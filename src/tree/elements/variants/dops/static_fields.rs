@@ -1,6 +1,8 @@
-use crate::tree::types::{CellType, DetailRow, DetailSectionData};
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 use super::{kv_row, push_types_section};
+use crate::tree::types::{CellType, DetailRow, DetailSectionData};
 
 /// Build tabbed sections for StaticField DOP
 /// Shows byte size and fixed number of items (no DOP variant)

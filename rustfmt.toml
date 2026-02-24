@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+
+max_width = 100
+
+# in case rustfmt stopps working again, enable these options
+# to get more information about the error
+# requires to run rustfmt with nightly toolchain
+# for example: `rustfmt +nightly src/diagtype/mod.rs --edition 2024 --verbose`
+# error_on_unformatted = true
+# error_on_line_overflow = true
+#format_strings = true

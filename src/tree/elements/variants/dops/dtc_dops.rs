@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+
 use cda_database::datatypes::DataOperationVariant;
 
+use super::{DopInfo, kv_row, push_types_section};
 use crate::tree::{
     builder::TreeBuilder,
     types::{
@@ -7,8 +11,6 @@ use crate::tree::{
         DetailSectionType, NodeType,
     },
 };
-
-use super::{DopInfo, kv_row, push_types_section};
 
 /// Build sections for the DTC-DOPS category node.
 /// Overview with only SHORT-NAME column.

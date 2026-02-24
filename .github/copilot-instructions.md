@@ -1,9 +1,14 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Alexander Mohr
+-->
+
 # Instructions
 
 * Run `cargo fmt` to format the code according to Rust's standard style.
 * Run `cargo clippy` to check for common mistakes and improve the code quality.
 
-## Strucutre 
+## Strucutre
 * The project structure in src/tree should reflect how the tree is shown. All elements that have children should be reflected in the tree as such by using modules.
 * If a cell is used as jump source, the color of this cell should be blue
 * Database description is found in database.fbs
@@ -12,7 +17,7 @@
 * Jump or link means that clicking on the element in the UI should navigate to the target element in the UI. This should be implemented using the existing navigation system and not by re-rendering the entire tree or using a different mechanism, also don't implemenet a popup or something like that. The target element should be focused and highlighted as if the user had navigated to it manually.
 * Do not disable clippy warnings or prefix parameters with _ to silence warnings. If clippy is complaining, fix the underlying issue or ask if it is a false positive.
 
-## Style guide 
+## Style guide
 
 ### Control Flow: Use Iterator Chains, Not for Loops
 
@@ -439,4 +444,3 @@ mod tests {
     }
 }
 ```
-

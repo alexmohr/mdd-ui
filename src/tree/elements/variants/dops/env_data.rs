@@ -1,6 +1,8 @@
-use crate::tree::types::{CellType, DetailRow, DetailSectionData};
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 use super::push_types_section;
+use crate::tree::types::{CellType, DetailRow, DetailSectionData};
 
 /// Build tabbed sections for EnvDataDesc DOP
 pub(super) fn build_env_data_desc_dop_tabs(

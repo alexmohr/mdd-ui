@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+
 use cda_database::datatypes::{DiagLayer, DiagService, Variant};
 
 use crate::tree::{

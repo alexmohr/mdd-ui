@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+
 use cda_database::datatypes::DiagLayer;
 
 use crate::tree::{
@@ -8,7 +11,8 @@ use crate::tree::{
     },
 };
 
-/// Add Unit Spec section to the tree by collecting units from ComParamRef -> ProtStack -> ComParamSubSet
+/// Add Unit Spec section to the tree by collecting
+/// units from ComParamRef -> ProtStack -> ComParamSubSet
 pub fn add_unit_spec(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
     let Some(cp_refs) = layer.com_param_refs() else {
         return;

@@ -157,7 +157,8 @@ pub struct App {
     last_click_time: Option<Instant>, // Time of last click for double-click detection
     last_click_pos: (u16, u16),       // Position of last click (column, row)
     pub(crate) mouse_enabled: bool,   // Whether mouse input is enabled
-    navigation_history: Vec<usize>, // History of node indices in all_nodes (stable across expand/collapse)
+    // History of node indices in all_nodes (stable across expand/collapse)
+    navigation_history: Vec<usize>,
     history_position: usize, // Current position in history (for potential forward navigation)
     breadcrumb_area: Rect,   // Cached breadcrumb area for mouse handling
     breadcrumb_segments: Vec<(String, usize, u16, u16)>, // (text, node_idx, start_col, end_col)

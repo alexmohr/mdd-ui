@@ -1,0 +1,11 @@
+{#
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Alexander Mohr
+#}
+
+{% for expression in spdx_expressions %}
+SPDX-License-Identifier: {{ expression }}
+{% endfor %}
+{% for copyright_line in copyright_lines %}
+{{ copyright_line }}
+{% endfor %}

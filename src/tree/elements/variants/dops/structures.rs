@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+
+use super::kv_row;
 use crate::tree::types::{
     CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType, DetailSectionData,
     DetailSectionType,
 };
-
-use super::kv_row;
 
 /// Build tabbed sections for Structure DOP: Overview + Params tabs
 pub(super) fn build_structure_dop_tabs(

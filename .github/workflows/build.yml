@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Alexander Mohr
+
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          components: clippy, rustfmt
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Install cargo-deny
+        run: cargo install --locked --version 0.18.9 cargo-deny
+      - name: Install taplo toml toolkit
+        run: cargo install --locked --version 0.10.0 taplo-cli
+      - name: check fmt
+        run: cargo fmt --all -- --check
+      - name: check toml fmt
+        run: taplo fmt --check --diff
+      - name: Run Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Build
+        run: cargo build --locked --verbose
+      - name: Check licenses
+        run: cargo deny check licenses
+      - name: Check advisories
+        run: cargo deny check advisories
+      - name: Check allowed sources
+        run: cargo deny check sources
+      - name: Check banned practises
+        run: cargo deny check bans
+      - name: Build
+        run: cargo build --locked --verbose
+      - name: Test
+        run: cargo test --locked -- --show-output

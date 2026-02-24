@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Alexander Mohr
+
+version = 1
+
+# declares copyright and license metadata for files that can't easily contain license headers themselves.
+[[annotations]]
+path = ["LICENSE", "NOTICE", "CONTRIBUTORS", "LICENSES/**.txt"]
+SPDX-FileCopyrightText = "The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)"
+SPDX-License-Identifier = "Apache-2.0"

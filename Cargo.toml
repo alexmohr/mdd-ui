@@ -1,7 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Alexander Mohr
+
 [package]
 name = "mdd-ui"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
 
 [dependencies]
 cda-database = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "dbaddf1f9d615613b899198277f85400e0b0a91e" }

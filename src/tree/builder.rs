@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+
 use super::types::{DetailSectionData, NodeType, SectionType, ServiceListType, TreeNode};
 
 /// Accumulates `TreeNode`s while walking the database model.

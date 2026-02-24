@@ -1,10 +1,15 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Alexander Mohr
+-->
+
 # MDD-UI - Diagnostic Database Viewer
 
 A terminal-based user interface for browsing and exploring MDD (Marvelous Diagnostic Data) diagnostic databases. Built with Rust and [ratatui](https://ratatui.rs/), this tool provides an efficient way to navigate ECU diagnostic services, parameters, and metadata.
 
-**DISCLAIMER** 
+**DISCLAIMER**
 This tool is 99% vibe coded, and this is pretty visible in the codebase, anyhow it works, which is good enough for now.
-This project is in early development and may contain bugs or incomplete features. 
+This project is in early development and may contain bugs or incomplete features.
 Use at your own risk. Contributions and feedback are welcome to help improve the tool.
 
 ## Features
@@ -106,7 +111,7 @@ For each parameter, the tool displays:
 
 ### 🔍 Search Features
 - **Hierarchical Search Stack**: Build complex filtered views by chaining multiple searches
-- **Search Scopes**: 
+- **Search Scopes**:
   - All: Search everywhere
   - Variants: Filter variant names only
   - Functional Groups: Filter functional group names
@@ -136,12 +141,12 @@ For each parameter, the tool displays:
 - **Service Reference Links**: Click service references in not-inherited sections to navigate directly to services
 
 ### 🎯 Interactive Features
-- **Sortable Tables**: 
+- **Sortable Tables**:
   - Click column headers to sort (ascending/descending)
   - Press `s` when detail pane is focused to sort by current column
   - Sort indicators show current sort column and direction (▲/▼)
   - DiagComm sorting: toggle between ID-based and name-based with `s`
-- **Double-Click Actions**: 
+- **Double-Click Actions**:
   - Tree nodes: expand/collapse
   - Detail rows: show DOP popup (if available)
   - Service references: navigate to service

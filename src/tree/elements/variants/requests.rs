@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+
 use cda_database::datatypes::{DiagLayer, DiagService, Parameter, ParentRef};
 
 use super::services::{extract_coded_value, extract_dop_name, get_parent_ref_services_recursive};

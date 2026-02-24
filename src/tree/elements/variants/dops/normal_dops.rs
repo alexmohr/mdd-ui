@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+
+use super::{ParsedDopName, push_types_section};
 use crate::tree::types::{
     CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType, DetailSectionData,
     DetailSectionType,
 };
-
-use super::{ParsedDopName, push_types_section};
 
 /// Build tabbed sections for NormalDOP with Types, Constraints, and Compu tabs
 pub(super) fn build_normal_dop_tabs(

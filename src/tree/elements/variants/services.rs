@@ -1,8 +1,10 @@
 use cda_database::datatypes::{DiagLayer, DiagService, ParamType, Parameter, ParentRef};
 
 // Import rendering functions from specialized modules
-use super::requests::build_request_section;
-use super::responses::{build_neg_responses_sections, build_pos_responses_sections};
+use super::{
+    requests::build_request_section,
+    responses::{build_neg_responses_sections, build_pos_responses_sections},
+};
 use crate::tree::{
     builder::TreeBuilder,
     types::{
