@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Alexander Mohr
+ */
+
 /// Type of top-level section
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SectionType {

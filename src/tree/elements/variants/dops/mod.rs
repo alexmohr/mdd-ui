@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Alexander Mohr
+ */
+
 mod dtc_dops;
 mod dynamic_length_fields;
 mod end_of_pdu;

@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Alexander Mohr
+ */
+
 // Submodules that represent the tree hierarchy under variants
 pub mod com_params;
 pub mod dops;
