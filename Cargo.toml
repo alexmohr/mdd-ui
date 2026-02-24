@@ -21,13 +21,10 @@ clap = { version = "4", features = ["derive"] }
 # Error handling
 anyhow = "1"
 
-[features]
-default = []
-
 [patch.crates-io]
 flatbuffers = { git = "https://github.com/alexmohr/flatbuffers.git", rev = "0ba3307d" }
 
-[workspace.lints.clippy]
+[lints.clippy]
 # enable pedantic
 pedantic = { level = "warn", priority = -1 }
 ## exclude some too pedantic lints for now
