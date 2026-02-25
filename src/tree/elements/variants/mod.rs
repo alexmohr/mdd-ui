@@ -28,49 +28,49 @@ use crate::tree::{
     },
 };
 
-/// Format a service display name from its diag_comm short_name, request_id,
-/// and optional request_sub_function_id.
+/// Format a service display name from its `diag_comm` `short_name`, `request_id`,
+/// and optional `request_sub_function_id`.
 /// Returns `None` if `diag_comm()` is absent.
 pub(crate) fn format_service_display_name(ds: &DiagService<'_>) -> Option<String> {
     let dc = ds.diag_comm()?;
     let name = dc.short_name().unwrap_or("?");
 
-    let display_name = ds
-        .request_id()
-        .map(|sid| {
-            ds.request_sub_function_id()
-                .map(|(sub_fn, bit_len)| {
+    let display_name = ds.request_id().map_or_else(
+        || name.to_string(),
+        |sid| {
+            ds.request_sub_function_id().map_or_else(
+                || format!("0x{:6} - {}", format!("{sid:02X}"), name),
+                |(sub_fn, bit_len)| {
                     let sub_fn_str = if bit_len <= 8 {
                         format!("{sub_fn:02X}")
                     } else {
                         format!("{sub_fn:04X}")
                     };
                     format!("0x{:6} - {}", format!("{sid:02X}{sub_fn_str}"), name)
-                })
-                .unwrap_or_else(|| format!("0x{:6} - {}", format!("{sid:02X}"), name))
-        })
-        .unwrap_or_else(|| name.to_string());
+                },
+            )
+        },
+    );
 
     Some(display_name)
 }
 
 /// Format just the service ID portion (e.g., "0x2E01" or "0x22") without name.
-/// Returns empty string if no request_id.
+/// Returns empty string if no `request_id`.
 pub(crate) fn format_service_id(ds: &DiagService<'_>) -> String {
-    ds.request_id()
-        .map(|sid| {
-            ds.request_sub_function_id()
-                .map(|(sub_fn, bit_len)| {
-                    let sub_fn_str = if bit_len <= 8 {
-                        format!("{sub_fn:02X}")
-                    } else {
-                        format!("{sub_fn:04X}")
-                    };
-                    format!("0x{sid:02X}{sub_fn_str}")
-                })
-                .unwrap_or_else(|| format!("0x{sid:02X}"))
-        })
-        .unwrap_or_default()
+    ds.request_id().map_or_else(String::new, |sid| {
+        ds.request_sub_function_id().map_or_else(
+            || format!("0x{sid:02X}"),
+            |(sub_fn, bit_len)| {
+                let sub_fn_str = if bit_len <= 8 {
+                    format!("{sub_fn:02X}")
+                } else {
+                    format!("{sub_fn:04X}")
+                };
+                format!("0x{sid:02X}{sub_fn_str}")
+            },
+        )
+    })
 }
 
 /// Add all variants to the tree
@@ -158,7 +158,7 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
             SectionType::FunctionalGroups,
         );
 
-        for fg in groups.iter() {
+        for fg in groups {
             if let Some(dl) = fg.diag_layer() {
                 let layer = DiagLayer(dl);
                 let name = layer.short_name().unwrap_or("unnamed");
@@ -254,7 +254,7 @@ pub fn add_ecu_shared_data(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
             SectionType::EcuSharedData,
         );
 
-        for esd in unique_esd.iter() {
+        for esd in &unique_esd {
             if let Some(dl) = esd.diag_layer() {
                 let layer = DiagLayer(dl);
                 let name = layer.short_name().unwrap_or("unnamed");
@@ -346,7 +346,7 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
             SectionType::Protocols,
         );
 
-        for protocol_wrap in unique_protocols.iter() {
+        for protocol_wrap in &unique_protocols {
             let Some(dl) = protocol_wrap.diag_layer() else {
                 continue;
             };
@@ -418,7 +418,7 @@ fn build_variant_summary_section(vw: &VariantWrap<'_>, name: &str) -> Vec<Detail
     sections
 }
 
-/// Build summary section for a DiagLayer (used by functional groups and ECU shared data)
+/// Build summary section for a `DiagLayer` (used by functional groups and ECU shared data)
 fn build_layer_summary_section(layer: &DiagLayer<'_>, name: &str) -> Vec<DetailSectionData> {
     let header = DetailRow::header(
         vec!["Property".to_owned(), "Value".to_owned()],
@@ -451,7 +451,7 @@ fn build_layer_summary_section(layer: &DiagLayer<'_>, name: &str) -> Vec<DetailS
     ]
 }
 
-/// Append DiagLayer info rows (short name, long name, children) to an existing row list
+/// Append `DiagLayer` info rows (short name, long name, children) to an existing row list
 fn append_layer_info_rows(layer: &DiagLayer<'_>, info_rows: &mut Vec<DetailRow>) {
     if let Some(sn) = layer.short_name() {
         info_rows.push(DetailRow::normal(
@@ -470,12 +470,12 @@ fn append_layer_info_rows(layer: &DiagLayer<'_>, info_rows: &mut Vec<DetailRow>)
 
     if let Some(children_rows) = build_children_rows(layer) {
         info_rows.push(DetailRow::normal(
-            vec!["".to_owned(), "".to_owned()],
+            vec![String::new(), String::new()],
             vec![CellType::Text, CellType::Text],
             0,
         ));
         info_rows.push(DetailRow::normal(
-            vec!["Children".to_owned(), "".to_owned()],
+            vec!["Children".to_owned(), String::new()],
             vec![CellType::Text, CellType::Text],
             0,
         ));
@@ -487,169 +487,188 @@ fn append_layer_info_rows(layer: &DiagLayer<'_>, info_rows: &mut Vec<DetailRow>)
 fn build_children_rows(layer: &DiagLayer<'_>) -> Option<Vec<DetailRow>> {
     let mut rows = Vec::new();
 
-    // Check each child element type and add to table if present
-
-    // ComParam Refs
-    if let Some(cp_refs) = layer.com_param_refs()
-        && !cp_refs.is_empty()
-    {
-        rows.push(DetailRow {
-            cells: vec!["ComParam Refs".to_owned(), cp_refs.len().to_string()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::ChildElement,
-            metadata: Some(RowMetadata::ChildElement {
-                element_type: ChildElementType::ComParamRefs,
-            }),
-        });
-    }
-
-    // Diag-Comms (Services + Jobs)
-    let service_count = layer.diag_services().map(|s| s.len()).unwrap_or(0);
-    let job_count = layer.single_ecu_jobs().map(|j| j.len()).unwrap_or(0);
-    if service_count + job_count > 0 {
-        rows.push(DetailRow {
-            cells: vec![
-                "Diag-Comms".to_owned(),
-                format!("{} services, {} jobs", service_count, job_count),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::ChildElement,
-            metadata: Some(RowMetadata::ChildElement {
-                element_type: ChildElementType::DiagComms,
-            }),
-        });
-    }
-
-    // Functional Classes
-    if let Some(fcs) = layer.funct_classes()
-        && !fcs.is_empty()
-    {
-        rows.push(DetailRow {
-            cells: vec!["Functional Classes".to_owned(), fcs.len().to_string()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::ChildElement,
-            metadata: Some(RowMetadata::ChildElement {
-                element_type: ChildElementType::FunctionalClasses,
-            }),
-        });
-    }
-
-    // Neg-Responses
-    let neg_count: usize = layer
-        .diag_services()
-        .map(|services| {
-            services
-                .iter()
-                .filter_map(|s| {
-                    cda_database::datatypes::DiagService(s)
-                        .neg_responses()
-                        .map(|r| r.len())
-                })
-                .sum()
-        })
-        .unwrap_or(0);
-    if neg_count > 0 {
-        rows.push(DetailRow {
-            cells: vec!["Neg-Responses".to_owned(), neg_count.to_string()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::ChildElement,
-            metadata: Some(RowMetadata::ChildElement {
-                element_type: ChildElementType::NegResponses,
-            }),
-        });
-    }
-
-    // Pos-Responses
-    let pos_count: usize = layer
-        .diag_services()
-        .map(|services| {
-            services
-                .iter()
-                .filter_map(|s| {
-                    cda_database::datatypes::DiagService(s)
-                        .pos_responses()
-                        .map(|r| r.len())
-                })
-                .sum()
-        })
-        .unwrap_or(0);
-    if pos_count > 0 {
-        rows.push(DetailRow {
-            cells: vec!["Pos-Responses".to_owned(), pos_count.to_string()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::ChildElement,
-            metadata: Some(RowMetadata::ChildElement {
-                element_type: ChildElementType::PosResponses,
-            }),
-        });
-    }
-
-    // Requests
-    let request_count = layer
-        .diag_services()
-        .map(|services| {
-            services
-                .iter()
-                .filter(|&s| cda_database::datatypes::DiagService(s).request().is_some())
-                .count()
-        })
-        .unwrap_or(0);
-    if request_count > 0 {
-        rows.push(DetailRow {
-            cells: vec!["Requests".to_owned(), request_count.to_string()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::ChildElement,
-            metadata: Some(RowMetadata::ChildElement {
-                element_type: ChildElementType::Requests,
-            }),
-        });
-    }
-
-    // SDGs
-    let sdg_count = layer
-        .sdgs()
-        .and_then(|sdgs| sdgs.sdgs())
-        .filter(|list| !list.is_empty())
-        .map(|list| list.len());
-    if let Some(count) = sdg_count {
-        rows.push(DetailRow {
-            cells: vec!["SDGs".to_owned(), count.to_string()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::ChildElement,
-            metadata: Some(RowMetadata::ChildElement {
-                element_type: ChildElementType::SDGs,
-            }),
-        });
-    }
-
-    // State-Charts
-    rows.extend(
-        layer
-            .state_charts()
-            .filter(|c| !c.is_empty())
-            .map(|charts| DetailRow {
-                cells: vec!["State-Charts".to_owned(), charts.len().to_string()],
-                cell_types: vec![CellType::Text, CellType::Text],
-                indent: 0,
-                row_type: DetailRowType::ChildElement,
-                metadata: Some(RowMetadata::ChildElement {
-                    element_type: ChildElementType::StateCharts,
-                }),
-            }),
-    );
+    rows.extend(build_com_param_refs_row(layer));
+    rows.extend(build_diag_comms_row(layer));
+    rows.extend(build_functional_classes_row(layer));
+    rows.extend(build_neg_responses_row(layer));
+    rows.extend(build_pos_responses_row(layer));
+    rows.extend(build_requests_row(layer));
+    rows.extend(build_sdgs_row(layer));
+    rows.extend(build_state_charts_row(layer));
 
     if rows.is_empty() {
         return None;
     }
 
     Some(rows)
+}
+
+fn build_com_param_refs_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
+    let cp_refs = layer.com_param_refs()?;
+    if cp_refs.is_empty() {
+        return None;
+    }
+
+    Some(DetailRow {
+        cells: vec!["ComParam Refs".to_owned(), cp_refs.len().to_string()],
+        cell_types: vec![CellType::Text, CellType::Text],
+        indent: 0,
+        row_type: DetailRowType::ChildElement,
+        metadata: Some(RowMetadata::ChildElement {
+            element_type: ChildElementType::ComParamRefs,
+        }),
+    })
+}
+
+fn build_diag_comms_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
+    let service_count = layer.diag_services().map_or(0, |s| s.len());
+    let job_count = layer.single_ecu_jobs().map_or(0, |j| j.len());
+
+    if service_count.saturating_add(job_count) == 0 {
+        return None;
+    }
+
+    Some(DetailRow {
+        cells: vec![
+            "Diag-Comms".to_owned(),
+            format!("{service_count} services, {job_count} jobs"),
+        ],
+        cell_types: vec![CellType::Text, CellType::Text],
+        indent: 0,
+        row_type: DetailRowType::ChildElement,
+        metadata: Some(RowMetadata::ChildElement {
+            element_type: ChildElementType::DiagComms,
+        }),
+    })
+}
+
+fn build_functional_classes_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
+    let fcs = layer.funct_classes()?;
+    if fcs.is_empty() {
+        return None;
+    }
+
+    Some(DetailRow {
+        cells: vec!["Functional Classes".to_owned(), fcs.len().to_string()],
+        cell_types: vec![CellType::Text, CellType::Text],
+        indent: 0,
+        row_type: DetailRowType::ChildElement,
+        metadata: Some(RowMetadata::ChildElement {
+            element_type: ChildElementType::FunctionalClasses,
+        }),
+    })
+}
+
+fn build_neg_responses_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
+    let neg_count: usize = layer.diag_services().map_or(0, |services| {
+        services
+            .iter()
+            .filter_map(|s| {
+                cda_database::datatypes::DiagService(s)
+                    .neg_responses()
+                    .map(|r| r.len())
+            })
+            .sum()
+    });
+
+    if neg_count == 0 {
+        return None;
+    }
+
+    Some(DetailRow {
+        cells: vec!["Neg-Responses".to_owned(), neg_count.to_string()],
+        cell_types: vec![CellType::Text, CellType::Text],
+        indent: 0,
+        row_type: DetailRowType::ChildElement,
+        metadata: Some(RowMetadata::ChildElement {
+            element_type: ChildElementType::NegResponses,
+        }),
+    })
+}
+
+fn build_pos_responses_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
+    let pos_count: usize = layer.diag_services().map_or(0, |services| {
+        services
+            .iter()
+            .filter_map(|s| {
+                cda_database::datatypes::DiagService(s)
+                    .pos_responses()
+                    .map(|r| r.len())
+            })
+            .sum()
+    });
+
+    if pos_count == 0 {
+        return None;
+    }
+
+    Some(DetailRow {
+        cells: vec!["Pos-Responses".to_owned(), pos_count.to_string()],
+        cell_types: vec![CellType::Text, CellType::Text],
+        indent: 0,
+        row_type: DetailRowType::ChildElement,
+        metadata: Some(RowMetadata::ChildElement {
+            element_type: ChildElementType::PosResponses,
+        }),
+    })
+}
+
+fn build_requests_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
+    let request_count = layer.diag_services().map_or(0, |services| {
+        services
+            .iter()
+            .filter(|&s| cda_database::datatypes::DiagService(s).request().is_some())
+            .count()
+    });
+
+    if request_count == 0 {
+        return None;
+    }
+
+    Some(DetailRow {
+        cells: vec!["Requests".to_owned(), request_count.to_string()],
+        cell_types: vec![CellType::Text, CellType::Text],
+        indent: 0,
+        row_type: DetailRowType::ChildElement,
+        metadata: Some(RowMetadata::ChildElement {
+            element_type: ChildElementType::Requests,
+        }),
+    })
+}
+
+fn build_sdgs_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
+    let count = layer
+        .sdgs()
+        .and_then(|sdgs| sdgs.sdgs())
+        .filter(|list| !list.is_empty())
+        .map(|list| list.len())?;
+
+    Some(DetailRow {
+        cells: vec!["SDGs".to_owned(), count.to_string()],
+        cell_types: vec![CellType::Text, CellType::Text],
+        indent: 0,
+        row_type: DetailRowType::ChildElement,
+        metadata: Some(RowMetadata::ChildElement {
+            element_type: ChildElementType::SDGs,
+        }),
+    })
+}
+
+fn build_state_charts_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
+    let charts = layer.state_charts()?;
+    if charts.is_empty() {
+        return None;
+    }
+
+    Some(DetailRow {
+        cells: vec!["State-Charts".to_owned(), charts.len().to_string()],
+        cell_types: vec![CellType::Text, CellType::Text],
+        indent: 0,
+        row_type: DetailRowType::ChildElement,
+        metadata: Some(RowMetadata::ChildElement {
+            element_type: ChildElementType::StateCharts,
+        }),
+    })
 }
 
 fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionData> {

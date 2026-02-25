@@ -18,10 +18,10 @@ use super::variants::{
 };
 use crate::tree::builder::TreeBuilder;
 
-/// Extension trait for adding DiagLayer structures to the tree
+/// Extension trait for adding `DiagLayer` structures to the tree
 pub trait LayerExt {
     /// Add a complete diag layer with structured hierarchy for containers
-    /// variant_parent_refs: Optional iterator to parent refs from the variant
+    /// `variant_parent_refs`: Optional iterator to parent refs from the variant
     /// for fetching inherited services
     fn add_diag_layer_structured<'a>(
         &mut self,
@@ -46,7 +46,7 @@ impl LayerExt for TreeBuilder {
     ) {
         // Collect parent refs into a vector so we can reuse them for multiple sections
         let parent_refs_vec: Option<Vec<ParentRef<'a>>> =
-            variant_parent_refs.map(|iter| iter.collect());
+            variant_parent_refs.map(Iterator::collect);
 
         // Elements are ordered alphabetically for easier navigation
 

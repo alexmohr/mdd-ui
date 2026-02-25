@@ -61,8 +61,8 @@ fn sd_entry_label(
     } else if !ti.is_empty() {
         ti.to_owned()
     } else if unnamed_count > 1 {
-        *unnamed_idx += 1;
-        format!("{caption} [{}]", unnamed_idx)
+        *unnamed_idx = unnamed_idx.saturating_add(1);
+        format!("{caption} [{unnamed_idx}]")
     } else {
         caption.to_owned()
     }
@@ -106,10 +106,10 @@ macro_rules! emit_sdg_header {
                     "SI",
                     si.to_owned(),
                     CellType::Text,
-                    $base_indent + 1,
+                    $base_indent.saturating_add(1),
                 ));
             }
-            $base_indent + 1
+            $base_indent.saturating_add(1)
         } else {
             $base_indent
         }
@@ -174,13 +174,12 @@ pub(super) fn add_dtc_dop_children(b: &mut TreeBuilder, dop_info: &DopInfo<'_>, 
         return;
     };
 
-    for dtc in dtcs.iter() {
+    for dtc in dtcs {
         let short_name = dtc.short_name().unwrap_or("?").to_owned();
         let code_str = dtc
             .display_trouble_code()
             .filter(|s| !s.is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| format!("0x{:06X}", dtc.trouble_code()));
+            .map_or_else(|| format!("0x{:06X}", dtc.trouble_code()), str::to_owned);
         let text = dtc.text().and_then(|t| t.value()).unwrap_or("").to_owned();
 
         let display_name = format!("{short_name} - {code_str}");
@@ -308,10 +307,10 @@ pub(super) fn build_dtc_dop_tabs(
             .map(|dtc| {
                 let short_name = dtc.short_name().unwrap_or("?").to_owned();
                 let display_code = dtc.display_trouble_code().unwrap_or("");
-                let code_str = if !display_code.is_empty() {
-                    display_code.to_owned()
-                } else {
+                let code_str = if display_code.is_empty() {
                     format!("0x{:06X}", dtc.trouble_code())
+                } else {
+                    display_code.to_owned()
                 };
                 let text = dtc.text().and_then(|t| t.value()).unwrap_or("").to_owned();
 

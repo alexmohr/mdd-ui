@@ -126,6 +126,21 @@ pub(crate) struct TableSortState {
     pub direction: SortDirection,
 }
 
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+enum DragState {
+    None,
+    Divider,
+    TreeScrollbar,
+    DetailScrollbar,
+}
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub enum FocusState {
+    Tree,
+    Detail,
+    HelpPopup,
+}
+
 pub struct App {
     all_nodes: Vec<TreeNode>,
     visible: Vec<usize>,
@@ -139,7 +154,7 @@ pub struct App {
     pub(crate) search_matches: Vec<usize>,
     search_match_cursor: usize,
     pub(crate) status: String,
-    pub(crate) detail_focused: bool,
+    focus_state: FocusState,
     pub(crate) selected_tab: usize, // Currently selected tab in detail pane
     pub(crate) focused_section: usize, // Which detail pane section is focused (0 = first)
     pub(crate) section_scrolls: Vec<usize>, // Scroll position for each section
@@ -147,7 +162,6 @@ pub struct App {
     pub(crate) column_widths: Vec<Vec<u16>>, // Column widths for each section (percentages)
     pub(crate) focused_column: usize, // Currently focused column for resizing
     pub(crate) detail_popup: Option<PopupData>, // Generic popup state
-    pub(crate) help_popup_visible: bool, // Help popup visibility
     pub(crate) tree_width_percentage: u16, // Tree pane width (0-100)
     pub(crate) diagcomm_sort_by_id: bool, // true = sort by ID (default), false = sort by name
     // Sort state for each table section (None = default order)
@@ -167,15 +181,12 @@ pub struct App {
     history_position: usize, // Current position in history (for potential forward navigation)
     breadcrumb_area: Rect,   // Cached breadcrumb area for mouse handling
     breadcrumb_segments: Vec<(String, usize, u16, u16)>, // (text, node_idx, start_col, end_col)
-    dragging_divider: bool,  // Whether user is currently dragging the tree/detail divider
+    drag_state: DragState,   // Drag state for dividers and scrollbars
     tree_scrollbar_area: Option<Rect>, // Cached tree scrollbar area for mouse handling
     detail_scrollbar_area: Option<Rect>, // Cached detail scrollbar area for mouse handling
-    dragging_scrollbar: bool, // Whether user is currently dragging a scrollbar
-    // true = dragging tree scrollbar, false = detail scrollbar
-    dragging_tree_scrollbar: bool,
     last_diagcomm_tab: usize, // Last selected tab when viewing service/job nodes (for persistence)
     last_section_tabs: HashMap<DetailSectionType, usize>, // Last selected tab per section type
-    jump_buffer: String,      // Characters typed for type-to-jump in table views
+    jump_buffer: String,     // Characters typed for type-to-jump in table views
     jump_buffer_time: Option<Instant>, // Timestamp of last type-to-jump character for auto-reset
 }
 
@@ -200,7 +211,7 @@ impl App {
             search_matches: Vec::new(),
             search_match_cursor: 0,
             status: String::new(),
-            detail_focused: false,
+            focus_state: FocusState::Tree,
             selected_tab: 0,
             focused_section: 0,
             section_scrolls: Vec::new(),
@@ -208,7 +219,6 @@ impl App {
             column_widths: Vec::new(),
             focused_column: 0,
             detail_popup: None,
-            help_popup_visible: false,
             tree_width_percentage: 35,
             diagcomm_sort_by_id: true,    // Default: sort by ID
             table_sort_state: Vec::new(), // No sorting by default
@@ -225,11 +235,9 @@ impl App {
             history_position: 0,
             breadcrumb_area: Rect::default(),
             breadcrumb_segments: Vec::new(),
-            dragging_divider: false,
+            drag_state: DragState::None,
             tree_scrollbar_area: None,
             detail_scrollbar_area: None,
-            dragging_scrollbar: false,
-            dragging_tree_scrollbar: false,
             last_diagcomm_tab: 0,
             last_section_tabs: HashMap::new(),
             jump_buffer: String::new(),
@@ -242,28 +250,28 @@ impl App {
     }
 
     /// Helper: Check if a node is a service list section header
-    fn is_service_list_section(&self, node: &TreeNode) -> bool {
+    fn is_service_list_section(node: &TreeNode) -> bool {
         node.service_list_type.is_some()
     }
 
     /// Helper: Check if a node is a specific service list type
-    fn is_service_list_type(
-        &self,
-        node: &TreeNode,
-        list_type: crate::tree::ServiceListType,
-    ) -> bool {
+    fn is_service_list_type(node: &TreeNode, list_type: crate::tree::ServiceListType) -> bool {
         matches!(&node.service_list_type, Some(t) if *t == list_type)
     }
 
     /// Check if a node is a DOP category node (child of DIAG-DATA-DICTIONARY-SPEC)
     fn is_dop_category_node(&self, node_idx: usize) -> bool {
-        let node = &self.all_nodes[node_idx];
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return false;
+        };
         if !node.has_children || node.depth == 0 {
             return false;
         }
         // Walk backwards to find the parent (first node with depth - 1)
         for i in (0..node_idx).rev() {
-            let candidate = &self.all_nodes[i];
+            let Some(candidate) = self.all_nodes.get(i) else {
+                continue;
+            };
             if candidate.depth < node.depth {
                 return matches!(candidate.node_type, NodeType::DOP);
             }
@@ -274,13 +282,17 @@ impl App {
     /// Check if a node is an individual DOP with children (e.g. a DTC-DOP under DTC-DOPS).
     /// These nodes should navigate to their children instead of showing a popup.
     fn is_individual_dop_node(&self, node_idx: usize) -> bool {
-        let node = &self.all_nodes[node_idx];
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return false;
+        };
         if !node.has_children || node.depth < 2 {
             return false;
         }
         // Walk backwards to find the parent
         for i in (0..node_idx).rev() {
-            let candidate = &self.all_nodes[i];
+            let Some(candidate) = self.all_nodes.get(i) else {
+                continue;
+            };
             if candidate.depth < node.depth {
                 return self.is_dop_category_node(i);
             }
@@ -292,16 +304,20 @@ impl App {
     fn get_section_index(&self) -> usize {
         // Check if current node has a header section (rendered above tabs)
         if let Some(&idx) = self.visible.get(self.cursor) {
-            let sections = &self.all_nodes[idx].detail_sections;
+            let Some(node) = self.all_nodes.get(idx) else {
+                return self.selected_tab;
+            };
+            let sections = &node.detail_sections;
             if sections.len() > 1
-                && sections[0].render_as_header
+                && let Some(first_section) = sections.first()
+                && first_section.render_as_header
                 && matches!(
-                    &sections[0].content,
+                    &first_section.content,
                     crate::tree::DetailContent::PlainText(_)
                 )
             {
                 // Has header section, so selected_tab needs offset of 1
-                return self.selected_tab + 1;
+                return self.selected_tab.saturating_add(1);
             }
         }
         self.selected_tab
@@ -310,11 +326,15 @@ impl App {
     /// Get the section offset for rendering (0 or 1 if there's a header section)
     fn get_section_offset(&self) -> usize {
         if let Some(&idx) = self.visible.get(self.cursor) {
-            let sections = &self.all_nodes[idx].detail_sections;
+            let Some(node) = self.all_nodes.get(idx) else {
+                return 0;
+            };
+            let sections = &node.detail_sections;
             if sections.len() > 1
-                && sections[0].render_as_header
+                && let Some(first_section) = sections.first()
+                && first_section.render_as_header
                 && matches!(
-                    &sections[0].content,
+                    &first_section.content,
                     crate::tree::DetailContent::PlainText(_)
                 )
             {
@@ -326,7 +346,7 @@ impl App {
 
     /// Get the actual table section index for storing/retrieving sort state
     fn get_table_section_idx(&self) -> usize {
-        self.selected_tab + self.get_section_offset()
+        self.selected_tab.saturating_add(self.get_section_offset())
     }
 
     /// Update the selected tab and persist it generically for the current section type
@@ -338,10 +358,8 @@ impl App {
         // Save tab selection for the current section type
         if self.cursor < self.visible.len()
             && let Some(&node_idx) = self.visible.get(self.cursor)
-            && node_idx < self.all_nodes.len()
+            && let Some(node) = self.all_nodes.get(node_idx)
         {
-            let node = &self.all_nodes[node_idx];
-
             // For backward compatibility, still save diagcomm tab
             if matches!(
                 node.node_type,
@@ -354,30 +372,31 @@ impl App {
             if !node.detail_sections.is_empty() {
                 // Get the section type from the currently selected tab
                 let section_offset = self.get_section_offset();
-                let section_idx = new_tab + section_offset;
-                if section_idx < node.detail_sections.len() {
-                    let section_type = node.detail_sections[section_idx].section_type;
-                    self.last_section_tabs.insert(section_type, new_tab);
+                let section_idx = new_tab.saturating_add(section_offset);
+                if let Some(section) = node.detail_sections.get(section_idx) {
+                    self.last_section_tabs.insert(section.section_type, new_tab);
                 }
             }
         }
     }
 
-    /// Jump to the first table row whose first cell starts with the jump_buffer text
+    /// Jump to the first table row whose first cell starts with the `jump_buffer` text
     fn jump_to_matching_row(&mut self) {
         if self.jump_buffer.is_empty() || self.cursor >= self.visible.len() {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
         let section_idx = self.get_section_index();
 
-        if section_idx >= node.detail_sections.len() {
+        let Some(section) = node.detail_sections.get(section_idx) else {
             return;
-        }
-
-        let section = &node.detail_sections[section_idx];
+        };
 
         // Get table rows (apply sorting if active)
         let rows = match &section.content {
@@ -392,8 +411,8 @@ impl App {
             if let Some(cell) = row.cells.get(self.focused_column)
                 && cell.to_lowercase().starts_with(&buffer_lower)
             {
-                if section_idx < self.section_cursors.len() {
-                    self.section_cursors[section_idx] = i;
+                if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                    *cursor = i;
                 }
                 self.status = format!("Jump: \"{}\"", self.jump_buffer);
                 return;
@@ -414,8 +433,8 @@ impl App {
             let col = sort_state.column;
             let dir = sort_state.direction;
             sorted.sort_by(|a, b| {
-                let a_cell = a.cells.get(col).map(|s| s.as_str()).unwrap_or("");
-                let b_cell = b.cells.get(col).map(|s| s.as_str()).unwrap_or("");
+                let a_cell = a.cells.get(col).map_or("", String::as_str);
+                let b_cell = b.cells.get(col).map_or("", String::as_str);
 
                 // Try to parse as numbers first, fall back to string comparison
                 let cmp = match (a_cell.parse::<f64>(), b_cell.parse::<f64>()) {
@@ -489,7 +508,7 @@ impl App {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(self.tree_width_percentage),
-                Constraint::Percentage(100 - self.tree_width_percentage),
+                Constraint::Percentage(100u16.saturating_sub(self.tree_width_percentage)),
             ])
             .areas(main);
 
@@ -507,8 +526,8 @@ impl App {
         if self.detail_popup.is_some() {
             self.draw_detail_popup(frame);
         }
-        if self.help_popup_visible {
-            self.draw_help_popup(frame);
+        if self.focus_state == FocusState::HelpPopup {
+            Self::draw_help_popup(frame);
         }
     }
 
@@ -526,11 +545,16 @@ impl App {
             return false;
         }
 
-        let node_depth = self.all_nodes[node_idx].depth;
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return false;
+        };
+        let node_depth = node.depth;
 
         // Search backwards from node_idx to find parent section
         for i in (0..node_idx).rev() {
-            let parent = &self.all_nodes[i];
+            let Some(parent) = self.all_nodes.get(i) else {
+                continue;
+            };
 
             // Stop if we reach a node at the same or lower depth (not a parent)
             if parent.depth >= node_depth {
@@ -603,7 +627,9 @@ impl App {
                 continue;
             }
 
-            let node = &self.all_nodes[i];
+            let Some(node) = self.all_nodes.get(i) else {
+                continue;
+            };
             if self.node_matches_scope_and_query(node, i, scope, &q) {
                 self.include_node_and_hierarchy(i, &mut new_include);
             }
@@ -657,19 +683,19 @@ impl App {
                     | NodeType::NegResponse
             ),
             SearchScope::DiagComms => {
-                self.is_service_list_type(node, crate::tree::ServiceListType::DiagComms)
+                Self::is_service_list_type(node, crate::tree::ServiceListType::DiagComms)
                     || matches!(
                         node.node_type,
                         NodeType::Service | NodeType::ParentRefService | NodeType::Job
                     )
             }
             SearchScope::Requests => {
-                self.is_service_list_type(node, crate::tree::ServiceListType::Requests)
+                Self::is_service_list_type(node, crate::tree::ServiceListType::Requests)
                     || matches!(node.node_type, NodeType::Request)
             }
             SearchScope::Responses => {
-                self.is_service_list_type(node, crate::tree::ServiceListType::PosResponses)
-                    || self.is_service_list_type(node, crate::tree::ServiceListType::NegResponses)
+                Self::is_service_list_type(node, crate::tree::ServiceListType::PosResponses)
+                    || Self::is_service_list_type(node, crate::tree::ServiceListType::NegResponses)
                     || matches!(
                         node.node_type,
                         NodeType::PosResponse | NodeType::NegResponse
@@ -685,16 +711,26 @@ impl App {
 
     /// Include a node and its entire hierarchy (parents and children)
     fn include_node_and_hierarchy(&self, node_idx: usize, new_include: &mut [bool]) {
-        let node = &self.all_nodes[node_idx];
-        new_include[node_idx] = true;
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
+        let Some(include_slot) = new_include.get_mut(node_idx) else {
+            return;
+        };
+        *include_slot = true;
 
         // Include all children
         let match_depth = node.depth;
-        for (offset, child) in self.all_nodes[(node_idx + 1)..].iter().enumerate() {
-            if child.depth <= match_depth {
-                break;
+        if let Some(children_slice) = self.all_nodes.get(node_idx.saturating_add(1)..) {
+            for (offset, child) in children_slice.iter().enumerate() {
+                if child.depth <= match_depth {
+                    break;
+                }
+                let child_idx = node_idx.saturating_add(1).saturating_add(offset);
+                if let Some(include_slot) = new_include.get_mut(child_idx) {
+                    *include_slot = true;
+                }
             }
-            new_include[node_idx + 1 + offset] = true;
         }
 
         // Include all parents
@@ -708,8 +744,13 @@ impl App {
         let mut parent_depth = target_depth.saturating_sub(1);
 
         for j in (0..node_idx).rev() {
-            if self.all_nodes[j].depth == parent_depth {
-                new_include[j] = true;
+            let Some(node) = self.all_nodes.get(j) else {
+                continue;
+            };
+            if node.depth == parent_depth {
+                if let Some(include_slot) = new_include.get_mut(j) {
+                    *include_slot = true;
+                }
                 if parent_depth == 0 {
                     break;
                 }
@@ -727,7 +768,9 @@ impl App {
                 continue;
             }
 
-            let node = &self.all_nodes[i];
+            let Some(node) = self.all_nodes.get(i) else {
+                continue;
+            };
 
             // Check if we're inside a collapsed section
             if let Some(cd) = collapsed_below {
@@ -754,35 +797,45 @@ impl App {
         let Some(&idx) = self.visible.get(self.cursor) else {
             return;
         };
-        if !self.all_nodes[idx].has_children {
+        let Some(node) = self.all_nodes.get(idx) else {
+            return;
+        };
+        if !node.has_children {
             return;
         }
-        self.all_nodes[idx].expanded = !self.all_nodes[idx].expanded;
+        if let Some(node_mut) = self.all_nodes.get_mut(idx) {
+            node_mut.expanded = !node_mut.expanded;
+        }
         let old = self.cursor;
         self.rebuild_visible();
         self.cursor = old.min(self.visible.len().saturating_sub(1));
     }
 
     pub(crate) fn try_expand(&mut self) {
-        if self.detail_focused {
+        if self.focus_state == FocusState::Detail {
             return;
         }
         let Some(&idx) = self.visible.get(self.cursor) else {
             return;
         };
-        if self.all_nodes[idx].has_children && !self.all_nodes[idx].expanded {
+        let Some(node) = self.all_nodes.get(idx) else {
+            return;
+        };
+        if node.has_children && !node.expanded {
             self.toggle_expand();
         }
     }
 
     pub(crate) fn try_collapse_or_parent(&mut self) {
-        if self.detail_focused {
+        if self.focus_state == FocusState::Detail {
             return;
         }
         let Some(&idx) = self.visible.get(self.cursor) else {
             return;
         };
-        let node = &self.all_nodes[idx];
+        let Some(node) = self.all_nodes.get(idx) else {
+            return;
+        };
 
         if node.has_children && node.expanded {
             self.toggle_expand();
@@ -794,7 +847,10 @@ impl App {
             return;
         }
         for i in (0..self.cursor).rev() {
-            if self.all_nodes[self.visible[i]].depth < my_depth {
+            if let Some(&visible_idx) = self.visible.get(i)
+                && let Some(visible_node) = self.all_nodes.get(visible_idx)
+                && visible_node.depth < my_depth
+            {
                 self.cursor = i;
                 self.detail_scroll = 0;
                 break;
@@ -844,28 +900,36 @@ impl App {
         // Find all "Diag-Comms" section headers and sort their children
         let mut i = 0;
         while i < self.all_nodes.len() {
-            let node = &self.all_nodes[i];
+            let Some(node) = self.all_nodes.get(i) else {
+                break;
+            };
 
             // Skip non-Diag-Comms nodes early
-            if !self.is_service_list_type(node, crate::tree::ServiceListType::DiagComms) {
-                i += 1;
+            if !Self::is_service_list_type(node, crate::tree::ServiceListType::DiagComms) {
+                i = i.saturating_add(1);
                 continue;
             }
 
             let section_depth = node.depth;
-            let section_start = i + 1;
+            let section_start = i.saturating_add(1);
 
             // Find all children (services) of this section
             let mut section_end = section_start;
-            while section_end < self.all_nodes.len()
-                && self.all_nodes[section_end].depth > section_depth
-            {
-                section_end += 1;
+            while section_end < self.all_nodes.len() {
+                if let Some(node_at_end) = self.all_nodes.get(section_end) {
+                    if node_at_end.depth > section_depth {
+                        section_end = section_end.saturating_add(1);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             }
 
             // Skip if no children to sort
             if section_end <= section_start {
-                i += 1;
+                i = i.saturating_add(1);
                 continue;
             }
 
@@ -874,17 +938,18 @@ impl App {
                 self.all_nodes.drain(section_start..section_end).collect();
 
             // Sort services based on current sort order
-            match self.diagcomm_sort_by_id {
-                true => services.sort_by(|a, b| {
+            if self.diagcomm_sort_by_id {
+                services.sort_by(|a, b| {
                     let a_id = extract_service_id(&a.text);
                     let b_id = extract_service_id(&b.text);
                     a_id.cmp(&b_id)
-                }),
-                false => services.sort_by(|a, b| {
+                });
+            } else {
+                services.sort_by(|a, b| {
                     let a_name = extract_service_name(&a.text);
                     let b_name = extract_service_name(&b.text);
                     a_name.cmp(b_name)
-                }),
+                });
             }
 
             // Deduplicate by name - keep only first occurrence of each service name
@@ -899,7 +964,7 @@ impl App {
             if let Some(header_node) = self.all_nodes.get_mut(i) {
                 // Update "Diag-Comms (X)" to reflect filtered count
                 if header_node.text.find('(').is_some() {
-                    header_node.text = format!("Diag-Comms ({})", new_count);
+                    header_node.text = format!("Diag-Comms ({new_count})");
                 }
             }
 
@@ -908,13 +973,13 @@ impl App {
                 .splice(section_start..section_start, services);
 
             // Skip past the sorted section
-            i = section_start + (section_end - section_start);
+            i = section_start.saturating_add(section_end.saturating_sub(section_start));
         }
     }
 
     pub(crate) fn toggle_table_column_sort(&mut self) {
         // Only works when detail pane is focused
-        if !self.detail_focused {
+        if self.focus_state != FocusState::Detail {
             return;
         }
 
@@ -929,29 +994,35 @@ impl App {
 
         // Toggle sort state: if already sorting by this column, toggle direction,
         // otherwise sort ascending by this column
-        self.table_sort_state[section_idx] = match self.table_sort_state[section_idx] {
-            Some(state) if state.column == column => {
-                // Same column clicked: toggle direction
-                let new_direction = match state.direction {
-                    SortDirection::Ascending => SortDirection::Descending,
-                    SortDirection::Descending => SortDirection::Ascending,
-                };
-                Some(TableSortState {
-                    column,
-                    direction: new_direction,
-                })
-            }
-            _ => {
-                // Different column or no sort: sort ascending by this column
-                Some(TableSortState {
-                    column,
-                    direction: SortDirection::Ascending,
-                })
-            }
-        };
+        if let Some(sort_state) = self.table_sort_state.get_mut(section_idx) {
+            *sort_state = match *sort_state {
+                Some(state) if state.column == column => {
+                    // Same column clicked: toggle direction
+                    let new_direction = match state.direction {
+                        SortDirection::Ascending => SortDirection::Descending,
+                        SortDirection::Descending => SortDirection::Ascending,
+                    };
+                    Some(TableSortState {
+                        column,
+                        direction: new_direction,
+                    })
+                }
+                _ => {
+                    // Different column or no sort: sort ascending by this column
+                    Some(TableSortState {
+                        column,
+                        direction: SortDirection::Ascending,
+                    })
+                }
+            };
+        }
 
         // Update status message
-        if let Some(state) = self.table_sort_state[section_idx] {
+        if let Some(&state) = self
+            .table_sort_state
+            .get(section_idx)
+            .and_then(|s| s.as_ref())
+        {
             let direction_str = match state.direction {
                 SortDirection::Ascending => "▲",
                 SortDirection::Descending => "▼",
@@ -964,8 +1035,11 @@ impl App {
     // Navigation history
     // -------------------------------------------------------------------
 
-    /// Add current node to navigation history (stores all_nodes index for stability)
+    /// Add current node to navigation history (stores `all_nodes` index for stability)
     fn push_to_history(&mut self) {
+        // Limit history size to prevent unbounded growth
+        const MAX_HISTORY: usize = 100;
+
         let Some(&node_idx) = self.visible.get(self.cursor) else {
             return;
         };
@@ -982,9 +1056,6 @@ impl App {
 
         self.navigation_history.push(node_idx);
         self.history_position = self.navigation_history.len();
-
-        // Limit history size to prevent unbounded growth
-        const MAX_HISTORY: usize = 100;
         if self.navigation_history.len() > MAX_HISTORY {
             self.navigation_history.remove(0);
             self.history_position = self.navigation_history.len();
@@ -995,63 +1066,79 @@ impl App {
     pub(crate) fn navigate_to_previous_in_history(&mut self) {
         // Need at least 2 elements (current + previous)
         if self.navigation_history.len() < 2 {
-            self.status = "No previous element in history".to_owned();
+            "No previous element in history".clone_into(&mut self.status);
             return;
         }
 
         if self.history_position <= 1 {
-            self.status = "Already at oldest element in history".to_owned();
+            "Already at oldest element in history".clone_into(&mut self.status);
             return;
         }
 
-        self.history_position -= 1;
-        let target_node_idx = self.navigation_history[self.history_position - 1];
+        self.history_position = self.history_position.saturating_sub(1);
+        let Some(&target_node_idx) = self
+            .navigation_history
+            .get(self.history_position.saturating_sub(1))
+        else {
+            "History access failed".clone_into(&mut self.status);
+            return;
+        };
 
         // Ensure ancestors are expanded so the target node becomes visible
         self.ensure_node_visible(target_node_idx);
 
         // Find the target node in the (now-updated) visible list
         let Some(cursor_pos) = self.visible.iter().position(|&idx| idx == target_node_idx) else {
-            self.status = "Previous element no longer reachable".to_owned();
+            "Previous element no longer reachable".clone_into(&mut self.status);
             return;
         };
 
         self.cursor = cursor_pos;
         self.reset_detail_state();
         self.scroll_offset = self.cursor.saturating_sub(5);
-        self.detail_focused = false;
-        self.status = format!("Navigated to: {}", self.all_nodes[target_node_idx].text);
+        self.focus_state = FocusState::Tree;
+        if let Some(node) = self.all_nodes.get(target_node_idx) {
+            self.status = format!("Navigated to: {}", node.text);
+        }
     }
 
     /// Navigate up one level in hierarchy (parent node)
     pub(crate) fn navigate_up_one_layer(&mut self) {
         // Get the current node
         if self.cursor >= self.visible.len() {
-            self.status = "No parent to navigate to".to_owned();
+            "No parent to navigate to".clone_into(&mut self.status);
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let current_node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(current_node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
         let current_depth = current_node.depth;
 
         // If we're at the root level, can't go up
         if current_depth == 0 {
-            self.status = "Already at root level".to_owned();
+            "Already at root level".clone_into(&mut self.status);
             return;
         }
 
         // Find parent by looking for previous node with lower depth
         let mut found_parent = false;
         for i in (0..node_idx).rev() {
-            if self.all_nodes[i].depth < current_depth {
+            if let Some(node_at_i) = self.all_nodes.get(i)
+                && node_at_i.depth < current_depth
+            {
                 // Found parent node, now find it in visible list
                 if let Some(visible_pos) = self.visible.iter().position(|&idx| idx == i) {
                     self.cursor = visible_pos;
                     self.reset_detail_state();
                     self.scroll_offset = self.cursor.saturating_sub(5); // Center the view
-                    self.detail_focused = false;
-                    self.status = format!("Navigated up to: {}", self.all_nodes[i].text);
+                    self.focus_state = FocusState::Tree;
+                    if let Some(parent_node) = self.all_nodes.get(i) {
+                        self.status = format!("Navigated up to: {}", parent_node.text);
+                    }
                     found_parent = true;
                 }
                 break;
@@ -1059,7 +1146,7 @@ impl App {
         }
 
         if !found_parent {
-            self.status = "Parent not visible in tree".to_owned();
+            "Parent not visible in tree".clone_into(&mut self.status);
         }
     }
 
@@ -1078,13 +1165,12 @@ impl App {
             .visible
             .get(self.cursor)
             .and_then(|&node_idx| self.all_nodes.get(node_idx))
-            .map(|node| {
+            .is_some_and(|node| {
                 matches!(
                     node.node_type,
                     NodeType::Service | NodeType::ParentRefService | NodeType::Job
                 )
-            })
-            .unwrap_or(false);
+            });
 
         // Restore tab selection based on section type
         if is_diagcomm {
@@ -1109,13 +1195,10 @@ impl App {
             .get(self.cursor)
             .and_then(|&node_idx| self.all_nodes.get(node_idx))
             .and_then(|node| {
-                let section_offset = if !node.detail_sections.is_empty()
-                    && node.detail_sections[0].render_as_header
-                {
-                    1
-                } else {
-                    0
-                };
+                let section_offset = usize::from(
+                    !node.detail_sections.is_empty()
+                        && node.detail_sections.first()?.render_as_header,
+                );
 
                 // Find first section with saved tab preference
                 node.detail_sections
@@ -1124,7 +1207,7 @@ impl App {
                     .filter(|(idx, _)| *idx >= section_offset)
                     .find_map(|(idx, section)| {
                         self.last_section_tabs.get(&section.section_type).map(|_| {
-                            self.selected_tab = idx - section_offset;
+                            self.selected_tab = idx.saturating_sub(section_offset);
                             true
                         })
                     })
@@ -1137,12 +1220,11 @@ impl App {
     }
 
     pub(crate) fn move_up(&mut self) {
-        if self.detail_focused {
+        if self.focus_state == FocusState::Detail {
             // Move cursor up in the detail pane (typically a table row)
             let section_idx = self.get_section_index();
-            if section_idx < self.section_cursors.len() {
-                self.section_cursors[section_idx] =
-                    self.section_cursors[section_idx].saturating_sub(1);
+            if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                *cursor = cursor.saturating_sub(1);
             }
         } else {
             let old_cursor = self.cursor;
@@ -1157,16 +1239,17 @@ impl App {
     }
 
     pub(crate) fn move_down(&mut self) {
-        if self.detail_focused {
+        if self.focus_state == FocusState::Detail {
             // Move cursor down in the detail pane (typically a table row)
             let section_idx = self.get_section_index();
-            if section_idx < self.section_cursors.len() {
-                self.section_cursors[section_idx] =
-                    self.section_cursors[section_idx].saturating_add(1);
+            if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                *cursor = cursor.saturating_add(1);
             }
-        } else if self.cursor + 1 < self.visible.len() {
+        } else if let Some(new_cursor) = self.cursor.checked_add(1)
+            && new_cursor < self.visible.len()
+        {
             let old_cursor = self.cursor;
-            self.cursor += 1;
+            self.cursor = new_cursor;
 
             // Reset detail state when moving to a different node
             if old_cursor != self.cursor {
@@ -1177,11 +1260,10 @@ impl App {
     }
 
     pub(crate) fn page_up(&mut self, n: usize) {
-        if self.detail_focused {
+        if self.focus_state == FocusState::Detail {
             let section_idx = self.get_section_index();
-            if section_idx < self.section_cursors.len() {
-                self.section_cursors[section_idx] =
-                    self.section_cursors[section_idx].saturating_sub(n);
+            if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                *cursor = cursor.saturating_sub(n);
             }
         } else {
             let old_cursor = self.cursor;
@@ -1194,15 +1276,17 @@ impl App {
     }
 
     pub(crate) fn page_down(&mut self, n: usize) {
-        if self.detail_focused {
+        if self.focus_state == FocusState::Detail {
             let section_idx = self.get_section_index();
-            if section_idx < self.section_cursors.len() {
-                self.section_cursors[section_idx] =
-                    self.section_cursors[section_idx].saturating_add(n);
+            if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                *cursor = cursor.saturating_add(n);
             }
         } else {
             let old_cursor = self.cursor;
-            self.cursor = (self.cursor + n).min(self.visible.len().saturating_sub(1));
+            self.cursor = self
+                .cursor
+                .saturating_add(n)
+                .min(self.visible.len().saturating_sub(1));
             if old_cursor != self.cursor {
                 self.reset_detail_state();
                 self.push_to_history();
@@ -1211,10 +1295,10 @@ impl App {
     }
 
     pub(crate) fn home(&mut self) {
-        if self.detail_focused {
+        if self.focus_state == FocusState::Detail {
             let section_idx = self.get_section_index();
-            if section_idx < self.section_cursors.len() {
-                self.section_cursors[section_idx] = 0;
+            if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                *cursor = 0;
             }
         } else {
             let old_cursor = self.cursor;
@@ -1227,10 +1311,10 @@ impl App {
     }
 
     pub(crate) fn end(&mut self) {
-        if self.detail_focused {
+        if self.focus_state == FocusState::Detail {
             let section_idx = self.get_section_index();
-            if section_idx < self.section_cursors.len() {
-                self.section_cursors[section_idx] = usize::MAX; // clamped during render
+            if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                *cursor = usize::MAX; // clamped during render
             }
         } else {
             let old_cursor = self.cursor;
@@ -1252,8 +1336,13 @@ impl App {
         }
         if self.cursor < self.scroll_offset {
             self.scroll_offset = self.cursor;
-        } else if self.cursor >= self.scroll_offset + viewport_height {
-            self.scroll_offset = self.cursor - viewport_height + 1;
+        } else if let Some(max_scroll) = self.scroll_offset.checked_add(viewport_height)
+            && self.cursor >= max_scroll
+        {
+            self.scroll_offset = self
+                .cursor
+                .saturating_sub(viewport_height)
+                .saturating_add(1);
         }
     }
 
@@ -1291,7 +1380,7 @@ impl App {
     pub(crate) fn clear_search_stack(&mut self) {
         self.search_stack.clear();
         self.search.clear();
-        self.status = "Search cleared".to_owned();
+        "Search cleared".clone_into(&mut self.status);
         self.rebuild_visible();
         self.cursor = 0;
         self.reset_detail_state();
@@ -1306,9 +1395,8 @@ impl App {
             SearchScope::Services => SearchScope::DiagComms,
             SearchScope::DiagComms => SearchScope::Requests,
             SearchScope::Requests => SearchScope::Responses,
-            SearchScope::Responses => SearchScope::All,
             // Subtree is contextual, cycling from it resets to All
-            SearchScope::Subtree { .. } => SearchScope::All,
+            SearchScope::Responses | SearchScope::Subtree { .. } => SearchScope::All,
         };
 
         self.status = format!("Search scope: {}", self.search_scope);
@@ -1319,14 +1407,24 @@ impl App {
         let Some(&start_idx) = self.visible.get(self.cursor) else {
             return;
         };
-        let root_depth = self.all_nodes[start_idx].depth;
-        let root_name = self.all_nodes[start_idx].text.clone();
+        let Some(root_node) = self.all_nodes.get(start_idx) else {
+            return;
+        };
+        let root_depth = root_node.depth;
+        let root_name = root_node.text.clone();
 
         // Walk forward to find the last descendant
-        let end_idx = self.all_nodes[start_idx + 1..]
-            .iter()
-            .position(|n| n.depth <= root_depth)
-            .map_or(self.all_nodes.len() - 1, |offset| start_idx + offset);
+        let end_idx =
+            if let Some(children_slice) = self.all_nodes.get(start_idx.saturating_add(1)..) {
+                children_slice
+                    .iter()
+                    .position(|n| n.depth <= root_depth)
+                    .map_or(self.all_nodes.len().saturating_sub(1), |offset| {
+                        start_idx.saturating_add(offset)
+                    })
+            } else {
+                self.all_nodes.len().saturating_sub(1)
+            };
 
         self.search_scope = SearchScope::Subtree {
             start_idx,
@@ -1356,7 +1454,7 @@ impl App {
                 }
             );
         } else {
-            self.status = "Failed to toggle mouse mode".to_owned();
+            "Failed to toggle mouse mode".clone_into(&mut self.status);
         }
     }
 
@@ -1364,14 +1462,19 @@ impl App {
         if self.search_matches.is_empty() {
             return;
         }
-        self.search_match_cursor = (self.search_match_cursor + 1) % self.search_matches.len();
-        self.cursor = self.search_matches[self.search_match_cursor];
-        self.reset_detail_state();
-        self.status = format!(
-            "Match {}/{}",
-            self.search_match_cursor + 1,
-            self.search_matches.len()
-        );
+        self.search_match_cursor = self
+            .search_match_cursor
+            .saturating_add(1)
+            .rem_euclid(self.search_matches.len());
+        if let Some(&match_idx) = self.search_matches.get(self.search_match_cursor) {
+            self.cursor = match_idx;
+            self.reset_detail_state();
+            self.status = format!(
+                "Match {}/{}",
+                self.search_match_cursor.saturating_add(1),
+                self.search_matches.len()
+            );
+        }
     }
 
     pub(crate) fn prev_search_match(&mut self) {
@@ -1379,17 +1482,19 @@ impl App {
             return;
         }
         self.search_match_cursor = if self.search_match_cursor == 0 {
-            self.search_matches.len() - 1
+            self.search_matches.len().saturating_sub(1)
         } else {
-            self.search_match_cursor - 1
+            self.search_match_cursor.saturating_sub(1)
         };
-        self.cursor = self.search_matches[self.search_match_cursor];
-        self.reset_detail_state();
-        self.status = format!(
-            "Match {}/{}",
-            self.search_match_cursor + 1,
-            self.search_matches.len()
-        );
+        if let Some(&match_idx) = self.search_matches.get(self.search_match_cursor) {
+            self.cursor = match_idx;
+            self.reset_detail_state();
+            self.status = format!(
+                "Match {}/{}",
+                self.search_match_cursor.saturating_add(1),
+                self.search_matches.len()
+            );
+        }
     }
 
     /// Handle Enter key press when detail pane is focused
@@ -1398,8 +1503,12 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Early returns for different node types using functional matching
         if let Some(SectionType::Variants) = node.section_type {
@@ -1463,15 +1572,21 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
         let section_idx = self.get_section_index();
 
         if section_idx >= node.detail_sections.len() {
             return;
         }
 
-        let section = &node.detail_sections[section_idx];
+        let Some(section) = node.detail_sections.get(section_idx) else {
+            return;
+        };
 
         // Check for parameter table (requests/responses)
         if matches!(
@@ -1509,8 +1624,12 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
         let section_idx = self.get_section_index();
 
         let section = node
@@ -1529,7 +1648,7 @@ impl App {
                 self.try_navigate_from_detail_row();
             }
         } else {
-            self.status = "No details available".to_owned();
+            "No details available".clone_into(&mut self.status);
         }
     }
 
@@ -1540,16 +1659,17 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
         let section_idx = self.get_section_index();
 
-        let (rows, use_row_selection) = match self.get_table_rows(node, section_idx) {
-            Some(data) => data,
-            None => {
-                self.status = "No table data".to_owned();
-                return;
-            }
+        let Some((rows, use_row_selection)) = Self::get_table_rows(node, section_idx) else {
+            "No table data".clone_into(&mut self.status);
+            return;
         };
 
         let row_cursor = self.section_cursors.get(section_idx).copied().unwrap_or(0);
@@ -1563,16 +1683,15 @@ impl App {
         let cell_type = selected_row
             .cell_types
             .get(focused_col)
-            .cloned()
+            .copied()
             .unwrap_or(CellType::Text);
         let cell_value = selected_row
             .cells
             .get(focused_col)
-            .map(|s| s.as_str())
-            .unwrap_or("");
+            .map_or("", std::string::String::as_str);
 
         if cell_value.is_empty() || cell_value == "-" {
-            self.status = "Empty cell".to_owned();
+            "Empty cell".clone_into(&mut self.status);
             return;
         }
 
@@ -1594,7 +1713,7 @@ impl App {
         if let Some(idx) = found_idx {
             self.navigate_to_node(idx);
         } else {
-            self.status = "This cell is not navigable".to_owned();
+            "This cell is not navigable".clone_into(&mut self.status);
         }
     }
 
@@ -1607,22 +1726,27 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
-        if !self.is_service_list_section(node) {
-            self.status = "Not a service list section".to_owned();
+        if !Self::is_service_list_section(node) {
+            "Not a service list section".clone_into(&mut self.status);
             return;
         }
 
         // Get service name from table or return early
-        let service_name = match self.extract_service_name_from_table(node_idx) {
-            Some(name) => name,
-            None => return,
+        let Some(service_name) = self.extract_service_name_from_table(node_idx) else {
+            return;
         };
 
         // Expand service list section if collapsed
-        if !self.all_nodes[node_idx].expanded {
+        if let Some(node_at_idx) = self.all_nodes.get(node_idx)
+            && !node_at_idx.expanded
+        {
             self.expand_and_update_cursor(node_idx);
         }
 
@@ -1632,15 +1756,12 @@ impl App {
 
     /// Extract service name from the current table row
     fn extract_service_name_from_table(&mut self, node_idx: usize) -> Option<String> {
-        let node = &self.all_nodes[node_idx];
+        let node = self.all_nodes.get(node_idx)?;
         let section = node.detail_sections.first()?;
 
-        let rows = match &section.content {
-            crate::tree::DetailContent::Table { rows, .. } => rows,
-            _ => {
-                self.status = "Details should be a table".to_owned();
-                return None;
-            }
+        let crate::tree::DetailContent::Table { rows, .. } = &section.content else {
+            "Details should be a table".clone_into(&mut self.status);
+            return None;
         };
 
         let section_index = self.get_section_index();
@@ -1650,15 +1771,17 @@ impl App {
 
         // Determine name column index based on node type
         let is_functional_class =
-            self.is_service_list_type(node, crate::tree::ServiceListType::FunctionalClasses);
-        let name_column_index = if is_functional_class { 0 } else { 1 };
+            Self::is_service_list_type(node, crate::tree::ServiceListType::FunctionalClasses);
+        let name_column_index = usize::from(!is_functional_class);
 
         selected_row.cells.get(name_column_index).cloned()
     }
 
     /// Expand section and update cursor position
     fn expand_and_update_cursor(&mut self, node_idx: usize) {
-        self.all_nodes[node_idx].expanded = true;
+        if let Some(node_mut) = self.all_nodes.get_mut(node_idx) {
+            node_mut.expanded = true;
+        }
         self.rebuild_visible();
 
         if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == node_idx) {
@@ -1668,49 +1791,60 @@ impl App {
 
     /// Find and navigate to a service by name
     fn find_and_navigate_to_service(&mut self, service_name: &str, parent_node_idx: usize) {
-        let parent_depth = self.all_nodes[parent_node_idx].depth;
-        let is_functional_class = self.is_service_list_type(
-            &self.all_nodes[parent_node_idx],
+        let Some(parent_node) = self.all_nodes.get(parent_node_idx) else {
+            return;
+        };
+        let parent_depth = parent_node.depth;
+        let is_functional_class = Self::is_service_list_type(
+            parent_node,
             crate::tree::ServiceListType::FunctionalClasses,
         );
 
         // Find service in visible nodes after parent
-        let found_idx = self.visible[self.cursor + 1..]
-            .iter()
-            .copied()
-            .take_while(|&vis_idx| self.all_nodes[vis_idx].depth > parent_depth)
-            .filter(|&vis_idx| self.all_nodes[vis_idx].depth == parent_depth + 1)
-            .find(|&vis_idx| {
-                self.node_matches_service_name(
-                    &self.all_nodes[vis_idx],
-                    service_name,
-                    is_functional_class,
-                )
-            })
-            .and_then(|vis_idx| self.visible.iter().position(|&idx| idx == vis_idx));
+        let found_idx = self
+            .visible
+            .get(self.cursor.saturating_add(1)..)
+            .and_then(|rest| {
+                rest.iter()
+                    .copied()
+                    .take_while(|&vis_idx| {
+                        self.all_nodes
+                            .get(vis_idx)
+                            .is_some_and(|n| n.depth > parent_depth)
+                    })
+                    .filter(|&vis_idx| {
+                        self.all_nodes
+                            .get(vis_idx)
+                            .is_some_and(|n| n.depth == parent_depth.saturating_add(1))
+                    })
+                    .find(|&vis_idx| {
+                        if let Some(node) = self.all_nodes.get(vis_idx) {
+                            Self::node_matches_service_name(node, service_name, is_functional_class)
+                        } else {
+                            false
+                        }
+                    })
+                    .and_then(|vis_idx| self.visible.iter().position(|&idx| idx == vis_idx))
+            });
 
-        match found_idx {
-            Some(target_cursor) => {
-                self.push_to_history();
-                self.detail_focused = false;
-                self.cursor = target_cursor;
-                self.reset_detail_state();
-                self.scroll_offset = self.cursor.saturating_sub(5);
-            }
-            None => {
-                let item_type = if is_functional_class {
-                    "Functional class"
-                } else {
-                    "Service"
-                };
-                self.status = format!("{} '{}' not found in tree", item_type, service_name);
-            }
+        if let Some(target_cursor) = found_idx {
+            self.push_to_history();
+            self.focus_state = FocusState::Tree;
+            self.cursor = target_cursor;
+            self.reset_detail_state();
+            self.scroll_offset = self.cursor.saturating_sub(5);
+        } else {
+            let item_type = if is_functional_class {
+                "Functional class"
+            } else {
+                "Service"
+            };
+            self.status = format!("{item_type} '{service_name}' not found in tree");
         }
     }
 
     /// Check if a node's name matches the target service name
     fn node_matches_service_name(
-        &self,
         node: &TreeNode,
         target_name: &str,
         is_functional_class: bool,
@@ -1748,31 +1882,34 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
-        if !self.is_service_node(node) {
-            self.status = "Not a service node".to_owned();
+        if !Self::is_service_node(node) {
+            "Not a service node".clone_into(&mut self.status);
             return;
         }
 
         // Extract current service name and parent layer name
-        let current_service_name = self.extract_service_name_from_node(node);
-        let parent_layer_name = match self.get_parent_layer_name(node_idx) {
-            Some(name) => name,
-            None => return,
+        let current_service_name = Self::extract_service_name_from_node(node);
+        let Some(parent_layer_name) = self.get_parent_layer_name(node_idx) else {
+            return;
         };
 
         // Find parent container and navigate
         if let Some(container_idx) = self.find_container_by_name(&parent_layer_name) {
             self.navigate_to_parent_service(container_idx, &current_service_name);
         } else {
-            self.status = format!("Parent layer '{}' not found in tree", parent_layer_name);
+            self.status = format!("Parent layer '{parent_layer_name}' not found in tree");
         }
     }
 
     /// Check if node is a service-related node
-    fn is_service_node(&self, node: &TreeNode) -> bool {
+    fn is_service_node(node: &TreeNode) -> bool {
         matches!(
             node.node_type,
             NodeType::Service
@@ -1784,29 +1921,29 @@ impl App {
     }
 
     /// Extract service name from node text
-    fn extract_service_name_from_node(&self, node: &TreeNode) -> String {
-        node.text
-            .find(" - ")
-            .map(|dash_idx| node.text[dash_idx + 3..].to_string())
-            .unwrap_or_else(|| node.text.clone())
+    fn extract_service_name_from_node(node: &TreeNode) -> String {
+        node.text.find(" - ").map_or_else(
+            || node.text.clone(),
+            |dash_idx| node.text[dash_idx.saturating_add(3)..].to_string(),
+        )
     }
 
     /// Get parent layer name from the Overview section's "Inherited From" row
     fn get_parent_layer_name(&self, node_idx: usize) -> Option<String> {
-        let node = &self.all_nodes[node_idx];
+        let node = self.all_nodes.get(node_idx)?;
 
-        let overview_idx =
-            if node.detail_sections.len() > 1 && node.detail_sections[0].render_as_header {
-                1
-            } else {
-                0
-            };
+        let overview_idx = usize::from(
+            node.detail_sections.len() > 1
+                && node
+                    .detail_sections
+                    .first()
+                    .is_some_and(|s| s.render_as_header),
+        );
 
         let overview_section = node.detail_sections.get(overview_idx)?;
 
-        let rows = match &overview_section.content {
-            crate::tree::DetailContent::Table { rows, .. } => rows,
-            _ => return None,
+        let crate::tree::DetailContent::Table { rows, .. } = &overview_section.content else {
+            return None;
         };
 
         let row_cursor = self.section_cursors.get(overview_idx).copied().unwrap_or(0);
@@ -1829,8 +1966,11 @@ impl App {
         // Expand ancestors and container
         self.expand_node_ancestors(container_idx);
 
-        if self.all_nodes[container_idx].has_children {
-            self.all_nodes[container_idx].expanded = true;
+        if let Some(node) = self.all_nodes.get(container_idx)
+            && node.has_children
+            && let Some(node_mut) = self.all_nodes.get_mut(container_idx)
+        {
+            node_mut.expanded = true;
         }
 
         // Find Diag-Comms section
@@ -1840,7 +1980,9 @@ impl App {
             return;
         };
 
-        self.all_nodes[dc_idx].expanded = true;
+        if let Some(node_mut) = self.all_nodes.get_mut(dc_idx) {
+            node_mut.expanded = true;
+        }
         self.rebuild_visible();
 
         let target = self
@@ -1851,52 +1993,72 @@ impl App {
 
     /// Expand all ancestors of a node
     fn expand_node_ancestors(&mut self, node_idx: usize) {
-        let target_depth = self.all_nodes[node_idx].depth;
+        let Some(target_node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
+        let target_depth = target_node.depth;
 
         if target_depth == 0 {
             return;
         }
 
         for i in 0..node_idx {
-            if self.all_nodes[i].depth < target_depth && self.all_nodes[i].has_children {
-                self.all_nodes[i].expanded = true;
+            if let Some(node) = self.all_nodes.get(i)
+                && node.depth < target_depth
+                && node.has_children
+                && let Some(node_mut) = self.all_nodes.get_mut(i)
+            {
+                node_mut.expanded = true;
             }
         }
     }
 
     /// Find the Diag-Comms section within a container
     fn find_diagcomm_section(&self, container_idx: usize) -> Option<usize> {
-        let container_depth = self.all_nodes[container_idx].depth;
+        let container = self.all_nodes.get(container_idx)?;
+        let container_depth = container.depth;
 
-        self.all_nodes[(container_idx + 1)..]
-            .iter()
-            .enumerate()
-            .take_while(|(_, child)| child.depth > container_depth)
-            .find(|(_, child)| {
-                child.depth == container_depth + 1
-                    && self.is_service_list_type(child, crate::tree::ServiceListType::DiagComms)
-            })
-            .map(|(offset, _)| container_idx + 1 + offset)
+        if let Some(children_slice) = self.all_nodes.get(container_idx.saturating_add(1)..) {
+            children_slice
+                .iter()
+                .enumerate()
+                .take_while(|(_, child)| child.depth > container_depth)
+                .find(|(_, child)| {
+                    child.depth == container_depth.saturating_add(1)
+                        && Self::is_service_list_type(
+                            child,
+                            crate::tree::ServiceListType::DiagComms,
+                        )
+                })
+                .map(|(offset, _)| container_idx.saturating_add(1).saturating_add(offset))
+        } else {
+            None
+        }
     }
 
     /// Find a service by name within a Diag-Comms section
     fn find_service_in_diagcomm(&self, diagcomm_idx: usize, service_name: &str) -> Option<usize> {
-        let diagcomm_depth = self.all_nodes[diagcomm_idx].depth;
+        let diagcomm_node = self.all_nodes.get(diagcomm_idx)?;
+        let diagcomm_depth = diagcomm_node.depth;
 
-        self.all_nodes[(diagcomm_idx + 1)..]
-            .iter()
-            .enumerate()
-            .take_while(|(_, node)| node.depth > diagcomm_depth)
-            .filter(|(_, node)| node.depth == diagcomm_depth + 1)
-            .find(|(_, node)| node.text.contains(service_name))
-            .map(|(offset, _)| diagcomm_idx + 1 + offset)
+        if let Some(children_slice) = self.all_nodes.get(diagcomm_idx.saturating_add(1)..) {
+            children_slice
+                .iter()
+                .enumerate()
+                .take_while(|(_, node)| node.depth > diagcomm_depth)
+                .filter(|(_, node)| node.depth == diagcomm_depth.saturating_add(1))
+                .find(|(_, node)| node.text.contains(service_name))
+                .map(|(offset, _)| diagcomm_idx.saturating_add(1).saturating_add(offset))
+        } else {
+            None
+        }
     }
 
-    /// Navigate to a node by its index in all_nodes
+    /// Navigate to a node by its index in `all_nodes`
     fn navigate_to_node_by_idx(&mut self, target_idx: usize) {
         if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == target_idx) {
             self.push_to_history();
-            self.detail_focused = false;
+            self.focus_state = FocusState::Tree;
             self.cursor = new_cursor;
             self.reset_detail_state();
             self.scroll_offset = self.cursor.saturating_sub(5);
@@ -1913,8 +2075,7 @@ impl App {
             let node_name = node
                 .text
                 .find(" [")
-                .map(|idx| &node.text[..idx])
-                .unwrap_or(&node.text);
+                .map_or(node.text.as_str(), |idx| &node.text[..idx]);
 
             node_name == name
         })
@@ -1929,22 +2090,24 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
         let section_idx = self.get_section_index();
 
         // Get table data or return early
-        let (rows, use_row_selection) = match self.get_table_rows(node, section_idx) {
-            Some(data) => data,
-            None => return,
+        let Some((rows, use_row_selection)) = Self::get_table_rows(node, section_idx) else {
+            return;
         };
 
         let row_cursor = self.section_cursors.get(section_idx).copied().unwrap_or(0);
         let sorted_rows = self.apply_table_sort(rows, section_idx);
 
-        let selected_row = match sorted_rows.get(row_cursor) {
-            Some(row) => row,
-            None => return,
+        let Some(selected_row) = sorted_rows.get(row_cursor) else {
+            return;
         };
 
         // Determine focused column and cell
@@ -1952,16 +2115,15 @@ impl App {
         let cell_type = selected_row
             .cell_types
             .get(focused_col)
-            .cloned()
+            .copied()
             .unwrap_or(CellType::Text);
         let cell_value = selected_row
             .cells
             .get(focused_col)
-            .map(|s| s.as_str())
-            .unwrap_or("");
+            .map_or("", std::string::String::as_str);
 
         if cell_value.is_empty() {
-            self.status = "Empty cell".to_owned();
+            "Empty cell".clone_into(&mut self.status);
             return;
         }
 
@@ -1969,7 +2131,11 @@ impl App {
         match cell_type {
             CellType::DopReference => self.navigate_to_dop(cell_value),
             CellType::ParameterName => {
-                let node_type = self.all_nodes[node_idx].node_type.clone();
+                let Some(node) = self.all_nodes.get(node_idx) else {
+                    "Invalid node index".clone_into(&mut self.status);
+                    return;
+                };
+                let node_type = node.node_type.clone();
                 match node_type {
                     // DiagComm view: navigate to the matching Request/Response service node
                     NodeType::Service | NodeType::ParentRefService => {
@@ -1987,22 +2153,18 @@ impl App {
                     | NodeType::DOP
                     | NodeType::SDG
                     | NodeType::Default => {
-                        self.status = "Parameter navigation not available here".to_owned();
+                        "Parameter navigation not available here".clone_into(&mut self.status);
                     }
                 }
             }
             CellType::Text | CellType::NumericValue => {
-                self.status = "This cell is not navigable".to_owned();
+                "This cell is not navigable".clone_into(&mut self.status);
             }
         }
     }
 
     /// Get table rows from section
-    fn get_table_rows<'a>(
-        &'a self,
-        node: &'a TreeNode,
-        section_idx: usize,
-    ) -> Option<(&'a Vec<DetailRow>, bool)> {
+    fn get_table_rows(node: &TreeNode, section_idx: usize) -> Option<(&Vec<DetailRow>, bool)> {
         let section = node.detail_sections.get(section_idx)?;
 
         match &section.content {
@@ -2015,16 +2177,21 @@ impl App {
         }
     }
 
-    /// Navigate from a DiagComm service to the corresponding Request/Response node.
-    /// The DiagComm node text has a `[Service] ` prefix that the counterpart lacks.
+    /// Navigate from a `DiagComm` service to the corresponding Request/Response node.
+    /// The `DiagComm` node text has a `[Service] ` prefix that the counterpart lacks.
     fn navigate_to_request_response_counterpart(&mut self, node_idx: usize, section_idx: usize) {
-        let service_name = self.all_nodes[node_idx]
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            "Invalid node index".clone_into(&mut self.status);
+            return;
+        };
+
+        let service_name = node
             .text
             .strip_prefix("[Service] ")
-            .unwrap_or(&self.all_nodes[node_idx].text)
+            .unwrap_or(&node.text)
             .to_owned();
 
-        let section_type = self.all_nodes[node_idx]
+        let section_type = node
             .detail_sections
             .get(section_idx)
             .map(|s| s.section_type);
@@ -2042,7 +2209,7 @@ impl App {
             | DetailSectionType::FunctionalClass
             | DetailSectionType::Custom => None,
         }) else {
-            self.status = "Cannot navigate from this section type".to_owned();
+            "Cannot navigate from this section type".clone_into(&mut self.status);
             return;
         };
 
@@ -2081,10 +2248,10 @@ impl App {
         match found_idx {
             Some(dop_idx) => {
                 self.navigate_to_node(dop_idx);
-                self.status = format!("Navigated to DOP: {}", dop_name);
+                self.status = format!("Navigated to DOP: {dop_name}");
             }
             None => {
-                self.status = format!("DOP '{}' not found in tree", dop_name);
+                self.status = format!("DOP '{dop_name}' not found in tree");
             }
         }
     }
@@ -2092,21 +2259,17 @@ impl App {
     /// Navigate to a parameter node using param ID from metadata
     fn navigate_to_parameter(&mut self, selected_row: &DetailRow) {
         // Extract param ID from metadata
-        let param_id = match &selected_row.metadata {
-            Some(crate::tree::RowMetadata::ParameterRow { param_id }) => *param_id,
-            _ => {
-                self.status = "No parameter ID in metadata".to_owned();
-                return;
-            }
+        let Some(crate::tree::RowMetadata::ParameterRow { param_id }) = &selected_row.metadata
+        else {
+            "No parameter ID in metadata".clone_into(&mut self.status);
+            return;
         };
+        let param_id = *param_id;
 
         // Find parameter node by ID
-        let param_idx = match self.find_param_by_id(param_id) {
-            Some(idx) => idx,
-            None => {
-                self.status = format!("Parameter with ID {} not found", param_id);
-                return;
-            }
+        let Some(param_idx) = self.find_param_by_id(param_id) else {
+            self.status = format!("Parameter with ID {param_id} not found");
+            return;
         };
 
         // Expand ancestors to make parameter visible
@@ -2115,17 +2278,17 @@ impl App {
         // Navigate to parameter
         if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == param_idx) {
             self.push_to_history();
-            self.detail_focused = false;
+            self.focus_state = FocusState::Tree;
             self.cursor = new_cursor;
             self.reset_detail_state();
             self.scroll_offset = self.cursor.saturating_sub(5);
-            self.status = format!("Navigated to parameter (ID: {})", param_id);
+            self.status = format!("Navigated to parameter (ID: {param_id})");
         } else {
-            self.status = format!("Parameter found but not visible (ID: {})", param_id);
+            self.status = format!("Parameter found but not visible (ID: {param_id})");
         }
     }
 
-    /// Find parameter node by param_id
+    /// Find parameter node by `param_id`
     fn find_param_by_id(&self, param_id: u32) -> Option<usize> {
         self.all_nodes
             .iter()
@@ -2138,8 +2301,12 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Get the actual section index
         let section_idx = self.get_section_index();
@@ -2148,18 +2315,18 @@ impl App {
             return;
         }
 
-        let section = &node.detail_sections[section_idx];
+        let Some(section) = node.detail_sections.get(section_idx) else {
+            return;
+        };
 
         // Get table rows
-        use crate::tree::DetailContent;
-        let rows = match &section.content {
-            DetailContent::Table { rows, .. } => rows,
-            _ => return,
+        let DetailContent::Table { rows, .. } = &section.content else {
+            return;
         };
 
         // Get the selected row cursor
         let row_cursor = if section_idx < self.section_cursors.len() {
-            self.section_cursors[section_idx]
+            *self.section_cursors.get(section_idx).unwrap_or(&0)
         } else {
             return;
         };
@@ -2171,15 +2338,19 @@ impl App {
             return;
         }
 
-        let selected_row = &sorted_rows[row_cursor];
+        let Some(selected_row) = sorted_rows.get(row_cursor) else {
+            return;
+        };
 
         // Extract the short name from the first column (was second before reordering)
         if selected_row.cells.len() < 2 {
-            self.status = "Invalid parent ref row".to_owned();
+            "Invalid parent ref row".clone_into(&mut self.status);
             return;
         }
 
-        let target_short_name = selected_row.cells[0].clone();
+        let Some(target_short_name) = selected_row.cells.first().cloned() else {
+            return;
+        };
 
         // Search for a node in the tree that matches this short name
         // We need to find Containers (variants, functional groups, ECU shared data, protocols)
@@ -2204,21 +2375,28 @@ impl App {
 
         if let Some(container_node_idx) = found_container_idx {
             // Expand all parents of the target node to make it visible
-            let container_depth = self.all_nodes[container_node_idx].depth;
+            let Some(container_node) = self.all_nodes.get(container_node_idx) else {
+                return;
+            };
+            let container_depth = container_node.depth;
 
             // Expand parent nodes
             if container_depth > 0 {
                 for i in 0..container_node_idx {
-                    let node = &mut self.all_nodes[i];
-                    if node.depth < container_depth && node.has_children {
+                    if let Some(node) = self.all_nodes.get_mut(i)
+                        && node.depth < container_depth
+                        && node.has_children
+                    {
                         node.expanded = true;
                     }
                 }
             }
 
             // Expand the container node itself if it has children
-            if self.all_nodes[container_node_idx].has_children {
-                self.all_nodes[container_node_idx].expanded = true;
+            if let Some(node) = self.all_nodes.get_mut(container_node_idx)
+                && node.has_children
+            {
+                node.expanded = true;
             }
 
             // Rebuild visible list
@@ -2231,25 +2409,29 @@ impl App {
                 .position(|&idx| idx == container_node_idx)
             {
                 self.push_to_history();
-                self.detail_focused = false;
+                self.focus_state = FocusState::Tree;
                 self.cursor = new_cursor;
                 self.reset_detail_state();
                 self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to: {}", target_short_name);
+                self.status = format!("Navigated to: {target_short_name}");
             }
         } else {
-            self.status = format!("Element '{}' not found in tree", target_short_name);
+            self.status = format!("Element '{target_short_name}' not found in tree");
         }
     }
 
-    /// Navigate to a not-inherited element (DiagComm, DiagVariable, Dop, Table)
+    /// Navigate to a not-inherited element (`DiagComm`, `DiagVariable`, `Dop`, `Table`)
     pub(crate) fn try_navigate_to_not_inherited_element(&mut self) {
         if self.cursor >= self.visible.len() {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Get the actual section index
         let section_idx = self.get_section_index();
@@ -2258,7 +2440,9 @@ impl App {
             return;
         }
 
-        let section = &node.detail_sections[section_idx];
+        let Some(section) = node.detail_sections.get(section_idx) else {
+            return;
+        };
 
         // Determine what type of element we're looking for based on the section title
         let element_type = if section.title.contains("DiagComms") {
@@ -2267,20 +2451,18 @@ impl App {
             // For now, only services (DiagComms) are navigable
             // TODO: Add navigation for DiagVariables, DOPs,
             // and Tables when they're added to the tree
-            self.status = "Navigation not yet supported for this element type".to_owned();
+            "Navigation not yet supported for this element type".clone_into(&mut self.status);
             return;
         };
 
         // Get table rows
-        use crate::tree::DetailContent;
-        let rows = match &section.content {
-            DetailContent::Table { rows, .. } => rows,
-            _ => return,
+        let DetailContent::Table { rows, .. } = &section.content else {
+            return;
         };
 
         // Get the selected row cursor
         let row_cursor = if section_idx < self.section_cursors.len() {
-            self.section_cursors[section_idx]
+            *self.section_cursors.get(section_idx).unwrap_or(&0)
         } else {
             return;
         };
@@ -2292,15 +2474,19 @@ impl App {
             return;
         }
 
-        let selected_row = &sorted_rows[row_cursor];
+        let Some(selected_row) = sorted_rows.get(row_cursor) else {
+            return;
+        };
 
         // Extract the element short name from the first column
         if selected_row.cells.is_empty() {
-            self.status = "Invalid row".to_owned();
+            "Invalid row".clone_into(&mut self.status);
             return;
         }
 
-        let target_short_name = selected_row.cells[0].clone();
+        let Some(target_short_name) = selected_row.cells.first().cloned() else {
+            return;
+        };
 
         // Search for the element in the tree based on type
         if element_type == "service" {
@@ -2311,7 +2497,7 @@ impl App {
                 if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
                     // Service nodes have format "0xXXXX - ShortName"
                     let service_name = if let Some(dash_idx) = n.text.find(" - ") {
-                        &n.text[dash_idx + 3..]
+                        n.text.get(dash_idx.saturating_add(3)..).unwrap_or(&n.text)
                     } else {
                         &n.text
                     };
@@ -2325,13 +2511,18 @@ impl App {
 
             if let Some(service_node_idx) = found_service_idx {
                 // Expand all parents of the target node to make it visible
-                let service_depth = self.all_nodes[service_node_idx].depth;
+                let Some(service_node) = self.all_nodes.get(service_node_idx) else {
+                    return;
+                };
+                let service_depth = service_node.depth;
 
                 // Expand parent nodes
                 if service_depth > 0 {
                     for i in 0..service_node_idx {
-                        let node = &mut self.all_nodes[i];
-                        if node.depth < service_depth && node.has_children {
+                        if let Some(node) = self.all_nodes.get_mut(i)
+                            && node.depth < service_depth
+                            && node.has_children
+                        {
                             node.expanded = true;
                         }
                     }
@@ -2345,14 +2536,14 @@ impl App {
                     self.visible.iter().position(|&idx| idx == service_node_idx)
                 {
                     self.push_to_history();
-                    self.detail_focused = false;
+                    self.focus_state = FocusState::Tree;
                     self.cursor = new_cursor;
                     self.reset_detail_state();
                     self.scroll_offset = self.cursor.saturating_sub(5);
-                    self.status = format!("Navigated to service: {}", target_short_name);
+                    self.status = format!("Navigated to service: {target_short_name}");
                 }
             } else {
-                self.status = format!("Service '{}' not found in tree", target_short_name);
+                self.status = format!("Service '{target_short_name}' not found in tree");
             }
         }
     }
@@ -2360,18 +2551,22 @@ impl App {
     /// Navigate to a layer from functional class detail view
     /// The layer name is extracted from the "Layer" column of the selected row
     /// Navigate to a service or job from a functional class detail view
-    /// Uses the ShortName column (column 0) to find the target
+    /// Uses the `ShortName` column (column 0) to find the target
     pub(crate) fn try_navigate_to_service_from_functional_class(&mut self) {
         if self.cursor >= self.visible.len() {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Verify we're on a functional class node
         if !matches!(node.node_type, NodeType::FunctionalClass) {
-            self.status = "Not a functional class node".to_owned();
+            "Not a functional class node".clone_into(&mut self.status);
             return;
         }
 
@@ -2382,24 +2577,24 @@ impl App {
             return;
         }
 
-        let section = &node.detail_sections[section_idx];
+        let Some(section) = node.detail_sections.get(section_idx) else {
+            return;
+        };
 
         // We should be in a Services section
         if section.section_type != DetailSectionType::Services {
-            self.status = "Not in a services section".to_owned();
+            "Not in a services section".clone_into(&mut self.status);
             return;
         }
 
         // Get table rows
-        use crate::tree::DetailContent;
-        let rows = match &section.content {
-            DetailContent::Table { rows, .. } => rows,
-            _ => return,
+        let DetailContent::Table { rows, .. } = &section.content else {
+            return;
         };
 
         // Get the selected row cursor
         let row_cursor = if section_idx < self.section_cursors.len() {
-            self.section_cursors[section_idx]
+            *self.section_cursors.get(section_idx).unwrap_or(&0)
         } else {
             return;
         };
@@ -2411,15 +2606,19 @@ impl App {
             return;
         }
 
-        let selected_row = &sorted_rows[row_cursor];
+        let Some(selected_row) = sorted_rows.get(row_cursor) else {
+            return;
+        };
 
         // ShortName is in column 0
         if selected_row.cells.is_empty() {
-            self.status = "Invalid row structure".to_owned();
+            "Invalid row structure".clone_into(&mut self.status);
             return;
         }
 
-        let target_short_name = selected_row.cells[0].clone();
+        let Some(target_short_name) = selected_row.cells.first().cloned() else {
+            return;
+        };
 
         // Search for the service/job in the tree
         self.navigate_to_service_or_job(&target_short_name);
@@ -2430,12 +2629,16 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Verify we're on a functional class node
         if !matches!(node.node_type, NodeType::FunctionalClass) {
-            self.status = "Not a functional class node".to_owned();
+            "Not a functional class node".clone_into(&mut self.status);
             return;
         }
 
@@ -2446,24 +2649,24 @@ impl App {
             return;
         }
 
-        let section = &node.detail_sections[section_idx];
+        let Some(section) = node.detail_sections.get(section_idx) else {
+            return;
+        };
 
         // We should be in a Services section (the table showing services for this functional class)
         if section.section_type != DetailSectionType::Services {
-            self.status = "Not in a services section".to_owned();
+            "Not in a services section".clone_into(&mut self.status);
             return;
         }
 
         // Get table rows
-        use crate::tree::DetailContent;
-        let rows = match &section.content {
-            DetailContent::Table { rows, .. } => rows,
-            _ => return,
+        let DetailContent::Table { rows, .. } = &section.content else {
+            return;
         };
 
         // Get the selected row cursor
         let row_cursor = if section_idx < self.section_cursors.len() {
-            self.section_cursors[section_idx]
+            *self.section_cursors.get(section_idx).unwrap_or(&0)
         } else {
             return;
         };
@@ -2475,18 +2678,22 @@ impl App {
             return;
         }
 
-        let selected_row = &sorted_rows[row_cursor];
+        let Some(selected_row) = sorted_rows.get(row_cursor) else {
+            return;
+        };
 
         // The table has columns: ShortName | Type | SID_RQ | Semantic | Addressing | Layer
         // Layer name is in column 5 (index 5)
         let layer_column_index = 5;
 
         if selected_row.cells.len() <= layer_column_index {
-            self.status = "Invalid row structure".to_owned();
+            "Invalid row structure".clone_into(&mut self.status);
             return;
         }
 
-        let layer_name = selected_row.cells[layer_column_index].clone();
+        let Some(layer_name) = selected_row.cells.get(layer_column_index).cloned() else {
+            return;
+        };
 
         // Search for a layer node in the tree with matching name
         // The layer name in the table is just the short name (e.g., "IDC_GEN6_C_17.00.09")
@@ -2514,13 +2721,18 @@ impl App {
 
         if let Some(layer_node_idx) = found_layer_idx {
             // Expand all parents of the target node to make it visible
-            let layer_depth = self.all_nodes[layer_node_idx].depth;
+            let Some(layer_node) = self.all_nodes.get(layer_node_idx) else {
+                return;
+            };
+            let layer_depth = layer_node.depth;
 
             // Expand parent nodes
             if layer_depth > 0 {
                 for i in 0..layer_node_idx {
-                    let node = &mut self.all_nodes[i];
-                    if node.depth < layer_depth && node.has_children {
+                    if let Some(node) = self.all_nodes.get_mut(i)
+                        && node.depth < layer_depth
+                        && node.has_children
+                    {
                         node.expanded = true;
                     }
                 }
@@ -2532,65 +2744,61 @@ impl App {
             // Navigate to the layer
             if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == layer_node_idx) {
                 self.push_to_history();
-                self.detail_focused = false;
+                self.focus_state = FocusState::Tree;
                 self.cursor = new_cursor;
                 self.reset_detail_state();
                 self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to layer: {}", layer_name);
+                self.status = format!("Navigated to layer: {layer_name}");
             }
         } else {
-            self.status = format!("Layer '{}' not found in tree", layer_name);
+            self.status = format!("Layer '{layer_name}' not found in tree");
         }
     }
 
     /// Navigate to a variant from the Variants overview table
     pub(crate) fn try_navigate_to_variant(&mut self) {
+        use crate::tree::DetailContent;
+
         if self.cursor >= self.visible.len() {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Get the actual section index
         let section_idx = self.get_section_index();
 
-        if section_idx >= node.detail_sections.len() {
+        let Some(section) = node.detail_sections.get(section_idx) else {
             return;
-        }
-
-        let section = &node.detail_sections[section_idx];
+        };
 
         // Get table rows
-        use crate::tree::DetailContent;
-        let rows = match &section.content {
-            DetailContent::Table { rows, .. } => rows,
-            _ => return,
+        let DetailContent::Table { rows, .. } = &section.content else {
+            return;
         };
 
         // Get the selected row cursor
-        let row_cursor = if section_idx < self.section_cursors.len() {
-            self.section_cursors[section_idx]
-        } else {
+        let Some(&row_cursor) = self.section_cursors.get(section_idx) else {
             return;
         };
 
         // Apply sorting if active for this section
         let sorted_rows = self.apply_table_sort(rows, section_idx);
 
-        if row_cursor >= sorted_rows.len() {
+        let Some(selected_row) = sorted_rows.get(row_cursor) else {
             return;
-        }
-
-        let selected_row = &sorted_rows[row_cursor];
+        };
 
         // Extract the variant name from the first column
-        if selected_row.cells.is_empty() {
-            self.status = "Invalid variant row".to_owned();
+        let Some(target_variant_name) = selected_row.cells.first().cloned() else {
+            "Invalid variant row".clone_into(&mut self.status);
             return;
-        }
-
-        let target_variant_name = selected_row.cells[0].clone();
+        };
 
         // Search for a variant node in the tree that matches this name
         // Variant nodes are at depth 1 under "Variants" section
@@ -2621,34 +2829,38 @@ impl App {
             // Find the variant in the visible list and navigate to it
             if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == variant_node_idx) {
                 self.push_to_history();
-                self.detail_focused = false;
+                self.focus_state = FocusState::Tree;
                 self.cursor = new_cursor;
                 self.reset_detail_state();
                 self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to variant: {}", target_variant_name);
+                self.status = format!("Navigated to variant: {target_variant_name}");
             }
         } else {
-            self.status = format!("Variant '{}' not found in tree", target_variant_name);
+            self.status = format!("Variant '{target_variant_name}' not found in tree");
         }
     }
 
     /// Navigate from variant overview to a child element
     pub(crate) fn try_navigate_from_variant_overview(&mut self) {
+        use crate::tree::DetailContent;
+
         if self.cursor >= self.visible.len() {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Get the actual section index
         let section_idx = self.get_section_index();
 
-        if section_idx >= node.detail_sections.len() {
+        let Some(section) = node.detail_sections.get(section_idx) else {
             return;
-        }
-
-        let section = &node.detail_sections[section_idx];
+        };
 
         // Only handle Overview section type
         if section.section_type != DetailSectionType::Overview {
@@ -2656,39 +2868,35 @@ impl App {
         }
 
         // Get table rows
-        use crate::tree::DetailContent;
-        let rows = match &section.content {
-            DetailContent::Table { rows, .. } => rows,
-            _ => return,
+        let DetailContent::Table { rows, .. } = &section.content else {
+            return;
         };
 
         // Get the selected row cursor
-        let row_cursor = if section_idx < self.section_cursors.len() {
-            self.section_cursors[section_idx]
-        } else {
+        let Some(&row_cursor) = self.section_cursors.get(section_idx) else {
             return;
         };
 
         // Apply sorting if active for this section
         let sorted_rows = self.apply_table_sort(rows, section_idx);
 
-        if row_cursor >= sorted_rows.len() {
+        let Some(selected_row) = sorted_rows.get(row_cursor) else {
             return;
-        }
-
-        let selected_row = &sorted_rows[row_cursor];
+        };
 
         // Check if this row is a child element row with metadata
         if let Some(RowMetadata::ChildElement { element_type }) = &selected_row.metadata {
             // Find the child section node under the current variant
             // It should be a direct child (depth = current + 1) of the current node
             let current_depth = node.depth;
-            let target_depth = current_depth + 1;
+            let target_depth = current_depth.saturating_add(1);
 
             // Start searching after the current node
             let mut target_idx: Option<usize> = None;
-            for i in (node_idx + 1)..self.all_nodes.len() {
-                let child_node = &self.all_nodes[i];
+            for i in node_idx.saturating_add(1)..self.all_nodes.len() {
+                let Some(child_node) = self.all_nodes.get(i) else {
+                    continue;
+                };
 
                 // Stop if we've moved past this variant's children
                 if child_node.depth <= current_depth {
@@ -2713,7 +2921,7 @@ impl App {
                     self.visible.iter().position(|&idx| idx == target_node_idx)
                 {
                     self.push_to_history();
-                    self.detail_focused = false;
+                    self.focus_state = FocusState::Tree;
                     self.cursor = new_cursor;
                     self.reset_detail_state();
                     self.scroll_offset = self.cursor.saturating_sub(5);
@@ -2730,12 +2938,18 @@ impl App {
     /// like "DTC-DOPS", navigates to the category child node.
     /// For DOP category nodes: rows are individual DOPs, navigates to the DOP child node.
     fn try_navigate_to_dop_child(&mut self) {
+        use crate::tree::DetailContent;
+
         if self.cursor >= self.visible.len() {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Get the actual section index
         let section_idx = self.get_section_index();
@@ -2744,7 +2958,9 @@ impl App {
             return;
         }
 
-        let section = &node.detail_sections[section_idx];
+        let Some(section) = node.detail_sections.get(section_idx) else {
+            return;
+        };
 
         // Only handle Overview section type
         if section.section_type != DetailSectionType::Overview {
@@ -2752,16 +2968,12 @@ impl App {
         }
 
         // Get table rows
-        use crate::tree::DetailContent;
-        let rows = match &section.content {
-            DetailContent::Table { rows, .. } => rows,
-            _ => return,
+        let DetailContent::Table { rows, .. } = &section.content else {
+            return;
         };
 
         // Get the selected row cursor
-        let row_cursor = if section_idx < self.section_cursors.len() {
-            self.section_cursors[section_idx]
-        } else {
+        let Some(&row_cursor) = self.section_cursors.get(section_idx) else {
             return;
         };
 
@@ -2772,7 +2984,9 @@ impl App {
             return;
         }
 
-        let selected_row = &sorted_rows[row_cursor];
+        let Some(selected_row) = sorted_rows.get(row_cursor) else {
+            return;
+        };
 
         // Get the first cell text (category name or DOP name)
         let target_name = match selected_row.cells.first() {
@@ -2782,11 +2996,13 @@ impl App {
 
         // Find the child node that matches the target name
         let current_depth = node.depth;
-        let target_depth = current_depth + 1;
+        let target_depth = current_depth.saturating_add(1);
 
         let mut target_idx: Option<usize> = None;
-        for i in (node_idx + 1)..self.all_nodes.len() {
-            let child_node = &self.all_nodes[i];
+        for i in node_idx.saturating_add(1)..self.all_nodes.len() {
+            let Some(child_node) = self.all_nodes.get(i) else {
+                continue;
+            };
 
             // Stop if we've moved past this node's children
             if child_node.depth <= current_depth {
@@ -2807,14 +3023,14 @@ impl App {
             // Find the target in the visible list and navigate to it
             if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == target_node_idx) {
                 self.push_to_history();
-                self.detail_focused = false;
+                self.focus_state = FocusState::Tree;
                 self.cursor = new_cursor;
                 self.reset_detail_state();
                 self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to: {}", target_name);
+                self.status = format!("Navigated to: {target_name}");
             }
         } else {
-            self.status = format!("'{}' not found", target_name);
+            self.status = format!("'{target_name}' not found");
         }
     }
 
@@ -2827,7 +3043,7 @@ impl App {
             let matches = if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
                 // Service nodes have format "0xXXXX - ShortName"
                 let service_name = if let Some(dash_idx) = n.text.find(" - ") {
-                    &n.text[dash_idx + 3..]
+                    &n.text[dash_idx.saturating_add(3)..]
                 } else {
                     &n.text
                 };
@@ -2848,12 +3064,17 @@ impl App {
 
         if let Some(service_node_idx) = found_service_idx {
             // Expand all parents of the target node to make it visible
-            let service_depth = self.all_nodes[service_node_idx].depth;
+            let Some(service_node) = self.all_nodes.get(service_node_idx) else {
+                return;
+            };
+            let service_depth = service_node.depth;
 
             // Expand parent nodes
             if service_depth > 0 {
                 for i in 0..service_node_idx {
-                    let node = &mut self.all_nodes[i];
+                    let Some(node) = self.all_nodes.get_mut(i) else {
+                        continue;
+                    };
                     if node.depth < service_depth && node.has_children {
                         node.expanded = true;
                     }
@@ -2866,22 +3087,118 @@ impl App {
             // Navigate to the service/job
             if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == service_node_idx) {
                 self.push_to_history();
-                self.detail_focused = false;
+                self.focus_state = FocusState::Tree;
                 self.cursor = new_cursor;
                 self.reset_detail_state();
                 self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to: {}", target_short_name);
+                self.status = format!("Navigated to: {target_short_name}");
             }
         } else {
-            self.status = format!("Service/Job '{}' not found in tree", target_short_name);
+            self.status = format!("Service/Job '{target_short_name}' not found in tree");
+        }
+    }
+
+    fn initialize_column_widths(
+        &mut self,
+        constraints: &[crate::tree::ColumnConstraint],
+        section_idx: usize,
+    ) {
+        let mut widths: Vec<u16> = constraints
+            .iter()
+            .map(|c| match c {
+                crate::tree::ColumnConstraint::Fixed(w) => {
+                    w.saturating_mul(3).saturating_div(2).clamp(3, 15)
+                }
+                crate::tree::ColumnConstraint::Percentage(p) => *p,
+            })
+            .collect();
+
+        Self::normalize_column_widths(&mut widths);
+
+        let Some(section_widths) = self.column_widths.get_mut(section_idx) else {
+            return;
+        };
+        *section_widths = widths;
+    }
+
+    fn normalize_column_widths(widths: &mut Vec<u16>) {
+        let total: u16 = widths.iter().sum();
+        if total > 0 && total != 100 {
+            *widths = widths
+                .iter()
+                .map(|&w| {
+                    // f32 percentage value always fits in u16 (0..=100)
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    let result = ((f32::from(w) / f32::from(total)) * 100.0).round() as u16;
+                    result
+                })
+                .collect();
+
+            let new_total: u16 = widths.iter().sum();
+            if new_total != 100 && !widths.is_empty() {
+                let max_idx = widths
+                    .iter()
+                    .enumerate()
+                    .max_by_key(|(_, w)| *w)
+                    .map_or(0, |(idx, _)| idx);
+                let Some(max_width) = widths.get_mut(max_idx) else {
+                    return;
+                };
+                *max_width = max_width.saturating_add(100u16.saturating_sub(new_total));
+            }
+        }
+    }
+
+    fn normalize_and_adjust_column_widths(&mut self, section_idx: usize) {
+        let Some(section_widths) = self.column_widths.get(section_idx) else {
+            return;
+        };
+        let total: u16 = section_widths.iter().sum();
+        if total > 0 && total != 100 {
+            let normalized: Vec<u16> = section_widths
+                .iter()
+                .map(|&w| {
+                    // f32 percentage value always fits in u16 (0..=100)
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    let result = ((f32::from(w) / f32::from(total)) * 100.0).round() as u16;
+                    result
+                })
+                .collect();
+
+            let Some(section_widths_mut) = self.column_widths.get_mut(section_idx) else {
+                return;
+            };
+            *section_widths_mut = normalized;
+
+            let Some(section_widths) = self.column_widths.get(section_idx) else {
+                return;
+            };
+            let new_total: u16 = section_widths.iter().sum();
+            if new_total != 100 {
+                let diff = 100i16.saturating_sub(i16::try_from(new_total).unwrap_or(0));
+                let Some(&focused_width_u16) = section_widths.get(self.focused_column) else {
+                    return;
+                };
+                let focused_width = i16::try_from(focused_width_u16).unwrap_or(0);
+                let adjusted = focused_width.saturating_add(diff).max(1);
+                let adjusted_u16 = u16::try_from(adjusted).unwrap_or(1);
+                let Some(focused_width_mut) = self
+                    .column_widths
+                    .get_mut(section_idx)
+                    .and_then(|widths| widths.get_mut(self.focused_column))
+                else {
+                    return;
+                };
+                *focused_width_mut = adjusted_u16;
+            }
         }
     }
 
     pub(crate) fn resize_column(&mut self, delta: i16) {
-        // Get the actual section index accounting for header sections
+        use crate::tree::DetailContent;
+
         let section_idx = self.get_section_index();
 
-        // Ensure we have column_widths entries for all sections
         while self.column_widths.len() <= section_idx {
             self.column_widths.push(Vec::new());
         }
@@ -2889,82 +3206,67 @@ impl App {
         if self.cursor >= self.visible.len() {
             return;
         }
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
         if section_idx >= node.detail_sections.len() {
             return;
         }
-        let section = &node.detail_sections[section_idx];
-        use crate::tree::DetailContent;
-        let constraints = match &section.content {
-            DetailContent::Table { constraints, .. } => constraints,
-            _ => {
-                self.status = "Column resizing only available in tables".to_owned();
-                return;
-            }
+        let Some(section) = node.detail_sections.get(section_idx) else {
+            return;
+        };
+        let DetailContent::Table { constraints, .. } = &section.content else {
+            "Column resizing only available in tables".clone_into(&mut self.status);
+            return;
         };
 
-        // Initialize column widths from constraints if not already done
-        if self.column_widths[section_idx].is_empty() {
-            // First pass: convert to initial widths
-            let mut widths: Vec<u16> = constraints
-                .iter()
-                .map(|c| match c {
-                    crate::tree::ColumnConstraint::Fixed(w) => {
-                        // Convert fixed width to a reasonable percentage (roughly 1.5% per char)
-                        (*w * 3 / 2).clamp(3, 15)
-                    }
-                    crate::tree::ColumnConstraint::Percentage(p) => *p,
-                })
-                .collect();
-
-            // Normalize to ensure total is exactly 100%
-            let total: u16 = widths.iter().sum();
-            if total > 0 && total != 100 {
-                // Scale all widths proportionally to sum to 100
-                widths = widths
-                    .iter()
-                    .map(|&w| ((w as f32 / total as f32) * 100.0).round() as u16)
-                    .collect();
-
-                // Handle rounding errors: adjust the largest column
-                let new_total: u16 = widths.iter().sum();
-                if new_total != 100 && !widths.is_empty() {
-                    let max_idx = widths
-                        .iter()
-                        .enumerate()
-                        .max_by_key(|(_, w)| *w)
-                        .map(|(idx, _)| idx)
-                        .unwrap_or(0);
-                    widths[max_idx] = widths[max_idx].saturating_add(100 - new_total);
-                }
-            }
-
-            self.column_widths[section_idx] = widths;
+        let Some(current_widths) = self.column_widths.get(section_idx) else {
+            return;
+        };
+        if current_widths.is_empty() {
+            let constraints = (*constraints).clone();
+            self.initialize_column_widths(&constraints, section_idx);
         }
 
-        let num_cols = self.column_widths[section_idx].len();
+        let Some(section_widths) = self.column_widths.get(section_idx) else {
+            return;
+        };
+        let num_cols = section_widths.len();
         if num_cols == 0 || self.focused_column >= num_cols {
             return;
         }
 
-        // Calculate new width for focused column
-        let current_width = self.column_widths[section_idx][self.focused_column] as i16;
-        let new_current = (current_width + delta).clamp(3, 95) as u16; // Min 3%, Max 95%
-        let actual_delta = new_current as i16 - current_width;
+        let Some(&current_width_u16) = section_widths.get(self.focused_column) else {
+            return;
+        };
+        let current_width = i16::try_from(current_width_u16).unwrap_or(0);
+        let new_current_i16 = current_width.saturating_add(delta).clamp(3, 95);
+        let new_current = u16::try_from(new_current_i16).unwrap_or(3);
+        let actual_delta = new_current_i16.saturating_sub(current_width);
 
         if actual_delta == 0 {
-            self.status = "Cannot resize: at min/max width".to_owned();
+            "Cannot resize: at min/max width".clone_into(&mut self.status);
             return;
         }
 
-        // Apply the change to the focused column
-        self.column_widths[section_idx][self.focused_column] = new_current;
+        let Some(focused_width_mut) = self
+            .column_widths
+            .get_mut(section_idx)
+            .and_then(|widths| widths.get_mut(self.focused_column))
+        else {
+            return;
+        };
+        *focused_width_mut = new_current;
 
-        // Distribute the delta across all other columns proportionally
-        let num_other_cols = num_cols - 1;
+        let num_other_cols = num_cols.saturating_sub(1);
         if num_other_cols > 0 {
-            let total_other: u16 = self.column_widths[section_idx]
+            let Some(section_widths) = self.column_widths.get(section_idx) else {
+                return;
+            };
+            let total_other: u16 = section_widths
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| *i != self.focused_column)
@@ -2972,45 +3274,48 @@ impl App {
                 .sum();
 
             if total_other > 0 {
-                // Distribute the negative delta proportionally across other columns
                 for i in 0..num_cols {
                     if i != self.focused_column {
-                        let old_width = self.column_widths[section_idx][i] as i16;
-                        let proportion = old_width as f32 / total_other as f32;
-                        let adjustment = (-actual_delta as f32 * proportion).round() as i16;
-                        let new_width = (old_width + adjustment).max(3) as u16;
-                        self.column_widths[section_idx][i] = new_width;
+                        let Some(section_widths) = self.column_widths.get(section_idx) else {
+                            continue;
+                        };
+                        let Some(&old_width_u16) = section_widths.get(i) else {
+                            continue;
+                        };
+                        let old_width = i16::try_from(old_width_u16).unwrap_or(0);
+                        let proportion = f32::from(old_width_u16) / f32::from(total_other);
+                        let adjustment_f32 = -f32::from(actual_delta) * proportion;
+                        // adjustment is a small column-width delta that fits in i16
+                        #[allow(clippy::cast_possible_truncation)]
+                        let adjustment = adjustment_f32.round() as i16;
+                        let new_width_i16 = old_width.saturating_add(adjustment).max(3);
+                        let new_width = u16::try_from(new_width_i16).unwrap_or(3);
+                        let Some(col_width_mut) = self
+                            .column_widths
+                            .get_mut(section_idx)
+                            .and_then(|widths| widths.get_mut(i))
+                        else {
+                            continue;
+                        };
+                        *col_width_mut = new_width;
                     }
                 }
             }
         }
 
-        // Normalize to ensure total is exactly 100%
-        let total: u16 = self.column_widths[section_idx].iter().sum();
-        if total > 0 && total != 100 {
-            // Scale all widths proportionally to sum to 100
-            let normalized: Vec<u16> = self.column_widths[section_idx]
-                .iter()
-                .map(|&w| ((w as f32 / total as f32) * 100.0).round() as u16)
-                .collect();
+        self.normalize_and_adjust_column_widths(section_idx);
 
-            self.column_widths[section_idx] = normalized;
-
-            // Handle rounding errors: adjust the focused column to make total exactly 100
-            let new_total: u16 = self.column_widths[section_idx].iter().sum();
-            if new_total != 100 {
-                let diff = 100i16 - new_total as i16;
-                let focused_width = self.column_widths[section_idx][self.focused_column] as i16;
-                self.column_widths[section_idx][self.focused_column] =
-                    (focused_width + diff).max(1) as u16;
-            }
-        }
-
+        let Some(section_widths) = self.column_widths.get(section_idx) else {
+            return;
+        };
+        let Some(&focused_width) = section_widths.get(self.focused_column) else {
+            return;
+        };
         self.status = format!(
             "Column {} width: {}% (total: {}%)",
             self.focused_column,
-            self.column_widths[section_idx][self.focused_column],
-            self.column_widths[section_idx].iter().sum::<u16>()
+            focused_width,
+            section_widths.iter().sum::<u16>()
         );
     }
 
@@ -3036,20 +3341,18 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) => {
                 // Check if clicking on a scrollbar to start drag
                 if self.is_in_tree_scrollbar(column, row) {
-                    self.dragging_scrollbar = true;
-                    self.dragging_tree_scrollbar = true;
+                    self.drag_state = DragState::TreeScrollbar;
                     self.handle_scrollbar_drag(row);
                     return Action::Continue;
                 } else if self.is_in_detail_scrollbar(column, row) {
-                    self.dragging_scrollbar = true;
-                    self.dragging_tree_scrollbar = false;
+                    self.drag_state = DragState::DetailScrollbar;
                     self.handle_scrollbar_drag(row);
                     return Action::Continue;
                 }
 
                 // Check if clicking near the divider to start drag
                 if self.is_near_divider(column) {
-                    self.dragging_divider = true;
+                    self.drag_state = DragState::Divider;
                     return Action::Continue;
                 }
 
@@ -3078,16 +3381,18 @@ impl App {
             }
             MouseEventKind::Up(MouseButton::Left) => {
                 // Stop dragging when mouse button is released
-                self.dragging_divider = false;
-                self.dragging_scrollbar = false;
+                self.drag_state = DragState::None;
             }
             MouseEventKind::Drag(MouseButton::Left) => {
                 // Handle drag to scroll via scrollbar
-                if self.dragging_scrollbar {
+                if matches!(
+                    self.drag_state,
+                    DragState::TreeScrollbar | DragState::DetailScrollbar
+                ) {
                     self.handle_scrollbar_drag(row);
                 }
                 // Handle drag to resize tree pane
-                else if self.dragging_divider {
+                else if self.drag_state == DragState::Divider {
                     self.handle_divider_drag(column);
                 }
             }
@@ -3095,7 +3400,7 @@ impl App {
                 if self.is_in_tree_area(column, row) {
                     self.move_down();
                 } else if self.is_in_detail_area(column, row) {
-                    self.detail_focused = true;
+                    self.focus_state = FocusState::Detail;
                     self.move_down();
                 }
             }
@@ -3103,7 +3408,7 @@ impl App {
                 if self.is_in_tree_area(column, row) {
                     self.move_up();
                 } else if self.is_in_detail_area(column, row) {
-                    self.detail_focused = true;
+                    self.focus_state = FocusState::Detail;
                     self.move_up();
                 }
             }
@@ -3119,10 +3424,10 @@ impl App {
             self.handle_breadcrumb_click(column);
         } else if self.is_in_tree_area(column, row) {
             // Click in tree area
-            self.detail_focused = false;
+            self.focus_state = FocusState::Tree;
             self.handle_tree_click(row);
         } else if self.is_in_detail_area(column, row) {
-            self.detail_focused = true;
+            self.focus_state = FocusState::Detail;
             // Check if click is on tab area
             if self.is_in_tab_area(column, row) {
                 self.handle_tab_click(column, row);
@@ -3133,14 +3438,14 @@ impl App {
     }
 
     fn handle_double_click(&mut self, column: u16, row: u16) {
+        const HEADER_HEIGHT: usize = 3;
         // Double-click in table content area should trigger navigation or DOP popup
         if self.is_in_table_content_area(column, row) {
-            self.detail_focused = true;
+            self.focus_state = FocusState::Detail;
 
             // Check if double-click is on table header and ignore it
             if let Some(area) = self.table_content_area {
-                let relative_row = (row - area.y) as usize;
-                const HEADER_HEIGHT: usize = 3;
+                let relative_row = (row.saturating_sub(area.y)) as usize;
                 if relative_row < HEADER_HEIGHT {
                     // Ignore double-clicks on header
                     return;
@@ -3149,11 +3454,15 @@ impl App {
 
             // Check what type of node we're on
             if self.cursor < self.visible.len() {
-                let node_idx = self.visible[self.cursor];
-                let node = &self.all_nodes[node_idx];
+                let Some(&node_idx) = self.visible.get(self.cursor) else {
+                    return;
+                };
+                let Some(node) = self.all_nodes.get(node_idx) else {
+                    return;
+                };
 
                 // Check if this is a service list header (generic check)
-                let is_service_list = self.is_service_list_section(node);
+                let is_service_list = Self::is_service_list_section(node);
 
                 // Check if this is the Variants overview section
                 let is_variants_section =
@@ -3209,7 +3518,9 @@ impl App {
                     let section_idx = self.get_section_index();
 
                     if section_idx < node.detail_sections.len() {
-                        let section = &node.detail_sections[section_idx];
+                        let Some(section) = node.detail_sections.get(section_idx) else {
+                            return;
+                        };
 
                         // Check if this is a request/response parameter table
                         if matches!(
@@ -3222,20 +3533,16 @@ impl App {
                         } else if section.section_type == DetailSectionType::Overview
                             && let crate::tree::DetailContent::Table { rows, .. } = &section.content
                         {
-                            let row_cursor = if section_idx < self.section_cursors.len() {
-                                self.section_cursors[section_idx]
-                            } else {
-                                0
-                            };
+                            let row_cursor =
+                                self.section_cursors.get(section_idx).copied().unwrap_or(0);
 
                             // Apply sorting if active for this section
                             let sorted_rows = self.apply_table_sort(rows, section_idx);
 
-                            if row_cursor < sorted_rows.len() {
-                                let selected_row = &sorted_rows[row_cursor];
-                                if selected_row.row_type == DetailRowType::InheritedFrom {
-                                    should_navigate_to_parent = true;
-                                }
+                            if let Some(selected_row) = sorted_rows.get(row_cursor)
+                                && selected_row.row_type == DetailRowType::InheritedFrom
+                            {
+                                should_navigate_to_parent = true;
                             }
                         }
                     }
@@ -3250,8 +3557,7 @@ impl App {
                 } else {
                     // Check if we're in a Parent References section
                     let section_idx = self.get_section_index();
-                    if section_idx < node.detail_sections.len() {
-                        let section = &node.detail_sections[section_idx];
+                    if let Some(section) = node.detail_sections.get(section_idx) {
                         if section.section_type == DetailSectionType::RelatedRefs
                             && section.title == "Parent References"
                         {
@@ -3272,24 +3578,24 @@ impl App {
 
     fn is_in_tree_area(&self, column: u16, row: u16) -> bool {
         column >= self.tree_area.x
-            && column < self.tree_area.x + self.tree_area.width
+            && column < self.tree_area.x.saturating_add(self.tree_area.width)
             && row >= self.tree_area.y
-            && row < self.tree_area.y + self.tree_area.height
+            && row < self.tree_area.y.saturating_add(self.tree_area.height)
     }
 
     fn is_in_detail_area(&self, column: u16, row: u16) -> bool {
         column >= self.detail_area.x
-            && column < self.detail_area.x + self.detail_area.width
+            && column < self.detail_area.x.saturating_add(self.detail_area.width)
             && row >= self.detail_area.y
-            && row < self.detail_area.y + self.detail_area.height
+            && row < self.detail_area.y.saturating_add(self.detail_area.height)
     }
 
     fn is_in_tab_area(&self, column: u16, row: u16) -> bool {
         if let Some(tab_area) = self.tab_area {
             column >= tab_area.x
-                && column < tab_area.x + tab_area.width
+                && column < tab_area.x.saturating_add(tab_area.width)
                 && row >= tab_area.y
-                && row < tab_area.y + tab_area.height
+                && row < tab_area.y.saturating_add(tab_area.height)
         } else {
             false
         }
@@ -3298,9 +3604,9 @@ impl App {
     fn is_in_table_content_area(&self, column: u16, row: u16) -> bool {
         if let Some(area) = self.table_content_area {
             column >= area.x
-                && column < area.x + area.width
+                && column < area.x.saturating_add(area.width)
                 && row >= area.y
-                && row < area.y + area.height
+                && row < area.y.saturating_add(area.height)
         } else {
             false
         }
@@ -3309,15 +3615,15 @@ impl App {
     /// Check if the mouse is near the divider between tree and detail panes
     /// The divider is considered to be within 1-2 columns of the tree pane's right edge
     fn is_near_divider(&self, column: u16) -> bool {
-        let divider_col = self.tree_area.x + self.tree_area.width;
+        let divider_col = self.tree_area.x.saturating_add(self.tree_area.width);
         // Allow clicking on the last column of tree or first column of detail
-        column >= divider_col.saturating_sub(1) && column <= divider_col + 1
+        column >= divider_col.saturating_sub(1) && column <= divider_col.saturating_add(1)
     }
 
     /// Handle dragging the divider to resize tree pane
     fn handle_divider_drag(&mut self, column: u16) {
         // Get the total width of main area (tree + detail)
-        let total_width = self.tree_area.width + self.detail_area.width;
+        let total_width = self.tree_area.width.saturating_add(self.detail_area.width);
         if total_width == 0 {
             return;
         }
@@ -3327,17 +3633,21 @@ impl App {
         let new_tree_width = column.saturating_sub(self.tree_area.x);
 
         // Calculate percentage (clamped between 20% and 80%)
-        let new_percentage = ((new_tree_width as f32 / total_width as f32) * 100.0) as u16;
-        self.tree_width_percentage = new_percentage.clamp(20, 80);
+        let percentage_f32 = (f32::from(new_tree_width) / f32::from(total_width)) * 100.0;
+        let clamped = percentage_f32.clamp(20.0, 80.0);
+        // clamped percentage (20..=80) always fits in u16
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let percentage = clamped.round().clamp(0.0, 100.0) as u16;
+        self.tree_width_percentage = percentage;
     }
 
     /// Check if the mouse is in the tree scrollbar area
     fn is_in_tree_scrollbar(&self, column: u16, row: u16) -> bool {
         if let Some(area) = self.tree_scrollbar_area {
             column >= area.x
-                && column < area.x + area.width
+                && column < area.x.saturating_add(area.width)
                 && row >= area.y
-                && row < area.y + area.height
+                && row < area.y.saturating_add(area.height)
         } else {
             false
         }
@@ -3347,9 +3657,9 @@ impl App {
     fn is_in_detail_scrollbar(&self, column: u16, row: u16) -> bool {
         if let Some(area) = self.detail_scrollbar_area {
             column >= area.x
-                && column < area.x + area.width
+                && column < area.x.saturating_add(area.width)
                 && row >= area.y
-                && row < area.y + area.height
+                && row < area.y.saturating_add(area.height)
         } else {
             false
         }
@@ -3357,11 +3667,14 @@ impl App {
 
     /// Handle dragging on a scrollbar to scroll
     fn handle_scrollbar_drag(&mut self, row: u16) {
-        if !self.dragging_scrollbar {
+        if !matches!(
+            self.drag_state,
+            DragState::TreeScrollbar | DragState::DetailScrollbar
+        ) {
             return;
         }
 
-        if self.dragging_tree_scrollbar {
+        if self.drag_state == DragState::TreeScrollbar {
             // Dragging tree scrollbar
             if let Some(area) = self.tree_scrollbar_area {
                 let visible_count = self.visible.len();
@@ -3376,7 +3689,11 @@ impl App {
                 let max_cursor = visible_count.saturating_sub(1);
 
                 let new_cursor = if area.height > 1 {
-                    (relative_y * max_cursor) / (area.height.saturating_sub(1) as usize)
+                    let divisor = usize::from(area.height.saturating_sub(1));
+                    relative_y
+                        .saturating_mul(max_cursor)
+                        .checked_div(divisor)
+                        .unwrap_or(0)
                 } else {
                     0
                 };
@@ -3384,7 +3701,7 @@ impl App {
                 self.cursor = new_cursor.min(max_cursor);
 
                 // Adjust scroll_offset to keep cursor centered in view
-                let half_viewport = viewport_height / 2;
+                let half_viewport = viewport_height.saturating_div(2);
                 self.scroll_offset = self.cursor.saturating_sub(half_viewport);
                 let max_scroll = visible_count.saturating_sub(viewport_height);
                 self.scroll_offset = self.scroll_offset.min(max_scroll);
@@ -3397,18 +3714,21 @@ impl App {
                 }
 
                 // Get the current section's details
-                let node_idx = if let Some(&idx) = self.visible.get(self.cursor) {
-                    idx
-                } else {
+                let Some(&node_idx) = self.visible.get(self.cursor) else {
                     return;
                 };
 
-                let sections = &self.all_nodes[node_idx].detail_sections;
+                let Some(node) = self.all_nodes.get(node_idx) else {
+                    return;
+                };
+                let sections = &node.detail_sections;
                 if self.focused_section >= sections.len() {
                     return;
                 }
 
-                let section = &sections[self.focused_section];
+                let Some(section) = sections.get(self.focused_section) else {
+                    return;
+                };
                 let row_count = match &section.content {
                     DetailContent::Table { rows, .. } => rows.len(),
                     DetailContent::PlainText(lines) => lines.len(),
@@ -3427,19 +3747,33 @@ impl App {
                 let max_cursor = row_count.saturating_sub(1);
 
                 let new_cursor = if area.height > 1 {
-                    (relative_y * max_cursor) / (area.height.saturating_sub(1) as usize)
+                    let divisor = usize::from(area.height.saturating_sub(1));
+                    relative_y
+                        .saturating_mul(max_cursor)
+                        .checked_div(divisor)
+                        .unwrap_or(0)
                 } else {
                     0
                 };
 
-                self.section_cursors[self.focused_section] = new_cursor.min(max_cursor);
+                let Some(section_cursor) = self.section_cursors.get_mut(self.focused_section)
+                else {
+                    return;
+                };
+                *section_cursor = new_cursor.min(max_cursor);
 
                 // Adjust scroll to keep cursor centered
-                let half_viewport = viewport_height / 2;
-                let new_scroll =
-                    self.section_cursors[self.focused_section].saturating_sub(half_viewport);
+                let half_viewport = viewport_height.saturating_div(2);
+                let Some(&cursor_val) = self.section_cursors.get(self.focused_section) else {
+                    return;
+                };
+                let new_scroll = cursor_val.saturating_sub(half_viewport);
                 let max_scroll = row_count.saturating_sub(viewport_height);
-                self.section_scrolls[self.focused_section] = new_scroll.min(max_scroll);
+                let Some(section_scroll) = self.section_scrolls.get_mut(self.focused_section)
+                else {
+                    return;
+                };
+                *section_scroll = new_scroll.min(max_scroll);
             }
         }
     }
@@ -3459,8 +3793,8 @@ impl App {
             return;
         }
 
-        let relative_col = (column - tab_area.x) as usize;
-        let relative_row = (row - tab_area.y) as usize;
+        let relative_col = column.saturating_sub(tab_area.x) as usize;
+        let relative_row = row.saturating_sub(tab_area.y) as usize;
 
         // Calculate available width for tabs (full width, no borders)
         let available_width = tab_area.width as usize;
@@ -3469,18 +3803,19 @@ impl App {
         let tab_strings: Vec<String> = self
             .tab_titles
             .iter()
-            .map(|title| format!(" {} ", title))
+            .map(|title| format!(" {title} "))
             .collect();
 
         // Simulate tab wrapping to determine which line each tab is on
         let mut lines: Vec<Vec<usize>> = Vec::new();
         let mut current_line: Vec<usize> = Vec::new();
-        let mut current_width = 0;
+        let mut current_width: usize = 0;
 
         for (idx, tab_str) in tab_strings.iter().enumerate() {
-            let tab_width = tab_str.len() + 1; // +1 for separator
+            let tab_width: usize = tab_str.len().saturating_add(1); // +1 for separator
 
-            if current_width + tab_width > available_width && !current_line.is_empty() {
+            if current_width.saturating_add(tab_width) > available_width && !current_line.is_empty()
+            {
                 // Start a new line
                 lines.push(current_line);
                 current_line = Vec::new();
@@ -3488,7 +3823,7 @@ impl App {
             }
 
             current_line.push(idx);
-            current_width += tab_width;
+            current_width = current_width.saturating_add(tab_width);
         }
 
         if !current_line.is_empty() {
@@ -3496,32 +3831,40 @@ impl App {
         }
 
         // Determine which line was clicked
-        if relative_row >= lines.len() {
+        let Some(clicked_line_tabs) = lines.get(relative_row) else {
             return;
-        }
-
-        let clicked_line_tabs = &lines[relative_row];
+        };
 
         // Calculate tab positions on the clicked line
-        let mut current_pos = 0;
+        let mut current_pos: usize = 0;
         for (i, &tab_idx) in clicked_line_tabs.iter().enumerate() {
-            let tab_str = &tab_strings[tab_idx];
-            let separator_width = if i == 0 { 0 } else { 1 }; // "│" separator before tab
+            let Some(tab_str) = tab_strings.get(tab_idx) else {
+                continue;
+            };
+            let separator_width: usize = usize::from(i != 0); // "│" separator before tab
 
             // Check if click falls within this tab
-            if relative_col >= current_pos + separator_width
-                && relative_col < current_pos + separator_width + tab_str.len()
+            if relative_col >= current_pos.saturating_add(separator_width)
+                && relative_col
+                    < current_pos
+                        .saturating_add(separator_width)
+                        .saturating_add(tab_str.len())
             {
                 self.set_selected_tab(tab_idx);
                 return;
             }
 
             // Move past this tab and its separator
-            current_pos += separator_width + tab_str.len();
+            current_pos = current_pos
+                .saturating_add(separator_width)
+                .saturating_add(tab_str.len());
         }
     }
 
     fn handle_table_click(&mut self, column: u16, row: u16) {
+        use crate::tree::DetailContent;
+        const HEADER_HEIGHT: usize = 3;
+
         let Some(area) = self.table_content_area else {
             return;
         };
@@ -3531,8 +3874,12 @@ impl App {
             return;
         }
 
-        let node_idx = self.visible[self.cursor];
-        let node = &self.all_nodes[node_idx];
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return;
+        };
 
         // Get the correct section index (accounting for header section offset)
         let section_idx = self.get_section_index();
@@ -3543,8 +3890,10 @@ impl App {
         }
 
         // Extract table content
-        use crate::tree::DetailContent;
-        let (rows, use_row_selection) = match &node.detail_sections[section_idx].content {
+        let Some(section) = node.detail_sections.get(section_idx) else {
+            return;
+        };
+        let (rows, use_row_selection) = match &section.content {
             DetailContent::Table {
                 rows,
                 use_row_selection,
@@ -3567,12 +3916,11 @@ impl App {
         }
 
         // Calculate clicked row (skip header which is 3 lines tall)
-        let relative_row = (row - area.y) as usize;
-        const HEADER_HEIGHT: usize = 3;
+        let relative_row = (row.saturating_sub(area.y)) as usize;
 
         if relative_row < HEADER_HEIGHT {
             // Clicked on header - trigger column sort
-            let relative_col = column - area.x;
+            let relative_col = column.saturating_sub(area.x);
             if let Some(col_idx) = self.calculate_clicked_column(relative_col) {
                 self.focused_column = col_idx;
                 self.toggle_table_column_sort();
@@ -3580,19 +3928,27 @@ impl App {
             return;
         }
 
-        let clicked_row_idx = (relative_row - HEADER_HEIGHT) + self.section_scrolls[section_idx];
+        let Some(&section_scroll) = self.section_scrolls.get(section_idx) else {
+            return;
+        };
+        let clicked_row_idx = relative_row
+            .saturating_sub(HEADER_HEIGHT)
+            .saturating_add(section_scroll);
 
         if clicked_row_idx >= rows.len() {
             return;
         }
 
         // Update the row cursor
-        self.section_cursors[section_idx] = clicked_row_idx;
+        let Some(section_cursor) = self.section_cursors.get_mut(section_idx) else {
+            return;
+        };
+        *section_cursor = clicked_row_idx;
 
         // For tables with row selection mode, only select by row
         // For cell selection mode, also update the focused column
         if !use_row_selection {
-            let relative_col = column - area.x;
+            let relative_col = column.saturating_sub(area.x);
             if let Some(col_idx) = self.calculate_clicked_column(relative_col) {
                 self.focused_column = col_idx;
             }
@@ -3600,6 +3956,8 @@ impl App {
     }
 
     fn calculate_clicked_column(&self, relative_col: u16) -> Option<usize> {
+        use ratatui::layout::{Direction, Layout};
+
         let area = self.table_content_area?;
 
         if self.cached_ratatui_constraints.is_empty() {
@@ -3607,7 +3965,6 @@ impl App {
         }
 
         // Use ratatui's Layout with the exact constraints used in rendering
-        use ratatui::layout::{Direction, Layout};
 
         // Split the area using ratatui's layout - this matches what Table does internally
         let column_areas = Layout::default()
@@ -3618,8 +3975,8 @@ impl App {
 
         // Find which column area contains the click
         for (idx, col_area) in column_areas.iter().enumerate() {
-            let col_start = col_area.x - area.x;
-            let col_end = col_start + col_area.width;
+            let col_start = col_area.x.saturating_sub(area.x);
+            let col_end = col_start.saturating_add(col_area.width);
 
             if relative_col >= col_start && relative_col < col_end {
                 return Some(idx);
@@ -3631,7 +3988,10 @@ impl App {
             .iter()
             .enumerate()
             .map(|(idx, col_area)| {
-                let col_center = (col_area.x - area.x) + col_area.width / 2;
+                let col_center = col_area
+                    .x
+                    .saturating_sub(area.x)
+                    .saturating_add(col_area.width.saturating_div(2));
                 let distance = relative_col.abs_diff(col_center);
                 (idx, distance)
             })
@@ -3642,13 +4002,20 @@ impl App {
     fn handle_tree_click(&mut self, row: u16) {
         // Calculate which tree item was clicked
         // Account for border (1 line) and title
-        let inner_y = self.tree_area.y + 1;
-        if row < inner_y || row >= self.tree_area.y + self.tree_area.height - 1 {
+        let inner_y = self.tree_area.y.saturating_add(1);
+        if row < inner_y
+            || row
+                >= self
+                    .tree_area
+                    .y
+                    .saturating_add(self.tree_area.height)
+                    .saturating_sub(1)
+        {
             return; // Clicked on border or help text area
         }
 
-        let clicked_line = (row - inner_y) as usize;
-        let target_cursor = self.scroll_offset + clicked_line;
+        let clicked_line = row.saturating_sub(inner_y) as usize;
+        let target_cursor = self.scroll_offset.saturating_add(clicked_line);
 
         if target_cursor >= self.visible.len() {
             return;
@@ -3666,9 +4033,17 @@ impl App {
 
     fn is_in_breadcrumb_area(&self, column: u16, row: u16) -> bool {
         column >= self.breadcrumb_area.x
-            && column < self.breadcrumb_area.x + self.breadcrumb_area.width
+            && column
+                < self
+                    .breadcrumb_area
+                    .x
+                    .saturating_add(self.breadcrumb_area.width)
             && row >= self.breadcrumb_area.y
-            && row < self.breadcrumb_area.y + self.breadcrumb_area.height
+            && row
+                < self
+                    .breadcrumb_area
+                    .y
+                    .saturating_add(self.breadcrumb_area.height)
     }
 
     fn handle_breadcrumb_click(&mut self, column: u16) {
@@ -3683,11 +4058,11 @@ impl App {
         if let Some((text, node_idx)) = clicked_segment {
             // Navigate to this node
             self.navigate_to_node(node_idx);
-            self.status = format!("Jumped to: {}", text);
+            self.status = format!("Jumped to: {text}");
         }
     }
 
-    /// Navigate to a specific node by its index in all_nodes
+    /// Navigate to a specific node by its index in `all_nodes`
     fn navigate_to_node(&mut self, target_node_idx: usize) {
         // Find the position of this node in visible
         if let Some(_visible_pos) = self.visible.iter().position(|&idx| idx == target_node_idx) {
@@ -3697,7 +4072,7 @@ impl App {
             // Find the updated position after expanding
             if let Some(new_pos) = self.visible.iter().position(|&idx| idx == target_node_idx) {
                 self.push_to_history(); // Store old position before jumping
-                self.detail_focused = false;
+                self.focus_state = FocusState::Tree;
                 self.cursor = new_pos;
                 self.reset_detail_state();
                 self.scroll_offset = self.cursor.saturating_sub(5); // Center the view
@@ -3709,7 +4084,7 @@ impl App {
             // Try to find it again after expanding parents
             if let Some(visible_pos) = self.visible.iter().position(|&idx| idx == target_node_idx) {
                 self.push_to_history(); // Store old position before jumping
-                self.detail_focused = false;
+                self.focus_state = FocusState::Tree;
                 self.cursor = visible_pos;
                 self.reset_detail_state();
                 self.scroll_offset = self.cursor.saturating_sub(5); // Center the view
@@ -3719,18 +4094,21 @@ impl App {
 
     /// Ensure a node is visible by expanding only its direct ancestors
     fn ensure_node_visible(&mut self, target_node_idx: usize) {
-        if target_node_idx >= self.all_nodes.len() {
+        let Some(target_node) = self.all_nodes.get(target_node_idx) else {
             return;
-        }
+        };
 
-        let mut needed_depth = self.all_nodes[target_node_idx].depth;
+        let mut needed_depth = target_node.depth;
 
         // Walk backwards, expanding only the direct ancestor at each level
         for i in (0..target_node_idx).rev() {
-            let node_depth = self.all_nodes[i].depth;
+            let Some(node) = self.all_nodes.get_mut(i) else {
+                continue;
+            };
+            let node_depth = node.depth;
 
             if node_depth < needed_depth {
-                self.all_nodes[i].expanded = true;
+                node.expanded = true;
                 needed_depth = node_depth;
 
                 if node_depth == 0 {
@@ -3759,7 +4137,8 @@ fn extract_service_id(text: &str) -> u32 {
 fn extract_service_name(text: &str) -> &str {
     // Extract name from format like "0x10    - ServiceName"
     if let Some(dash_pos) = text.find(" - ") {
-        return text[dash_pos + 3..].trim();
+        let start = dash_pos.saturating_add(3);
+        return text.get(start..).unwrap_or(text).trim();
     }
     text
 }

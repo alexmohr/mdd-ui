@@ -4,7 +4,7 @@
 use super::{kv_row, push_types_section};
 use crate::tree::types::{CellType, DetailRow, DetailSectionData};
 
-/// Build tabbed sections for EndOfPdu DOP
+/// Build tabbed sections for `EndOfPdu` DOP
 /// Shows basic structure ref (linked) + min, max values
 pub(super) fn build_end_of_pdu_dop_tabs(
     eof_field: &cda_database::datatypes::EndOfPdu<'_>,
@@ -12,7 +12,7 @@ pub(super) fn build_end_of_pdu_dop_tabs(
     sections: &mut Vec<DetailSectionData>,
 ) {
     // Remove the DOP Variant row — not needed per requirements
-    types_rows.retain(|row| row.cells.first().map(|c| c.as_str()) != Some("DOP Variant"));
+    types_rows.retain(|row| row.cells.first().map(String::as_str) != Some("DOP Variant"));
 
     if let Some(field) = eof_field.field()
         && let Some(basic_struct) = field.basic_structure()

@@ -11,7 +11,7 @@ use crate::tree::{
     },
 };
 
-/// Add Tables section by collecting TableDops from parent refs
+/// Add Tables section by collecting `TableDops` from parent refs
 pub fn add_tables<'a>(
     b: &mut TreeBuilder,
     depth: usize,
@@ -43,11 +43,11 @@ pub fn add_tables<'a>(
             .unwrap_or("-")
             .to_owned();
         let has_key_dop = key_dop_name != "-";
-        let row_count = table_dop.rows().map(|r| r.len()).unwrap_or(0);
+        let row_count = table_dop.rows().map_or(0, |r| r.len());
 
         let mut rows_data = Vec::new();
         if let Some(rows) = table_dop.rows() {
-            for row in rows.iter() {
+            for row in rows {
                 let row_name = row.short_name().unwrap_or("?").to_owned();
                 let row_key = row.key().unwrap_or("-").to_owned();
                 let row_struct = row
@@ -94,7 +94,7 @@ pub fn add_tables<'a>(
     for table in &tables {
         let detail = build_table_detail(table);
         b.push_details_structured(
-            depth + 1,
+            depth.saturating_add(1),
             table.short_name.clone(),
             false,
             false,

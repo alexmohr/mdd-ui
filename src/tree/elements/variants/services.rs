@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use cda_database::datatypes::{DiagLayer, DiagService, ParamType, Parameter, ParentRef};
+use cda_database::datatypes::{DiagComm, DiagLayer, DiagService, ParamType, Parameter, ParentRef};
 
 // Import rendering functions from specialized modules
 use super::{
@@ -38,9 +38,9 @@ pub fn extract_coded_value(param: &Parameter<'_>) -> String {
                     format!("0x{num:02X}")
                 } else if num <= 0xFFFF {
                     format!("0x{num:04X}")
-                } else if num <= 0xFFFFFF {
+                } else if num <= 0x00FF_FFFF {
                     format!("0x{num:06X}")
-                } else if num <= 0xFFFFFFFF {
+                } else if num <= 0xFFFF_FFFF {
                     format!("0x{num:08X}")
                 } else {
                     format!("0x{num:016X}")
@@ -65,7 +65,7 @@ pub fn extract_dop_name(param: &Parameter<'_>) -> String {
         .specific_data_as_value()
         .and_then(|vd| vd.dop())
         .and_then(|dop| dop.short_name())
-        .map(|s| s.to_owned())
+        .map(std::borrow::ToOwned::to_owned)
         .unwrap_or_default()
 }
 
@@ -108,10 +108,10 @@ pub fn add_diag_comms<'a>(
     });
 
     // Count single ECU jobs
-    let job_count = layer.single_ecu_jobs().map(|jobs| jobs.len()).unwrap_or(0);
+    let job_count = layer.single_ecu_jobs().map_or(0, |jobs| jobs.len());
 
-    let service_count = own_services.len() + parent_services.len();
-    let total_count = service_count + job_count;
+    let service_count = own_services.len().saturating_add(parent_services.len());
+    let total_count = service_count.saturating_add(job_count);
 
     if total_count > 0 {
         // Build detail section for Diag-Comms header showing all services and jobs
@@ -137,10 +137,7 @@ pub fn add_diag_comms<'a>(
 
         b.push_service_list_header(
             depth,
-            format!(
-                "Diag-Comms ({} services, {} jobs)",
-                service_count, job_count
-            ),
+            format!("Diag-Comms ({service_count} services, {job_count} jobs)"),
             false,
             true,
             vec![detail_section],
@@ -148,15 +145,15 @@ pub fn add_diag_comms<'a>(
         );
 
         // Add own services first
-        for ds in own_services.iter() {
+        for ds in &own_services {
             let Some(display_name) = super::format_service_display_name(ds) else {
                 continue;
             };
             let sections = build_diag_comm_details_with_parent(ds, None);
 
             b.push_details_structured(
-                depth + 1,
-                format!("[Service] {}", display_name),
+                depth.saturating_add(1),
+                format!("[Service] {display_name}"),
                 false,
                 false,
                 sections,
@@ -165,15 +162,15 @@ pub fn add_diag_comms<'a>(
         }
 
         // Add parent ref services with different node type
-        for (ds, source_layer_name) in parent_services.iter() {
+        for (ds, source_layer_name) in &parent_services {
             let Some(display_name) = super::format_service_display_name(ds) else {
                 continue;
             };
             let sections = build_diag_comm_details_with_parent(ds, Some(source_layer_name.clone()));
 
             b.push_details_structured(
-                depth + 1,
-                format!("[Service] {}", display_name),
+                depth.saturating_add(1),
+                format!("[Service] {display_name}"),
                 false,
                 false,
                 sections,
@@ -181,177 +178,119 @@ pub fn add_diag_comms<'a>(
             );
         }
 
-        // Add single ECU jobs after services
-        if let Some(jobs) = layer.single_ecu_jobs() {
-            // Sort jobs alphabetically by name
-            let mut sorted_jobs: Vec<_> = jobs.iter().collect();
-            sorted_jobs.sort_by_cached_key(|job| {
-                job.diag_comm()
-                    .and_then(|dc| dc.short_name())
-                    .unwrap_or("")
-                    .to_lowercase()
-            });
+        add_single_ecu_jobs(b, layer, depth);
+    }
+}
 
-            for job in sorted_jobs.into_iter() {
-                let job_name = job
-                    .diag_comm()
-                    .and_then(|dc| dc.short_name())
-                    .unwrap_or("Unnamed");
+/// Add single ECU jobs to the tree
+fn add_single_ecu_jobs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
+    let Some(jobs) = layer.single_ecu_jobs() else {
+        return;
+    };
 
-                // Build job details inline
-                let mut sections = Vec::new();
+    let mut sorted_jobs: Vec<_> = jobs.iter().collect();
+    sorted_jobs.sort_by_cached_key(|job| {
+        job.diag_comm()
+            .and_then(|dc| dc.short_name())
+            .unwrap_or("")
+            .to_lowercase()
+    });
 
-                // Add header section with job name
-                sections.push(DetailSectionData {
-                    title: format!("Job - {}", job_name),
-                    render_as_header: true,
-                    content: DetailContent::PlainText(vec![]),
-                    section_type: DetailSectionType::Header,
-                });
+    for job in sorted_jobs {
+        let Some(dc) = job.diag_comm() else {
+            continue;
+        };
 
-                // Overview section
-                let header = DetailRow {
-                    row_type: DetailRowType::Normal,
-                    metadata: None,
-                    cells: vec!["Property".to_owned(), "Value".to_owned()],
-                    cell_types: vec![CellType::Text, CellType::Text],
-                    indent: 0,
-                };
+        let Some(short_name) = dc.short_name() else {
+            continue;
+        };
 
-                let rows = vec![
-                    DetailRow {
-                        row_type: DetailRowType::Normal,
-                        metadata: None,
-                        cells: vec!["Job Name".to_owned(), job_name.to_owned()],
-                        cell_types: vec![CellType::Text, CellType::Text],
-                        indent: 0,
-                    },
-                    DetailRow {
-                        row_type: DetailRowType::Normal,
-                        metadata: None,
-                        cells: vec!["Status".to_owned(), "Available in database".to_owned()],
-                        cell_types: vec![CellType::Text, CellType::Text],
-                        indent: 0,
-                    },
-                ];
+        let mut sections = Vec::new();
 
-                sections.push(DetailSectionData {
-                    title: "Overview".to_owned(),
-                    render_as_header: false,
-                    section_type: DetailSectionType::Overview,
-                    content: DetailContent::Table {
-                        header,
-                        rows,
-                        constraints: vec![
-                            ColumnConstraint::Percentage(30),
-                            ColumnConstraint::Percentage(70),
-                        ],
-                        use_row_selection: true,
-                    },
-                });
+        // Header
+        sections.push(DetailSectionData {
+            title: format!("Job - {short_name}"),
+            render_as_header: true,
+            content: DetailContent::PlainText(vec![]),
+            section_type: DetailSectionType::Header,
+        });
 
-                // Precondition State Refs
-                if let Some(dc) = job.diag_comm() {
-                    let header = DetailRow {
-                        cells: vec![
-                            "State".to_owned(),
-                            "Value".to_owned(),
-                            "Input Param".to_owned(),
-                        ],
-                        cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-                        indent: 0,
-                        ..Default::default()
-                    };
+        // Overview
+        let header = DetailRow::header(
+            vec!["Property".to_owned(), "Value".to_owned()],
+            vec![CellType::Text, CellType::Text],
+        );
 
-                    let mut rows: Vec<DetailRow> = dc
-                        .pre_condition_state_refs()
-                        .into_iter()
-                        .flat_map(|refs| refs.iter())
-                        .map(|pc| {
-                            let state_name = pc
-                                .state()
-                                .and_then(|s| s.short_name())
-                                .unwrap_or("-")
-                                .to_owned();
-                            let value = pc.value().unwrap_or("-").to_owned();
-                            let input_param = pc
-                                .in_param_if_short_name()
-                                .or_else(|| pc.in_param_path_short_name())
-                                .unwrap_or("-")
-                                .to_owned();
+        let mut rows = Vec::new();
 
-                            DetailRow {
-                                cells: vec![state_name, value, input_param],
-                                cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-                                indent: 0,
-                                ..Default::default()
-                            }
-                        })
-                        .collect();
+        rows.extend(dc.short_name().map(|sn| {
+            DetailRow::normal(
+                vec!["Job".to_owned(), sn.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            )
+        }));
+        rows.extend(dc.semantic().map(|semantic| {
+            DetailRow::normal(
+                vec!["Semantic".to_owned(), semantic.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            )
+        }));
 
-                    if rows.is_empty() {
-                        rows.push(DetailRow {
-                            cells: vec![
-                                "(No precondition state refs)".to_owned(),
-                                "-".to_owned(),
-                                "-".to_owned(),
-                            ],
-                            cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-                            indent: 0,
-                            ..Default::default()
-                        });
-                    }
+        sections.push(
+            DetailSectionData::new(
+                "Overview".to_owned(),
+                DetailContent::Table {
+                    header,
+                    rows,
+                    constraints: vec![
+                        ColumnConstraint::Percentage(30),
+                        ColumnConstraint::Percentage(70),
+                    ],
+                    use_row_selection: true,
+                },
+                false,
+            )
+            .with_type(DetailSectionType::Overview),
+        );
 
-                    sections.push(DetailSectionData {
-                        title: "Precondition-State-Refs".to_owned(),
-                        render_as_header: false,
-                        section_type: DetailSectionType::Custom,
-                        content: DetailContent::Table {
-                            header,
-                            rows,
-                            constraints: vec![
-                                ColumnConstraint::Percentage(40),
-                                ColumnConstraint::Percentage(30),
-                                ColumnConstraint::Percentage(30),
-                            ],
-                            use_row_selection: true,
-                        },
-                    });
-                }
+        // Precondition State Refs (built from DiagComm since SingleEcuJob is not DiagService)
+        sections.push(build_precondition_state_refs_from_diag_comm(Some(
+            DiagComm(dc),
+        )));
 
-                b.push_details_structured(
-                    depth + 1,
-                    format!("[Job] {}", job_name),
-                    false,
-                    false,
-                    sections,
-                    NodeType::Job,
-                );
-            }
-        }
+        b.push_details_structured(
+            depth.saturating_add(1),
+            format!("[Job] {short_name}"),
+            false,
+            false,
+            sections,
+            NodeType::Job,
+        );
     }
 }
 
 /// Get services from parent references recursively with proper filtering
-/// Returns a tuple of (DiagService, source_layer_name)
+/// Returns a tuple of (`DiagService`, `source_layer_name`)
 pub fn get_parent_ref_services_recursive<'a>(
     parent_refs: impl Iterator<Item = ParentRef<'a>>,
 ) -> Vec<(DiagService<'a>, String)> {
     fn filter_not_inherited_services<'a>(
         diag_services: impl Iterator<Item = impl Into<DiagService<'a>>>,
         not_inherited_names: &[&str],
-        source_layer_name: String,
+        source_layer_name: &str,
     ) -> Vec<(DiagService<'a>, String)> {
         diag_services
             .into_iter()
-            .map(|s| s.into())
+            .map(Into::into)
             .filter(|service| {
                 service
                     .diag_comm()
                     .and_then(|dc| dc.short_name())
                     .is_none_or(|name| !not_inherited_names.contains(&name))
             })
-            .map(|service| (service, source_layer_name.clone()))
+            .map(|service| (service, source_layer_name.to_owned()))
             .collect()
     }
 
@@ -376,7 +315,7 @@ pub fn get_parent_ref_services_recursive<'a>(
                         Some(filter_not_inherited_services(
                             services,
                             &not_inherited_names,
-                            layer_name,
+                            &layer_name,
                         ))
                     }
                     Ok(cda_database::datatypes::ParentRefType::FunctionalGroup) => parent_ref
@@ -393,7 +332,7 @@ pub fn get_parent_ref_services_recursive<'a>(
                         Some(filter_not_inherited_services(
                             services,
                             &not_inherited_names,
-                            layer_name,
+                            &layer_name,
                         ))
                     }
                     Ok(cda_database::datatypes::ParentRefType::Variant) => {
@@ -404,7 +343,7 @@ pub fn get_parent_ref_services_recursive<'a>(
                         Some(filter_not_inherited_services(
                             services,
                             &not_inherited_names,
-                            layer_name,
+                            &layer_name,
                         ))
                     }
                     _ => {
@@ -420,30 +359,10 @@ pub fn get_parent_ref_services_recursive<'a>(
     find_services_recursive(parent_refs)
 }
 
-/// Build detailed sections for a diagnostic service with optional parent layer info
-pub fn build_diag_comm_details_with_parent(
+fn build_overview_section(
     ds: &DiagService<'_>,
     parent_layer_name: Option<String>,
-) -> Vec<DetailSectionData> {
-    let mut sections: Vec<DetailSectionData> = Vec::new();
-
-    // Add header section with service ID and name (matching tree display format)
-    let service_name = ds.diag_comm().and_then(|dc| dc.short_name()).unwrap_or("?");
-    let id_str = super::format_service_id(ds);
-    let header_title = if id_str.is_empty() {
-        format!("Service - {}", service_name)
-    } else {
-        format!("Service - {} - {}", id_str, service_name)
-    };
-
-    sections.push(DetailSectionData {
-        title: header_title,
-        render_as_header: true,
-        content: DetailContent::PlainText(vec![]),
-        section_type: DetailSectionType::Header,
-    });
-
-    // Overview - table with key-value pairs
+) -> DetailSectionData {
     let header = DetailRow::header(
         vec!["Property".to_owned(), "Value".to_owned()],
         vec![CellType::Text, CellType::Text],
@@ -498,40 +417,27 @@ pub fn build_diag_comm_details_with_parent(
         0,
     ));
 
-    // Add inheritance information only if inherited
     if let Some(parent_name) = parent_layer_name {
         rows.push(DetailRow::inherited_from(parent_name));
     }
 
-    sections.push(
-        DetailSectionData::new(
-            "Overview".to_owned(),
-            DetailContent::Table {
-                header,
-                rows,
-                constraints: vec![
-                    ColumnConstraint::Percentage(30),
-                    ColumnConstraint::Percentage(70),
-                ],
-                use_row_selection: true, // Use row selection for Overview
-            },
-            false,
-        )
-        .with_type(DetailSectionType::Overview),
-    );
+    DetailSectionData::new(
+        "Overview".to_owned(),
+        DetailContent::Table {
+            header,
+            rows,
+            constraints: vec![
+                ColumnConstraint::Percentage(30),
+                ColumnConstraint::Percentage(70),
+            ],
+            use_row_selection: true,
+        },
+        false,
+    )
+    .with_type(DetailSectionType::Overview)
+}
 
-    // Request params - use rendering logic from requests module
-    if let Some(request_section) = build_request_section(ds) {
-        sections.push(request_section);
-    }
-
-    // Pos responses - use rendering logic from responses module
-    sections.extend(build_pos_responses_sections(ds));
-
-    // Neg responses - use rendering logic from responses module
-    sections.extend(build_neg_responses_sections(ds));
-
-    // ComParam refs
+fn build_comparam_refs_section() -> DetailSectionData {
     let comparam_header = DetailRow {
         row_type: DetailRowType::Normal,
         metadata: None,
@@ -551,7 +457,7 @@ pub fn build_diag_comm_details_with_parent(
         ],
         indent: 0,
     };
-    sections.push(DetailSectionData {
+    DetailSectionData {
         title: "ComParam-Refs".to_owned(),
         render_as_header: false,
         section_type: DetailSectionType::ComParams,
@@ -573,13 +479,18 @@ pub fn build_diag_comm_details_with_parent(
             ],
             use_row_selection: false,
         },
-    });
+    }
+}
 
-    // Audience section - Combined into single tab with composite content
-    let audience_section = ds
-        .diag_comm()
-        .and_then(|dc| dc.audience())
-        .map(|audience| {
+fn build_audience_section(ds: &DiagService<'_>) -> DetailSectionData {
+    ds.diag_comm().and_then(|dc| dc.audience()).map_or_else(
+        || DetailSectionData {
+            title: "Audience".to_owned(),
+            render_as_header: false,
+            section_type: DetailSectionType::Custom,
+            content: DetailContent::PlainText(vec!["(No audience info)".to_owned()]),
+        },
+        |audience| {
             let flag_lines = vec![
                 format!("IS_MANUFACTURER: {}", audience.is_manufacturing()),
                 format!("IS_DEVELOPMENT: {}", audience.is_development()),
@@ -594,12 +505,11 @@ pub fn build_diag_comm_details_with_parent(
                 content: DetailContent::PlainText(flag_lines),
             }];
 
-            // Additional audiences subsection
             let audiences_list: Vec<_> = audience
                 .enabled_audiences()
                 .into_iter()
                 .flat_map(|a| a.iter())
-                .filter_map(|aa| aa.short_name().map(|s| s.to_owned()))
+                .filter_map(|aa| aa.short_name().map(std::borrow::ToOwned::to_owned))
                 .collect();
 
             if !audiences_list.is_empty() {
@@ -617,120 +527,107 @@ pub fn build_diag_comm_details_with_parent(
                 section_type: DetailSectionType::Custom,
                 content: DetailContent::Composite(subsections),
             }
-        })
-        .unwrap_or_else(|| DetailSectionData {
-            title: "Audience".to_owned(),
-            render_as_header: false,
-            section_type: DetailSectionType::Custom,
-            content: DetailContent::PlainText(vec!["(No audience info)".to_owned()]),
-        });
-    sections.push(audience_section);
+        },
+    )
+}
 
-    // SDGs - Get from DiagComm
-    {
-        let mut sdg_rows: Vec<DetailRow> = ds
-            .diag_comm()
-            .and_then(|dc| dc.sdgs())
-            .and_then(|sdgs| sdgs.sdgs())
-            .into_iter()
-            .flat_map(|sdg_list| sdg_list.iter())
-            .filter_map(|sdg| {
-                let caption = sdg.caption_sn()?;
-                let si = sdg.si().unwrap_or("-");
+fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
+    let mut sdg_rows: Vec<DetailRow> = ds
+        .diag_comm()
+        .and_then(|dc| dc.sdgs())
+        .and_then(|sdgs| sdgs.sdgs())
+        .into_iter()
+        .flat_map(|sdg_list| sdg_list.iter())
+        .filter_map(|sdg| {
+            let caption = sdg.caption_sn()?;
+            let si = sdg.si().unwrap_or("-");
 
-                let mut rows = vec![DetailRow::normal(
-                    vec![
-                        format!("SDG: {}", caption),
-                        si.to_owned(),
-                        String::new(),
-                        String::new(),
-                    ],
-                    vec![
-                        CellType::Text,
-                        CellType::Text,
-                        CellType::Text,
-                        CellType::Text,
-                    ],
-                    0,
-                )];
-
-                // Add nested SD items
-                rows.extend(
-                    sdg.sds()
-                        .into_iter()
-                        .flat_map(|sds| sds.iter())
-                        .filter_map(|entry| entry.sd_or_sdg_as_sd())
-                        .map(|sd| {
-                            DetailRow::normal(
-                                vec![
-                                    format!("  SD: {}", sd.value().unwrap_or("-")),
-                                    sd.si().unwrap_or("-").to_owned(),
-                                    sd.ti().unwrap_or("-").to_owned(),
-                                    String::new(),
-                                ],
-                                vec![
-                                    CellType::Text,
-                                    CellType::Text,
-                                    CellType::Text,
-                                    CellType::Text,
-                                ],
-                                1,
-                            )
-                        }),
-                );
-
-                Some(rows)
-            })
-            .flatten()
-            .collect();
-
-        if sdg_rows.is_empty() {
-            sdg_rows.push(DetailRow::normal(
-                vec!["(No SDGs available)".to_owned()],
-                vec![CellType::Text],
-                0,
-            ));
-        }
-
-        let sdg_header = DetailRow::header(
-            vec![
-                "Caption/Value".to_owned(),
-                "SI".to_owned(),
-                "TI".to_owned(),
-                "".to_owned(),
-            ],
-            vec![
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-            ],
-        );
-        sections.push(DetailSectionData {
-            title: "SDGs".to_owned(),
-            render_as_header: false,
-            section_type: DetailSectionType::Custom,
-            content: DetailContent::Table {
-                header: sdg_header,
-                rows: sdg_rows,
-                constraints: vec![
-                    ColumnConstraint::Percentage(50),
-                    ColumnConstraint::Percentage(20),
-                    ColumnConstraint::Percentage(20),
-                    ColumnConstraint::Percentage(10),
+            let mut rows = vec![DetailRow::normal(
+                vec![
+                    format!("SDG: {caption}"),
+                    si.to_owned(),
+                    String::new(),
+                    String::new(),
                 ],
-                use_row_selection: true,
-            },
-        });
+                vec![
+                    CellType::Text,
+                    CellType::Text,
+                    CellType::Text,
+                    CellType::Text,
+                ],
+                0,
+            )];
+
+            rows.extend(
+                sdg.sds()
+                    .into_iter()
+                    .flat_map(|sds| sds.iter())
+                    .filter_map(|entry| entry.sd_or_sdg_as_sd())
+                    .map(|sd| {
+                        DetailRow::normal(
+                            vec![
+                                format!("  SD: {}", sd.value().unwrap_or("-")),
+                                sd.si().unwrap_or("-").to_owned(),
+                                sd.ti().unwrap_or("-").to_owned(),
+                                String::new(),
+                            ],
+                            vec![
+                                CellType::Text,
+                                CellType::Text,
+                                CellType::Text,
+                                CellType::Text,
+                            ],
+                            1,
+                        )
+                    }),
+            );
+
+            Some(rows)
+        })
+        .flatten()
+        .collect();
+
+    if sdg_rows.is_empty() {
+        sdg_rows.push(DetailRow::normal(
+            vec!["(No SDGs available)".to_owned()],
+            vec![CellType::Text],
+            0,
+        ));
     }
 
-    // Precondition State Refs
-    sections.push(build_precondition_state_refs_section(ds));
+    let sdg_header = DetailRow::header(
+        vec![
+            "Caption/Value".to_owned(),
+            "SI".to_owned(),
+            "TI".to_owned(),
+            String::new(),
+        ],
+        vec![
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+        ],
+    );
+    DetailSectionData {
+        title: "SDGs".to_owned(),
+        render_as_header: false,
+        section_type: DetailSectionType::Custom,
+        content: DetailContent::Table {
+            header: sdg_header,
+            rows: sdg_rows,
+            constraints: vec![
+                ColumnConstraint::Percentage(50),
+                ColumnConstraint::Percentage(20),
+                ColumnConstraint::Percentage(20),
+                ColumnConstraint::Percentage(10),
+            ],
+            use_row_selection: true,
+        },
+    }
+}
 
-    // State Transition Refs
-    sections.push(build_state_transition_refs_section(ds));
-
-    // Related diag comm refs
+fn build_related_refs_section() -> DetailSectionData {
     let related_header = DetailRow {
         row_type: DetailRowType::Normal,
         metadata: None,
@@ -738,7 +635,7 @@ pub fn build_diag_comm_details_with_parent(
         cell_types: vec![CellType::Text],
         indent: 0,
     };
-    sections.push(DetailSectionData {
+    DetailSectionData {
         title: "Related-Diag-Comm-Refs".to_owned(),
         render_as_header: false,
         section_type: DetailSectionType::RelatedRefs,
@@ -754,7 +651,47 @@ pub fn build_diag_comm_details_with_parent(
             constraints: vec![ColumnConstraint::Percentage(100)],
             use_row_selection: false,
         },
+    }
+}
+
+/// Build detailed sections for a diagnostic service with optional parent layer info
+pub fn build_diag_comm_details_with_parent(
+    ds: &DiagService<'_>,
+    parent_layer_name: Option<String>,
+) -> Vec<DetailSectionData> {
+    let mut sections: Vec<DetailSectionData> = Vec::new();
+
+    // Add header section with service ID and name (matching tree display format)
+    let service_name = ds.diag_comm().and_then(|dc| dc.short_name()).unwrap_or("?");
+    let id_str = super::format_service_id(ds);
+    let header_title = if id_str.is_empty() {
+        format!("Service - {service_name}")
+    } else {
+        format!("Service - {id_str} - {service_name}")
+    };
+
+    sections.push(DetailSectionData {
+        title: header_title,
+        render_as_header: true,
+        content: DetailContent::PlainText(vec![]),
+        section_type: DetailSectionType::Header,
     });
+
+    sections.push(build_overview_section(ds, parent_layer_name));
+
+    if let Some(request_section) = build_request_section(ds) {
+        sections.push(request_section);
+    }
+
+    sections.extend(build_pos_responses_sections(ds));
+    sections.extend(build_neg_responses_sections(ds));
+
+    sections.push(build_comparam_refs_section());
+    sections.push(build_audience_section(ds));
+    sections.push(build_sdgs_section(ds));
+    sections.push(build_precondition_state_refs_section(ds));
+    sections.push(build_state_transition_refs_section(ds));
+    sections.push(build_related_refs_section());
 
     sections
 }
@@ -840,7 +777,7 @@ fn build_diag_comms_table_section(
     );
 
     // Add job entries to the table
-    for job_name in job_names.iter() {
+    for job_name in job_names {
         rows.push(DetailRow {
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -865,7 +802,7 @@ fn build_diag_comms_table_section(
     DetailSectionData {
         title: format!(
             "Diag-Comms ({} services, {} jobs)",
-            own_services.len() + parent_services.len(),
+            own_services.len().saturating_add(parent_services.len()),
             job_names.len()
         ),
         render_as_header: false,
@@ -885,9 +822,15 @@ fn build_diag_comms_table_section(
     }
 }
 
-/// Build precondition state refs section from a DiagService.
+/// Build precondition state refs section from a `DiagService`.
 /// Extracts data from the embedded State object rather than just the value string.
 fn build_precondition_state_refs_section(ds: &DiagService<'_>) -> DetailSectionData {
+    build_precondition_state_refs_from_diag_comm(ds.diag_comm().map(DiagComm))
+}
+
+/// Build precondition state refs from a `DiagComm` reference.
+/// Shared by both `DiagService` and `SingleEcuJob` code paths.
+fn build_precondition_state_refs_from_diag_comm(dc: Option<DiagComm<'_>>) -> DetailSectionData {
     let header = DetailRow {
         cells: vec![
             "State".to_owned(),
@@ -899,8 +842,7 @@ fn build_precondition_state_refs_section(ds: &DiagService<'_>) -> DetailSectionD
         ..Default::default()
     };
 
-    let rows: Vec<DetailRow> = ds
-        .diag_comm()
+    let rows: Vec<DetailRow> = dc
         .and_then(|dc| dc.pre_condition_state_refs())
         .into_iter()
         .flat_map(|refs| refs.iter())
@@ -958,8 +900,8 @@ fn build_precondition_state_refs_section(ds: &DiagService<'_>) -> DetailSectionD
     }
 }
 
-/// Build state transition refs section from a DiagService.
-/// Extracts data from the embedded StateTransition object.
+/// Build state transition refs section from a `DiagService`.
+/// Extracts data from the embedded `StateTransition` object.
 fn build_state_transition_refs_section(ds: &DiagService<'_>) -> DetailSectionData {
     let header = DetailRow {
         cells: vec![
@@ -984,16 +926,16 @@ fn build_state_transition_refs_section(ds: &DiagService<'_>) -> DetailSectionDat
         .into_iter()
         .flat_map(|refs| refs.iter())
         .map(|st| {
-            let (short_name, source, target) = st
-                .state_transition()
-                .map(|t| {
+            let (short_name, source, target) = st.state_transition().map_or_else(
+                || ("-".to_owned(), "-".to_owned(), "-".to_owned()),
+                |t| {
                     (
                         t.short_name().unwrap_or("-").to_owned(),
                         t.source_short_name_ref().unwrap_or("-").to_owned(),
                         t.target_short_name_ref().unwrap_or("-").to_owned(),
                     )
-                })
-                .unwrap_or_else(|| ("-".to_owned(), "-".to_owned(), "-".to_owned()));
+                },
+            );
             let value = st.value().unwrap_or("-").to_owned();
 
             DetailRow {

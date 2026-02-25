@@ -30,7 +30,7 @@ pub fn add_sdgs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
 
     // Extract all SDG data including SD elements
     let mut sdg_data_list = Vec::new();
-    for sdg in sdg_list.iter() {
+    for sdg in sdg_list {
         let Some(caption) = sdg.caption_sn() else {
             continue;
         };
@@ -43,15 +43,13 @@ pub fn add_sdgs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
             .flat_map(|sds| sds.iter().enumerate())
             .filter_map(|(index, sd_or_sdg)| {
                 let sd = sd_or_sdg.sd_or_sdg_as_sd()?;
-                let short_name = sd
-                    .si()
-                    .map(|s| s.to_owned())
-                    .unwrap_or_else(|| format!("SD #{}", index + 1));
+                let short_name = sd.si().map_or_else(
+                    || format!("SD #{}", index.saturating_add(1)),
+                    std::borrow::ToOwned::to_owned,
+                );
                 Some(SdElement {
                     short_name,
                     value: sd.value().unwrap_or("-").to_owned(),
-                    si: sd.si().unwrap_or("-").to_owned(),
-                    ti: sd.ti().unwrap_or("-").to_owned(),
                     depth: 0,
                 })
             })
@@ -85,7 +83,7 @@ pub fn add_sdgs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
         let detail_sections = build_sdg_detail_sections(sdg_data);
 
         b.push_details_structured(
-            depth + 1,
+            depth.saturating_add(1),
             sdg_data.caption.clone(),
             false,
             false,
@@ -232,9 +230,5 @@ struct SdgData {
 struct SdElement {
     short_name: String,
     value: String,
-    #[allow(dead_code)]
-    si: String,
-    #[allow(dead_code)]
-    ti: String,
     depth: usize,
 }

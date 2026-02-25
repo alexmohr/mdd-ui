@@ -18,7 +18,7 @@ use crate::tree::{
 };
 
 /// Build Pos-Response sections - this is the core rendering logic for Pos-Response data
-/// DiagComm module should import and use this function to render the Pos-Response tabs
+/// `DiagComm` module should import and use this function to render the Pos-Response tabs
 pub fn build_pos_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionData> {
     ds.pos_responses()
         .into_iter()
@@ -26,7 +26,7 @@ pub fn build_pos_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionDa
         .map(|(i, resp)| {
             let params = resp.params().into_iter().flatten().map(Parameter);
             build_response_param_section(
-                &format!("Pos-Response {}", i + 1),
+                &format!("Pos-Response {}", i.saturating_add(1)),
                 params,
                 DetailSectionType::PosResponses,
             )
@@ -35,7 +35,7 @@ pub fn build_pos_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionDa
 }
 
 /// Build Neg-Response sections - this is the core rendering logic for Neg-Response data
-/// DiagComm module should import and use this function to render the Neg-Response tabs
+/// `DiagComm` module should import and use this function to render the Neg-Response tabs
 pub fn build_neg_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionData> {
     ds.neg_responses()
         .into_iter()
@@ -43,12 +43,76 @@ pub fn build_neg_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionDa
         .map(|(i, resp)| {
             let params = resp.params().into_iter().flatten().map(Parameter);
             build_response_param_section(
-                &format!("Neg-Response {}", i + 1),
+                &format!("Neg-Response {}", i.saturating_add(1)),
                 params,
                 DetailSectionType::NegResponses,
             )
         })
         .collect()
+}
+
+/// Add a single service with positive responses to the tree
+fn add_pos_response_service(
+    b: &mut TreeBuilder,
+    ds: &DiagService<'_>,
+    depth: usize,
+    source_layer: Option<String>,
+) {
+    let Some(display_name) = format_service_display_name(ds) else {
+        return;
+    };
+
+    let sections = build_pos_response_view_sections(ds, source_layer);
+    let has_params = ds.pos_responses().is_some_and(|r| {
+        r.iter()
+            .any(|resp| resp.params().is_some_and(|p| !p.is_empty()))
+    });
+
+    b.push_details_structured(
+        depth.saturating_add(1),
+        display_name,
+        false,
+        has_params,
+        sections,
+        NodeType::PosResponse,
+    );
+
+    let response_count = ds.pos_responses().map_or(0, |r| r.len());
+    for (resp_idx, resp) in ds
+        .pos_responses()
+        .into_iter()
+        .flat_map(|r| r.iter().enumerate())
+    {
+        let Some(params) = resp.params().filter(|p| !p.is_empty()) else {
+            continue;
+        };
+        if response_count > 1 {
+            b.push_details_structured(
+                depth.saturating_add(2),
+                format!("Response {}", resp_idx.saturating_add(1)),
+                false,
+                true,
+                vec![],
+                NodeType::Default,
+            );
+        }
+        let base_depth = if response_count > 1 {
+            depth.saturating_add(3)
+        } else {
+            depth.saturating_add(2)
+        };
+        for param in params.iter().map(Parameter) {
+            let param_name = param.short_name().unwrap_or("?").to_owned();
+            let param_detail = build_param_detail_sections(&param);
+            b.push_param(
+                base_depth,
+                param_name,
+                param_detail,
+                NodeType::Default,
+                param.id(),
+            );
+        }
+    }
 }
 
 /// Add positive responses section to the tree
@@ -58,7 +122,6 @@ pub fn add_pos_responses_section<'a>(
     depth: usize,
     variant_parent_refs: Option<impl Iterator<Item = ParentRef<'a>> + 'a>,
 ) {
-    // Collect own services that have positive responses
     let own_services: Vec<DiagService<'_>> = layer
         .diag_services()
         .map(|services| {
@@ -70,7 +133,6 @@ pub fn add_pos_responses_section<'a>(
         })
         .unwrap_or_default();
 
-    // Collect services from parent refs with source layer names (that have positive responses)
     let parent_services: Vec<(DiagService<'_>, String)> =
         if let Some(parent_refs) = variant_parent_refs {
             get_parent_ref_services_recursive(parent_refs)
@@ -81,145 +143,90 @@ pub fn add_pos_responses_section<'a>(
             Vec::new()
         };
 
-    let total_count = own_services.len() + parent_services.len();
+    let total_count = own_services.len().saturating_add(parent_services.len());
 
     if total_count > 0 {
-        // Build detail section for Pos-Responses header showing all services in a table
         let detail_section = build_pos_responses_table_section(&own_services, &parent_services);
 
         b.push_service_list_header(
             depth,
-            format!("Pos-Responses ({})", total_count),
+            format!("Pos-Responses ({total_count})"),
             false,
             true,
             vec![detail_section],
             crate::tree::ServiceListType::PosResponses,
         );
 
-        // Add own services first
-        for ds in own_services.iter() {
-            let Some(display_name) = format_service_display_name(ds) else {
-                continue;
-            };
-
-            let sections = build_pos_response_view_sections(ds, None);
-            let has_params = ds
-                .pos_responses()
-                .map(|r| {
-                    r.iter()
-                        .any(|resp| resp.params().map(|p| !p.is_empty()).unwrap_or(false))
-                })
-                .unwrap_or(false);
-
-            b.push_details_structured(
-                depth + 1,
-                display_name,
-                false,
-                has_params,
-                sections,
-                NodeType::PosResponse,
-            );
-
-            // Add params as child nodes
-            let response_count = ds.pos_responses().map_or(0, |r| r.len());
-            for (resp_idx, resp) in ds
-                .pos_responses()
-                .into_iter()
-                .flat_map(|r| r.iter().enumerate())
-            {
-                let Some(params) = resp.params().filter(|p| !p.is_empty()) else {
-                    continue;
-                };
-                if response_count > 1 {
-                    b.push_details_structured(
-                        depth + 2,
-                        format!("Response {}", resp_idx + 1),
-                        false,
-                        true,
-                        vec![],
-                        NodeType::Default,
-                    );
-                }
-                let base_depth = if response_count > 1 {
-                    depth + 3
-                } else {
-                    depth + 2
-                };
-                for param in params.iter().map(Parameter) {
-                    let param_name = param.short_name().unwrap_or("?").to_owned();
-                    let param_detail = build_param_detail_sections(&param);
-                    b.push_param(
-                        base_depth,
-                        param_name,
-                        param_detail,
-                        NodeType::Default,
-                        param.id(),
-                    );
-                }
-            }
+        for ds in &own_services {
+            add_pos_response_service(b, ds, depth, None);
         }
 
-        // Add parent ref services
-        for (ds, source_layer_name) in parent_services.iter() {
-            let Some(display_name) = format_service_display_name(ds) else {
-                continue;
-            };
+        for (ds, source_layer_name) in &parent_services {
+            add_pos_response_service(b, ds, depth, Some(source_layer_name.clone()));
+        }
+    }
+}
 
-            let sections = build_pos_response_view_sections(ds, Some(source_layer_name.clone()));
-            let has_params = ds
-                .pos_responses()
-                .map(|r| {
-                    r.iter()
-                        .any(|resp| resp.params().map(|p| !p.is_empty()).unwrap_or(false))
-                })
-                .unwrap_or(false);
+/// Add a single service with negative responses to the tree
+fn add_neg_response_service(
+    b: &mut TreeBuilder,
+    ds: &DiagService<'_>,
+    depth: usize,
+    source_layer: Option<String>,
+) {
+    let Some(display_name) = format_service_display_name(ds) else {
+        return;
+    };
 
+    let sections = build_neg_response_view_sections(ds, source_layer);
+    let has_params = ds.neg_responses().is_some_and(|r| {
+        r.iter()
+            .any(|resp| resp.params().is_some_and(|p| !p.is_empty()))
+    });
+
+    b.push_details_structured(
+        depth.saturating_add(1),
+        display_name,
+        false,
+        has_params,
+        sections,
+        NodeType::NegResponse,
+    );
+
+    let response_count = ds.neg_responses().map_or(0, |r| r.len());
+    for (resp_idx, resp) in ds
+        .neg_responses()
+        .into_iter()
+        .flat_map(|r| r.iter().enumerate())
+    {
+        let Some(params) = resp.params().filter(|p| !p.is_empty()) else {
+            continue;
+        };
+        if response_count > 1 {
             b.push_details_structured(
-                depth + 1,
-                display_name,
+                depth.saturating_add(2),
+                format!("Response {}", resp_idx.saturating_add(1)),
                 false,
-                has_params,
-                sections,
-                NodeType::PosResponse,
+                true,
+                vec![],
+                NodeType::Default,
             );
-
-            // Add params as child nodes
-            let response_count = ds.pos_responses().map_or(0, |r| r.len());
-            for (resp_idx, resp) in ds
-                .pos_responses()
-                .into_iter()
-                .flat_map(|r| r.iter().enumerate())
-            {
-                let Some(params) = resp.params().filter(|p| !p.is_empty()) else {
-                    continue;
-                };
-                if response_count > 1 {
-                    b.push_details_structured(
-                        depth + 2,
-                        format!("Response {}", resp_idx + 1),
-                        false,
-                        true,
-                        vec![],
-                        NodeType::Default,
-                    );
-                }
-                let base_depth = if response_count > 1 {
-                    depth + 3
-                } else {
-                    depth + 2
-                };
-                for param in params.iter().map(Parameter) {
-                    let param_name = param.short_name().unwrap_or("?").to_owned();
-                    let param_detail = build_param_detail_sections(&param);
-                    b.push_param(
-                        base_depth,
-                        param_name,
-                        param_detail,
-                        NodeType::Default,
-                        param.id(),
-                    );
-                }
-            }
+        }
+        let base_depth = if response_count > 1 {
+            depth.saturating_add(3)
+        } else {
+            depth.saturating_add(2)
+        };
+        for param in params.iter().map(Parameter) {
+            let param_name = param.short_name().unwrap_or("?").to_owned();
+            let param_detail = build_param_detail_sections(&param);
+            b.push_param(
+                base_depth,
+                param_name,
+                param_detail,
+                NodeType::Default,
+                param.id(),
+            );
         }
     }
 }
@@ -231,7 +238,6 @@ pub fn add_neg_responses_section<'a>(
     depth: usize,
     variant_parent_refs: Option<impl Iterator<Item = ParentRef<'a>> + 'a>,
 ) {
-    // Collect own services that have negative responses
     let own_services: Vec<DiagService<'_>> = layer
         .diag_services()
         .map(|services| {
@@ -243,7 +249,6 @@ pub fn add_neg_responses_section<'a>(
         })
         .unwrap_or_default();
 
-    // Collect services from parent refs with source layer names (that have negative responses)
     let parent_services: Vec<(DiagService<'_>, String)> =
         if let Some(parent_refs) = variant_parent_refs {
             get_parent_ref_services_recursive(parent_refs)
@@ -254,145 +259,26 @@ pub fn add_neg_responses_section<'a>(
             Vec::new()
         };
 
-    let total_count = own_services.len() + parent_services.len();
+    let total_count = own_services.len().saturating_add(parent_services.len());
 
     if total_count > 0 {
-        // Build detail section for Neg-Responses header showing all services in a table
         let detail_section = build_neg_responses_table_section(&own_services, &parent_services);
 
         b.push_service_list_header(
             depth,
-            format!("Neg-Responses ({})", total_count),
+            format!("Neg-Responses ({total_count})"),
             false,
             true,
             vec![detail_section],
             crate::tree::ServiceListType::NegResponses,
         );
 
-        // Add own services first
-        for ds in own_services.iter() {
-            let Some(display_name) = format_service_display_name(ds) else {
-                continue;
-            };
-
-            let sections = build_neg_response_view_sections(ds, None);
-            let has_params = ds
-                .neg_responses()
-                .map(|r| {
-                    r.iter()
-                        .any(|resp| resp.params().map(|p| !p.is_empty()).unwrap_or(false))
-                })
-                .unwrap_or(false);
-
-            b.push_details_structured(
-                depth + 1,
-                display_name,
-                false,
-                has_params,
-                sections,
-                NodeType::NegResponse,
-            );
-
-            // Add params as child nodes
-            let response_count = ds.neg_responses().map_or(0, |r| r.len());
-            for (resp_idx, resp) in ds
-                .neg_responses()
-                .into_iter()
-                .flat_map(|r| r.iter().enumerate())
-            {
-                let Some(params) = resp.params().filter(|p| !p.is_empty()) else {
-                    continue;
-                };
-                if response_count > 1 {
-                    b.push_details_structured(
-                        depth + 2,
-                        format!("Response {}", resp_idx + 1),
-                        false,
-                        true,
-                        vec![],
-                        NodeType::Default,
-                    );
-                }
-                let base_depth = if response_count > 1 {
-                    depth + 3
-                } else {
-                    depth + 2
-                };
-                for param in params.iter().map(Parameter) {
-                    let param_name = param.short_name().unwrap_or("?").to_owned();
-                    let param_detail = build_param_detail_sections(&param);
-                    b.push_param(
-                        base_depth,
-                        param_name,
-                        param_detail,
-                        NodeType::Default,
-                        param.id(),
-                    );
-                }
-            }
+        for ds in &own_services {
+            add_neg_response_service(b, ds, depth, None);
         }
 
-        // Add parent ref services
-        for (ds, source_layer_name) in parent_services.iter() {
-            let Some(display_name) = format_service_display_name(ds) else {
-                continue;
-            };
-
-            let sections = build_neg_response_view_sections(ds, Some(source_layer_name.clone()));
-            let has_params = ds
-                .neg_responses()
-                .map(|r| {
-                    r.iter()
-                        .any(|resp| resp.params().map(|p| !p.is_empty()).unwrap_or(false))
-                })
-                .unwrap_or(false);
-
-            b.push_details_structured(
-                depth + 1,
-                display_name,
-                false,
-                has_params,
-                sections,
-                NodeType::NegResponse,
-            );
-
-            // Add params as child nodes
-            let response_count = ds.neg_responses().map_or(0, |r| r.len());
-            for (resp_idx, resp) in ds
-                .neg_responses()
-                .into_iter()
-                .flat_map(|r| r.iter().enumerate())
-            {
-                let Some(params) = resp.params().filter(|p| !p.is_empty()) else {
-                    continue;
-                };
-                if response_count > 1 {
-                    b.push_details_structured(
-                        depth + 2,
-                        format!("Response {}", resp_idx + 1),
-                        false,
-                        true,
-                        vec![],
-                        NodeType::Default,
-                    );
-                }
-                let base_depth = if response_count > 1 {
-                    depth + 3
-                } else {
-                    depth + 2
-                };
-                for param in params.iter().map(Parameter) {
-                    let param_name = param.short_name().unwrap_or("?").to_owned();
-                    let param_detail = build_param_detail_sections(&param);
-                    b.push_param(
-                        base_depth,
-                        param_name,
-                        param_detail,
-                        NodeType::Default,
-                        param.id(),
-                    );
-                }
-            }
+        for (ds, source_layer_name) in &parent_services {
+            add_neg_response_service(b, ds, depth, Some(source_layer_name.clone()));
         }
     }
 }
@@ -408,9 +294,9 @@ fn build_pos_response_view_sections(
     let service_name = ds.diag_comm().and_then(|dc| dc.short_name()).unwrap_or("?");
     let sid = format_service_id(ds);
     let header_title = if sid.is_empty() {
-        format!("Pos Response - {}", service_name)
+        format!("Pos Response - {service_name}")
     } else {
-        format!("Pos Response - {} - {}", sid, service_name)
+        format!("Pos Response - {sid} - {service_name}")
     };
 
     sections.push(DetailSectionData {
@@ -440,9 +326,9 @@ fn build_neg_response_view_sections(
     let service_name = ds.diag_comm().and_then(|dc| dc.short_name()).unwrap_or("?");
     let sid = format_service_id(ds);
     let header_title = if sid.is_empty() {
-        format!("Neg Response - {}", service_name)
+        format!("Neg Response - {service_name}")
     } else {
-        format!("Neg Response - {} - {}", sid, service_name)
+        format!("Neg Response - {sid} - {service_name}")
     };
 
     sections.push(DetailSectionData {
@@ -697,10 +583,10 @@ fn build_pos_responses_table_section(
             .filter_map(|(ds, _)| build_row(ds, "true")),
     );
 
-    let total_count = own_services.len() + parent_services.len();
+    let total_count = own_services.len().saturating_add(parent_services.len());
 
     DetailSectionData {
-        title: format!("Pos-Responses ({})", total_count),
+        title: format!("Pos-Responses ({total_count})"),
         render_as_header: false,
         section_type: DetailSectionType::PosResponses,
         content: DetailContent::Table {
@@ -757,10 +643,10 @@ fn build_neg_responses_table_section(
             .filter_map(|(ds, _)| build_row(ds, "true")),
     );
 
-    let total_count = own_services.len() + parent_services.len();
+    let total_count = own_services.len().saturating_add(parent_services.len());
 
     DetailSectionData {
-        title: format!("Neg-Responses ({})", total_count),
+        title: format!("Neg-Responses ({total_count})"),
         render_as_header: false,
         section_type: DetailSectionType::NegResponses,
         content: DetailContent::Table {
@@ -783,7 +669,7 @@ fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionData> 
     // Header section
     let param_name = param.short_name().unwrap_or("?");
     sections.push(DetailSectionData {
-        title: format!("Parameter - {}", param_name),
+        title: format!("Parameter - {param_name}"),
         render_as_header: true,
         section_type: DetailSectionType::Header,
         content: DetailContent::PlainText(vec![]),

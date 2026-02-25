@@ -11,7 +11,7 @@ use crate::tree::{
     },
 };
 
-/// Add ComParam refs section to the tree
+/// Add `ComParam` refs section to the tree
 pub fn add_com_params(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
     let Some(cp_refs) = layer.com_param_refs() else {
         return;
@@ -36,7 +36,7 @@ pub fn add_com_params(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) 
         let cp_name = cp.short_name().unwrap_or("?");
         let sections = build_com_param_ref_detail(layer, idx);
         b.push_details_structured(
-            depth + 1,
+            depth.saturating_add(1),
             cp_name.to_owned(),
             false,
             false,
@@ -88,14 +88,9 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
     ]
 }
 
-fn build_com_param_ref_detail(layer: &DiagLayer<'_>, idx: usize) -> Vec<DetailSectionData> {
-    let Some(cp_refs) = layer.com_param_refs() else {
-        return vec![];
-    };
+fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSectionData> {
+    let cp_refs = layer.com_param_refs()?;
     let cpr = cp_refs.get(idx);
-    let mut sections = Vec::new();
-
-    // General info section
     let mut general_rows: Vec<(String, String)> = Vec::new();
 
     if let Some(cp) = cpr.com_param() {
@@ -144,142 +139,164 @@ fn build_com_param_ref_detail(layer: &DiagLayer<'_>, idx: usize) -> Vec<DetailSe
         general_rows.push(("Prot Stack".to_owned(), name.to_owned()));
     }
 
-    if !general_rows.is_empty() {
-        let header = DetailRow::header(
-            vec!["Property".to_owned(), "Value".to_owned()],
-            vec![CellType::Text, CellType::Text],
-        );
-        let rows: Vec<DetailRow> = general_rows
-            .into_iter()
-            .map(|(k, v)| DetailRow::normal(vec![k, v], vec![CellType::Text, CellType::Text], 0))
-            .collect();
-
-        sections.push(
-            DetailSectionData::new(
-                "General".to_owned(),
-                DetailContent::Table {
-                    header,
-                    rows,
-                    constraints: vec![
-                        ColumnConstraint::Percentage(40),
-                        ColumnConstraint::Percentage(60),
-                    ],
-                    use_row_selection: false,
-                },
-                false,
-            )
-            .with_type(DetailSectionType::Overview),
-        );
+    if general_rows.is_empty() {
+        return None;
     }
 
-    // Complex value section
-    if let Some(cv) = cpr.complex_value()
-        && let Some(entries_type) = cv.entries_type()
-    {
-        let cv_rows: Vec<DetailRow> = entries_type
-            .iter()
-            .enumerate()
-            .map(|(i, tag)| {
-                let value = cv
-                    .entries_item_as_simple_value(i)
-                    .and_then(|sv| sv.value().map(|v| v.to_owned()))
-                    .unwrap_or_else(|| format!("Complex[{i}]"));
-                DetailRow::normal(
-                    vec![format!("{i}"), format!("{tag:?}"), value],
-                    vec![CellType::Text, CellType::Text, CellType::Text],
-                    0,
-                )
-            })
-            .collect();
+    let header = DetailRow::header(
+        vec!["Property".to_owned(), "Value".to_owned()],
+        vec![CellType::Text, CellType::Text],
+    );
+    let rows: Vec<DetailRow> = general_rows
+        .into_iter()
+        .map(|(k, v)| DetailRow::normal(vec![k, v], vec![CellType::Text, CellType::Text], 0))
+        .collect();
 
-        if !cv_rows.is_empty() {
-            let header = DetailRow::header(
-                vec!["#".to_owned(), "Type".to_owned(), "Value".to_owned()],
+    Some(
+        DetailSectionData::new(
+            "General".to_owned(),
+            DetailContent::Table {
+                header,
+                rows,
+                constraints: vec![
+                    ColumnConstraint::Percentage(40),
+                    ColumnConstraint::Percentage(60),
+                ],
+                use_row_selection: false,
+            },
+            false,
+        )
+        .with_type(DetailSectionType::Overview),
+    )
+}
+
+fn build_complex_value_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSectionData> {
+    let cp_refs = layer.com_param_refs()?;
+    let cpr = cp_refs.get(idx);
+    let cv = cpr.complex_value()?;
+    let entries_type = cv.entries_type()?;
+
+    let cv_rows: Vec<DetailRow> = entries_type
+        .iter()
+        .enumerate()
+        .map(|(i, tag)| {
+            let value = cv
+                .entries_item_as_simple_value(i)
+                .and_then(|sv| sv.value().map(std::borrow::ToOwned::to_owned))
+                .unwrap_or_else(|| format!("Complex[{i}]"));
+            DetailRow::normal(
+                vec![format!("{i}"), format!("{tag:?}"), value],
                 vec![CellType::Text, CellType::Text, CellType::Text],
-            );
-            sections.push(
-                DetailSectionData::new(
-                    "Complex Value".to_owned(),
-                    DetailContent::Table {
-                        header,
-                        rows: cv_rows,
-                        constraints: vec![
-                            ColumnConstraint::Fixed(5),
-                            ColumnConstraint::Percentage(30),
-                            ColumnConstraint::Percentage(70),
-                        ],
-                        use_row_selection: false,
-                    },
-                    false,
-                )
-                .with_type(DetailSectionType::Custom),
-            );
-        }
+                0,
+            )
+        })
+        .collect();
+
+    if cv_rows.is_empty() {
+        return None;
     }
 
-    // Sub-params for ComplexComParam
-    if let Some(cp) = cpr.com_param()
-        && let Some(ccp) = cp.specific_data_as_complex_com_param()
-        && let Some(sub_params) = ccp.com_params()
-    {
-        let header = DetailRow::header(
-            vec![
-                "Short Name".to_owned(),
-                "Type".to_owned(),
-                "Param Class".to_owned(),
-                "Default Value".to_owned(),
-            ],
-            vec![
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-            ],
-        );
-        let rows: Vec<DetailRow> = sub_params
-            .iter()
-            .map(|sp| {
-                let name = sp.short_name().unwrap_or("?").to_owned();
-                let sp_type = format!("{:?}", sp.com_param_type());
-                let param_class = sp.param_class().unwrap_or("-").to_owned();
-                let default_val = sp
-                    .specific_data_as_regular_com_param()
-                    .and_then(|r| r.physical_default_value().map(|v| v.to_owned()))
-                    .unwrap_or_default();
-                DetailRow::normal(
-                    vec![name, sp_type, param_class, default_val],
-                    vec![
-                        CellType::Text,
-                        CellType::Text,
-                        CellType::Text,
-                        CellType::Text,
-                    ],
-                    0,
-                )
-            })
-            .collect();
+    let header = DetailRow::header(
+        vec!["#".to_owned(), "Type".to_owned(), "Value".to_owned()],
+        vec![CellType::Text, CellType::Text, CellType::Text],
+    );
+    Some(
+        DetailSectionData::new(
+            "Complex Value".to_owned(),
+            DetailContent::Table {
+                header,
+                rows: cv_rows,
+                constraints: vec![
+                    ColumnConstraint::Fixed(5),
+                    ColumnConstraint::Percentage(30),
+                    ColumnConstraint::Percentage(70),
+                ],
+                use_row_selection: false,
+            },
+            false,
+        )
+        .with_type(DetailSectionType::Custom),
+    )
+}
 
-        if !rows.is_empty() {
-            sections.push(
-                DetailSectionData::new(
-                    "Sub-Parameters".to_owned(),
-                    DetailContent::Table {
-                        header,
-                        rows,
-                        constraints: vec![
-                            ColumnConstraint::Percentage(30),
-                            ColumnConstraint::Percentage(20),
-                            ColumnConstraint::Percentage(20),
-                            ColumnConstraint::Percentage(30),
-                        ],
-                        use_row_selection: true,
-                    },
-                    false,
-                )
-                .with_type(DetailSectionType::ComParams),
-            );
-        }
+fn build_sub_params_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSectionData> {
+    let cp_refs = layer.com_param_refs()?;
+    let cpr = cp_refs.get(idx);
+    let cp = cpr.com_param()?;
+    let ccp = cp.specific_data_as_complex_com_param()?;
+    let sub_params = ccp.com_params()?;
+
+    let header = DetailRow::header(
+        vec![
+            "Short Name".to_owned(),
+            "Type".to_owned(),
+            "Param Class".to_owned(),
+            "Default Value".to_owned(),
+        ],
+        vec![
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+        ],
+    );
+    let rows: Vec<DetailRow> = sub_params
+        .iter()
+        .map(|sp| {
+            let name = sp.short_name().unwrap_or("?").to_owned();
+            let sp_type = format!("{:?}", sp.com_param_type());
+            let param_class = sp.param_class().unwrap_or("-").to_owned();
+            let default_val = sp
+                .specific_data_as_regular_com_param()
+                .and_then(|r| {
+                    r.physical_default_value()
+                        .map(std::borrow::ToOwned::to_owned)
+                })
+                .unwrap_or_default();
+            DetailRow::normal(
+                vec![name, sp_type, param_class, default_val],
+                vec![
+                    CellType::Text,
+                    CellType::Text,
+                    CellType::Text,
+                    CellType::Text,
+                ],
+                0,
+            )
+        })
+        .collect();
+
+    if rows.is_empty() {
+        return None;
     }
 
-    sections
+    Some(
+        DetailSectionData::new(
+            "Sub-Parameters".to_owned(),
+            DetailContent::Table {
+                header,
+                rows,
+                constraints: vec![
+                    ColumnConstraint::Percentage(30),
+                    ColumnConstraint::Percentage(20),
+                    ColumnConstraint::Percentage(20),
+                    ColumnConstraint::Percentage(30),
+                ],
+                use_row_selection: true,
+            },
+            false,
+        )
+        .with_type(DetailSectionType::ComParams),
+    )
+}
+
+fn build_com_param_ref_detail(layer: &DiagLayer<'_>, idx: usize) -> Vec<DetailSectionData> {
+    [
+        build_general_section(layer, idx),
+        build_complex_value_section(layer, idx),
+        build_sub_params_section(layer, idx),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }

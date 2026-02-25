@@ -22,7 +22,7 @@ use crate::tree::{
     },
 };
 
-/// Semantic category of a group of DOPs, derived from the DataOperationVariant
+/// Semantic category of a group of DOPs, derived from the `DataOperationVariant`
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DopCategory {
     DtcDops,
@@ -37,7 +37,7 @@ enum DopCategory {
 }
 
 impl DopCategory {
-    fn label(&self) -> &'static str {
+    fn label(self) -> &'static str {
         match self {
             Self::DtcDops => "DTC-DOPS",
             Self::EnvDataDescs => "ENV-DATA-DESCS",
@@ -52,7 +52,7 @@ impl DopCategory {
     }
 
     /// Build detail sections appropriate for this category
-    fn build_detail_sections(&self, dops: &[DopInfo<'_>]) -> Vec<DetailSectionData> {
+    fn build_detail_sections(self, dops: &[DopInfo<'_>]) -> Vec<DetailSectionData> {
         match self {
             Self::DtcDops => dtc_dops::build_dtc_dops_category_sections(dops),
             Self::EnvDataDescs | Self::EnvDatas | Self::DataObjectProps => {
@@ -67,13 +67,13 @@ impl DopCategory {
     }
 
     /// Whether individual DOPs in this category have tree children
-    fn has_dop_children(&self) -> bool {
+    fn has_dop_children(self) -> bool {
         matches!(self, Self::DtcDops)
     }
 
     /// Add child tree nodes for an individual DOP in this category
-    fn add_dop_children(&self, b: &mut TreeBuilder, dop_info: &DopInfo<'_>, depth: usize) {
-        if self == &Self::DtcDops {
+    fn add_dop_children(self, b: &mut TreeBuilder, dop_info: &DopInfo<'_>, depth: usize) {
+        if self == Self::DtcDops {
             dtc_dops::add_dtc_dop_children(b, dop_info, depth);
         }
     }
@@ -96,7 +96,7 @@ struct DopInfo<'a> {
     desc_id: Option<String>,
 }
 
-/// Parsed information from DOP name (e.g., IDENTICAL_A_UINT32_0x00_0xFFFFFFFF_MicroSecond)
+/// Parsed information from DOP name (e.g., `IDENTICAL_A_UINT32_0x00_0xFFFFFFFF_MicroSecond`)
 #[derive(Default)]
 struct ParsedDopName {
     compu_category: Option<String>,
@@ -125,21 +125,21 @@ fn parse_dop_name(name: &str) -> ParsedDopName {
         "TABINTP",
         "RATFUNC",
     ];
-    if compu_categories
-        .iter()
-        .any(|&cat| parts[0].starts_with(cat))
+    if let Some(&first_part) = parts.first()
+        && compu_categories
+            .iter()
+            .any(|&cat| first_part.starts_with(cat))
     {
-        parsed.compu_category = Some(parts[0].to_owned());
+        parsed.compu_category = Some(first_part.to_owned());
     }
 
     // A_UINT32, A_INT32, A_FLOAT32, A_ASCIISTRING, etc.
     for (i, part) in parts.iter().enumerate() {
         if part.starts_with("A_") {
-            if i + 1 < parts.len() {
-                parsed.data_type = Some(format!("{}_{}", part, parts[i + 1]));
-            } else {
-                parsed.data_type = Some(part.to_string());
-            }
+            parsed.data_type = parts
+                .get(i.saturating_add(1))
+                .map(|next| format!("{part}_{next}"))
+                .or_else(|| Some(part.to_string()));
         }
     }
 
@@ -149,10 +149,10 @@ fn parse_dop_name(name: &str) -> ParsedDopName {
         .copied()
         .collect();
     if hex_parts.len() >= 2 {
-        parsed.range_min = Some(hex_parts[0].to_owned());
-        parsed.range_max = Some(hex_parts[1].to_owned());
+        parsed.range_min = hex_parts.first().map(|s| (*s).to_owned());
+        parsed.range_max = hex_parts.get(1).map(|s| (*s).to_owned());
     } else if hex_parts.len() == 1 {
-        parsed.range_min = Some(hex_parts[0].to_owned());
+        parsed.range_min = hex_parts.first().map(|s| (*s).to_owned());
     }
 
     // Last part might be unit (if not a hex value or data type)
@@ -182,6 +182,8 @@ fn parse_dop_name(name: &str) -> ParsedDopName {
 
 /// Add DOPs section to the tree by collecting from service/job request/response params
 pub fn add_dops_section<'a>(b: &mut TreeBuilder, layer: &DiagLayer<'a>, depth: usize) {
+    use cda_database::datatypes::DataOperationVariant;
+
     let mut all_dops: Vec<DopInfo<'a>> = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -192,8 +194,6 @@ pub fn add_dops_section<'a>(b: &mut TreeBuilder, layer: &DiagLayer<'a>, depth: u
     if unique_dops.is_empty() {
         return;
     }
-
-    use cda_database::datatypes::DataOperationVariant;
     let mut dtc_dops: Vec<DopInfo> = Vec::new();
     let mut env_data_descs: Vec<DopInfo> = Vec::new();
     let mut env_datas: Vec<DopInfo> = Vec::new();
@@ -257,7 +257,7 @@ pub fn add_dops_section<'a>(b: &mut TreeBuilder, layer: &DiagLayer<'a>, depth: u
             let cat_detail = cat.build_detail_sections(dops);
 
             b.push_details_structured(
-                depth + 1,
+                depth.saturating_add(1),
                 format!("{} ({})", cat.label(), dops.len()),
                 false,
                 true,
@@ -269,7 +269,7 @@ pub fn add_dops_section<'a>(b: &mut TreeBuilder, layer: &DiagLayer<'a>, depth: u
             for dop_info in *dops {
                 let detail_sections = build_dop_detail_sections(dop_info);
                 b.push_details_structured(
-                    depth + 2,
+                    depth.saturating_add(2),
                     dop_info.name.clone(),
                     false,
                     expandable,
@@ -278,7 +278,7 @@ pub fn add_dops_section<'a>(b: &mut TreeBuilder, layer: &DiagLayer<'a>, depth: u
                 );
 
                 if expandable {
-                    cat.add_dop_children(b, dop_info, depth + 3);
+                    cat.add_dop_children(b, dop_info, depth.saturating_add(3));
                 }
             }
         }
@@ -316,7 +316,7 @@ fn collect_single_dop<'a>(
     });
 }
 
-/// Extract metadata (category, units, desc_id) from a DataOperation
+/// Extract metadata (category, units, `desc_id`) from a `DataOperation`
 fn extract_dop_metadata(
     dop_wrap: &cda_database::datatypes::DataOperation<'_>,
 ) -> (
@@ -337,16 +337,18 @@ fn extract_dop_metadata(
             let int_unit = normal_dop
                 .unit_ref()
                 .and_then(|u| u.short_name())
-                .map(|s| s.to_owned());
+                .map(std::borrow::ToOwned::to_owned);
             let phys = normal_dop
                 .unit_ref()
                 .and_then(|u| u.display_name())
                 .or_else(|| normal_dop.unit_ref().and_then(|u| u.short_name()))
-                .map(|s| s.to_owned());
+                .map(std::borrow::ToOwned::to_owned);
             (cat, int_unit, phys, None)
         }
         DataOperationVariant::EnvDataDesc(env_desc) => {
-            let did = env_desc.param_short_name().map(|s| s.to_owned());
+            let did = env_desc
+                .param_short_name()
+                .map(std::borrow::ToOwned::to_owned);
             (None, None, None, did)
         }
         DataOperationVariant::EndOfPdu(_)
@@ -360,7 +362,7 @@ fn extract_dop_metadata(
 }
 
 /// Recursively collect nested DOPs from compound DOP types.
-/// Uses raw FlatBuffer accessors (via .0) to preserve the buffer lifetime 'a.
+/// Uses raw `FlatBuffer` accessors (via .0) to preserve the buffer lifetime 'a.
 fn collect_nested_dops<'a>(
     dop_wrap: &cda_database::datatypes::DataOperation<'a>,
     all_dops: &mut Vec<DopInfo<'a>>,
@@ -397,7 +399,7 @@ fn collect_nested_dops<'a>(
                 cda_database::datatypes::DataOperation(env_dop),
                 all_dops,
                 seen,
-            )
+            );
         });
 
     raw.specific_data_as_env_data()
@@ -413,7 +415,7 @@ fn collect_nested_dops<'a>(
             .into_iter()
             .chain(mux_dop.default_case().and_then(|dc| dc.structure()))
             .for_each(|d| {
-                collect_single_dop(cda_database::datatypes::DataOperation(d), all_dops, seen)
+                collect_single_dop(cda_database::datatypes::DataOperation(d), all_dops, seen);
             });
 
         mux_dop
@@ -422,7 +424,7 @@ fn collect_nested_dops<'a>(
             .flat_map(|c| c.iter())
             .filter_map(|case| case.structure())
             .for_each(|d| {
-                collect_single_dop(cda_database::datatypes::DataOperation(d), all_dops, seen)
+                collect_single_dop(cda_database::datatypes::DataOperation(d), all_dops, seen);
             });
     }
 
@@ -443,7 +445,7 @@ fn collect_nested_dops<'a>(
         .and_then(|det| det.dop())
         .into_iter()
         .for_each(|d| {
-            collect_single_dop(cda_database::datatypes::DataOperation(d), all_dops, seen)
+            collect_single_dop(cda_database::datatypes::DataOperation(d), all_dops, seen);
         });
 }
 
@@ -488,7 +490,7 @@ fn collect_dop_from_param<'a>(
     }
     .into_iter()
     .for_each(|dop| {
-        collect_single_dop(cda_database::datatypes::DataOperation(dop), all_dops, seen)
+        collect_single_dop(cda_database::datatypes::DataOperation(dop), all_dops, seen);
     });
 
     if matches!(param_type, ParamType::TableKey) {
@@ -498,7 +500,7 @@ fn collect_dop_from_param<'a>(
             .into_iter()
             .for_each(|table_dop| {
                 table_dop.key_dop().into_iter().for_each(|kd| {
-                    collect_single_dop(cda_database::datatypes::DataOperation(kd), all_dops, seen)
+                    collect_single_dop(cda_database::datatypes::DataOperation(kd), all_dops, seen);
                 });
 
                 table_dop
@@ -532,7 +534,7 @@ fn collect_dop_from_param<'a>(
     }
 }
 
-/// Collect all DOPs from a single DiagLayer (own services + single ECU jobs + ComParamSubSet)
+/// Collect all DOPs from a single `DiagLayer` (own services + single ECU jobs + `ComParamSubSet`)
 fn collect_dops_from_layer<'a>(
     layer: &DiagLayer<'a>,
     all_dops: &mut Vec<DopInfo<'a>>,
@@ -559,7 +561,7 @@ fn collect_dops_from_layer<'a>(
             .flat_map(|params| params.iter())
             .filter_map(|jp| jp.dop_base())
             .for_each(|dop| {
-                collect_single_dop(cda_database::datatypes::DataOperation(dop), all_dops, seen)
+                collect_single_dop(cda_database::datatypes::DataOperation(dop), all_dops, seen);
             });
         });
 
@@ -579,7 +581,7 @@ fn collect_dops_from_layer<'a>(
                 .into_iter()
                 .flat_map(|dops| dops.iter())
                 .for_each(|dop| {
-                    collect_single_dop(cda_database::datatypes::DataOperation(dop), all_dops, seen)
+                    collect_single_dop(cda_database::datatypes::DataOperation(dop), all_dops, seen);
                 });
         });
 }
@@ -655,7 +657,7 @@ fn build_dops_overview_table(
 }
 
 /// Build overview table with only SHORT-NAME column.
-/// Used for Structures, StaticFields, DynamicLengthFields, EndOfPduFields, MuxDops.
+/// Used for `Structures`, `StaticFields`, `DynamicLengthFields`, `EndOfPduFields`, `MuxDops`.
 fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData> {
     let header = DetailRow {
         cells: vec!["SHORT-NAME".to_owned()],
@@ -793,6 +795,8 @@ fn push_types_section(types_rows: Vec<DetailRow>, sections: &mut Vec<DetailSecti
 
 /// Build detail sections for a single DOP with full type-specific information
 fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
+    use cda_database::datatypes::DataOperationVariant;
+
     let mut sections = Vec::new();
 
     let parsed_name = parse_dop_name(&dop_info.name);
@@ -832,7 +836,6 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
         });
     }
 
-    use cda_database::datatypes::DataOperationVariant;
     if let Ok(variant) = dop_info.dop.variant() {
         match variant {
             DataOperationVariant::Normal(normal_dop) => {

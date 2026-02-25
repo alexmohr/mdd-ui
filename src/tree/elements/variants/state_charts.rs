@@ -32,7 +32,7 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
     let mut sorted_charts: Vec<_> = charts.iter().collect();
     sorted_charts.sort_by_cached_key(|chart| chart.short_name().unwrap_or("").to_lowercase());
 
-    for chart in sorted_charts.into_iter() {
+    for chart in sorted_charts {
         let chart_name = chart.short_name().unwrap_or("unnamed");
 
         // Get semantic description if available
@@ -58,7 +58,12 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
             .collect();
 
         // Sort transitions alphabetically by name
-        transitions.sort_by(|a, b| a.cells[0].to_lowercase().cmp(&b.cells[0].to_lowercase()));
+        transitions.sort_by(|a, b| {
+            a.cells
+                .first()
+                .map(|s| s.to_lowercase())
+                .cmp(&b.cells.first().map(|s| s.to_lowercase()))
+        });
 
         let transitions_section = DetailSectionData {
             title: "State Transitions".to_string(),
@@ -108,7 +113,12 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
             .collect();
 
         // Sort states alphabetically by name
-        states.sort_by(|a, b| a.cells[0].to_lowercase().cmp(&b.cells[0].to_lowercase()));
+        states.sort_by(|a, b| {
+            a.cells
+                .first()
+                .map(|s| s.to_lowercase())
+                .cmp(&b.cells.first().map(|s| s.to_lowercase()))
+        });
 
         let states_section = DetailSectionData {
             title: "States".to_string(),
@@ -137,10 +147,10 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
 
         // Add semantic information as first section (not a tab)
         sections.push(DetailSectionData {
-            title: format!("State Chart - {}", chart_name),
+            title: format!("State Chart - {chart_name}"),
             render_as_header: true,
             section_type: DetailSectionType::Header,
-            content: DetailContent::PlainText(vec![format!("Semantic: {}", semantic)]),
+            content: DetailContent::PlainText(vec![format!("Semantic: {semantic}")]),
         });
 
         // Add the two tab sections
@@ -149,7 +159,7 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
 
         // Push the state chart as a non-expandable node with detail sections
         b.push_details_structured(
-            depth + 1,
+            depth.saturating_add(1),
             chart_name.to_owned(),
             false,
             false, // Not expandable - no tree children

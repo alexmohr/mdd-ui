@@ -3,7 +3,7 @@
 
 use crossterm::event::KeyCode;
 
-use super::App;
+use super::{App, FocusState};
 
 /// Result of processing a key press.
 pub enum Action {
@@ -42,7 +42,7 @@ impl App {
                             self.status =
                                 format!("Search depth: {} [{}]", depth, stack_display.join(" → "));
                         } else {
-                            self.status = "All searches cleared".to_owned();
+                            "All searches cleared".clone_into(&mut self.status);
                         }
                     }
                 } else {
@@ -95,9 +95,9 @@ impl App {
     /// Handle a key press in normal (non-search) mode.
     pub(super) fn handle_normal_key(&mut self, code: KeyCode, ctrl: bool, shift: bool) -> Action {
         // Early return for help popup
-        if self.help_popup_visible {
+        if self.focus_state == FocusState::HelpPopup {
             if matches!(code, KeyCode::Esc | KeyCode::Char('?')) {
-                self.help_popup_visible = false;
+                self.focus_state = FocusState::Tree;
             }
             return Action::Continue;
         }
@@ -124,7 +124,7 @@ impl App {
 
             KeyCode::Backspace => {
                 // Navigate in tree (when not in search mode and not in detail pane)
-                if !self.detail_focused {
+                if self.focus_state != FocusState::Detail {
                     if shift {
                         // Shift+Backspace: Navigate up one layer in hierarchy
                         self.navigate_up_one_layer();
@@ -136,159 +136,71 @@ impl App {
             }
 
             KeyCode::Tab => {
-                self.detail_focused = !self.detail_focused;
-                if !self.detail_focused {
+                self.focus_state = if self.focus_state == FocusState::Detail {
+                    FocusState::Tree
+                } else {
+                    FocusState::Detail
+                };
+                if self.focus_state != FocusState::Detail {
                     self.focused_section = 0; // Reset when returning to tree
                 }
             }
 
             // Pane resizing
-            KeyCode::Char('+') | KeyCode::Char('=') => {
-                self.tree_width_percentage = (self.tree_width_percentage + 5).min(80);
+            KeyCode::Char('+' | '=') => {
+                self.tree_width_percentage = self.tree_width_percentage.saturating_add(5).min(80);
             }
-            KeyCode::Char('-') | KeyCode::Char('_') => {
+            KeyCode::Char('-' | '_') => {
                 self.tree_width_percentage = (self.tree_width_percentage.saturating_sub(5)).max(20);
             }
 
-            KeyCode::Up | KeyCode::Char('K') => {
-                if self.detail_focused {
-                    // Move cursor up in the selected tab
-                    let section_idx = self.get_section_index();
-                    if section_idx < self.section_cursors.len() {
-                        self.section_cursors[section_idx] =
-                            self.section_cursors[section_idx].saturating_sub(1);
-                    }
-                } else {
-                    self.move_up();
-                }
-            }
-            KeyCode::Char('k') if !self.detail_focused => {
-                self.move_up();
-            }
-            KeyCode::Down | KeyCode::Char('J') => {
-                if self.detail_focused {
-                    // Move cursor down in the selected tab (will be clamped during render)
-                    let section_idx = self.get_section_index();
-                    if section_idx < self.section_cursors.len() {
-                        self.section_cursors[section_idx] =
-                            self.section_cursors[section_idx].saturating_add(1);
-                    }
-                } else {
-                    self.move_down();
-                }
-            }
-            KeyCode::Char('j') if !self.detail_focused => {
-                self.move_down();
-            }
-            KeyCode::PageUp => {
-                if self.detail_focused {
-                    // Move cursor up by page in selected tab
-                    let section_idx = self.get_section_index();
-                    if section_idx < self.section_cursors.len() {
-                        self.section_cursors[section_idx] =
-                            self.section_cursors[section_idx].saturating_sub(20);
-                    }
-                } else {
-                    self.page_up(20);
-                }
-            }
-            KeyCode::PageDown => {
-                if self.detail_focused {
-                    // Move cursor down by page in selected tab
-                    let section_idx = self.get_section_index();
-                    if section_idx < self.section_cursors.len() {
-                        self.section_cursors[section_idx] =
-                            self.section_cursors[section_idx].saturating_add(20);
-                    }
-                } else {
-                    self.page_down(20);
-                }
-            }
-            KeyCode::Home => {
-                if self.detail_focused {
-                    // Move cursor to top of selected tab
-                    let section_idx = self.get_section_index();
-                    if section_idx < self.section_cursors.len() {
-                        self.section_cursors[section_idx] = 0;
-                    }
-                } else {
-                    self.home();
-                }
-            }
-            KeyCode::End => {
-                if self.detail_focused {
-                    // Move cursor to bottom of selected tab (will be clamped during render)
-                    let section_idx = self.get_section_index();
-                    if section_idx < self.section_cursors.len() {
-                        self.section_cursors[section_idx] = usize::MAX;
-                    }
-                } else {
-                    self.end();
-                }
-            }
-
-            KeyCode::Left | KeyCode::Char('H') => {
-                if self.detail_focused {
-                    // Navigate to previous tab
-                    let new_tab = self.selected_tab.saturating_sub(1);
-                    self.set_selected_tab(new_tab);
-                    self.focused_column = 0; // Reset column focus when switching tabs
-                } else {
-                    self.try_collapse_or_parent();
-                }
-            }
-            KeyCode::Char('h') if !self.detail_focused => {
-                self.try_collapse_or_parent();
-            }
-            KeyCode::Right | KeyCode::Char('L') => {
-                if self.detail_focused {
-                    // Navigate to next tab (will be clamped during render)
-                    let new_tab = self.selected_tab.saturating_add(1);
-                    self.set_selected_tab(new_tab);
-                    self.focused_column = 0; // Reset column focus when switching tabs
-                } else {
-                    self.try_expand();
-                }
-            }
-            KeyCode::Char('l') if !self.detail_focused => {
-                self.try_expand();
+            KeyCode::Up
+            | KeyCode::Char('K' | 'k' | 'J' | 'j' | 'H' | 'h' | 'L' | 'l')
+            | KeyCode::Down
+            | KeyCode::PageUp
+            | KeyCode::PageDown
+            | KeyCode::Home
+            | KeyCode::End
+            | KeyCode::Left
+            | KeyCode::Right => {
+                self.handle_navigation_key(code);
             }
             KeyCode::Enter => {
-                if !self.detail_focused {
-                    self.try_expand();
-                } else {
+                if self.focus_state == FocusState::Detail {
                     self.handle_enter_in_detail_pane();
+                } else {
+                    self.try_expand();
                 }
             }
-            KeyCode::Char(' ') if !self.detail_focused => {
+            KeyCode::Char(' ') if self.focus_state != FocusState::Detail => {
                 self.toggle_expand();
             }
 
-            KeyCode::Char('e') if !self.detail_focused => self.expand_all(),
-            KeyCode::Char('c') if !self.detail_focused => self.collapse_all(),
+            KeyCode::Char('e') if self.focus_state != FocusState::Detail => self.expand_all(),
+            KeyCode::Char('c') if self.focus_state != FocusState::Detail => self.collapse_all(),
 
             // Clear search stack ('x')
-            KeyCode::Char('x') if !self.detail_focused => {
+            KeyCode::Char('x') if self.focus_state != FocusState::Detail => {
                 self.clear_search_stack();
             }
 
             // Cycle search scope (Shift+S)
-            KeyCode::Char('S') if !self.detail_focused => {
+            KeyCode::Char('S') if self.focus_state != FocusState::Detail => {
                 self.cycle_search_scope();
             }
 
             // Set subtree search scope to current node ('t')
-            KeyCode::Char('t') if !self.detail_focused => {
+            KeyCode::Char('t') if self.focus_state != FocusState::Detail => {
                 self.set_subtree_scope();
             }
 
             // Toggle DiagComm sorting (only when tree is focused)
-            KeyCode::Char('s') if !self.detail_focused => {
+            KeyCode::Char('s') if self.focus_state != FocusState::Detail => {
                 self.toggle_diagcomm_sort();
             }
 
             // Toggle table column sorting (Shift+S when detail pane is focused)
-            KeyCode::Char('S') if self.detail_focused => {
+            KeyCode::Char('S') if self.focus_state == FocusState::Detail => {
                 self.toggle_table_column_sort();
             }
 
@@ -297,7 +209,7 @@ impl App {
                 self.search.clear();
                 let depth = self.search_stack.len();
                 if depth > 0 {
-                    self.status = format!("Add search (depth {}+1): ", depth);
+                    self.status = format!("Add search (depth {depth}+1): ");
                 } else {
                     self.status = "Search: ".into();
                 }
@@ -306,16 +218,16 @@ impl App {
             KeyCode::Char('N') => self.prev_search_match(),
 
             // Column resizing (only when detail pane is focused)
-            KeyCode::Char('[') if self.detail_focused => {
+            KeyCode::Char('[') if self.focus_state == FocusState::Detail => {
                 self.resize_column(-10);
             }
-            KeyCode::Char(']') if self.detail_focused => {
+            KeyCode::Char(']') if self.focus_state == FocusState::Detail => {
                 self.resize_column(10);
             }
-            KeyCode::Char(',') if self.detail_focused => {
+            KeyCode::Char(',') if self.focus_state == FocusState::Detail => {
                 self.focused_column = self.focused_column.saturating_sub(1);
             }
-            KeyCode::Char('.') if self.detail_focused => {
+            KeyCode::Char('.') if self.focus_state == FocusState::Detail => {
                 self.focused_column = self.focused_column.saturating_add(1);
             }
 
@@ -326,11 +238,11 @@ impl App {
 
             // Show help popup
             KeyCode::Char('?') => {
-                self.help_popup_visible = true;
+                self.focus_state = FocusState::HelpPopup;
             }
 
             // Type-to-jump: alphanumeric keys jump to matching row when detail pane is focused
-            KeyCode::Char(c) if self.detail_focused && c.is_alphanumeric() => {
+            KeyCode::Char(c) if (self.focus_state == FocusState::Detail) && c.is_alphanumeric() => {
                 self.jump_buffer.push(c.to_ascii_lowercase());
                 self.jump_buffer_time = Some(std::time::Instant::now());
                 self.jump_to_matching_row();
@@ -339,5 +251,72 @@ impl App {
             _ => {}
         }
         Action::Continue
+    }
+
+    /// Handle navigation keys, dispatching to detail or tree navigation.
+    fn handle_navigation_key(&mut self, code: KeyCode) {
+        if self.focus_state == FocusState::Detail {
+            self.handle_detail_navigation(code);
+            return;
+        }
+        match code {
+            KeyCode::Up | KeyCode::Char('K' | 'k') => self.move_up(),
+            KeyCode::Down | KeyCode::Char('J' | 'j') => self.move_down(),
+            KeyCode::PageUp => self.page_up(20),
+            KeyCode::PageDown => self.page_down(20),
+            KeyCode::Home => self.home(),
+            KeyCode::End => self.end(),
+            KeyCode::Left | KeyCode::Char('H' | 'h') => self.try_collapse_or_parent(),
+            KeyCode::Right | KeyCode::Char('L' | 'l') => self.try_expand(),
+            _ => {}
+        }
+    }
+
+    /// Handle navigation keys when the detail pane is focused.
+    fn handle_detail_navigation(&mut self, code: KeyCode) {
+        let section_idx = self.get_section_index();
+        match code {
+            KeyCode::Up | KeyCode::Char('K') => {
+                if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                    *cursor = cursor.saturating_sub(1);
+                }
+            }
+            KeyCode::Down | KeyCode::Char('J') => {
+                if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                    *cursor = cursor.saturating_add(1);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                    *cursor = cursor.saturating_sub(20);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                    *cursor = cursor.saturating_add(20);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                    *cursor = 0;
+                }
+            }
+            KeyCode::End => {
+                if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                    *cursor = usize::MAX;
+                }
+            }
+            KeyCode::Left | KeyCode::Char('H') => {
+                let new_tab = self.selected_tab.saturating_sub(1);
+                self.set_selected_tab(new_tab);
+                self.focused_column = 0;
+            }
+            KeyCode::Right | KeyCode::Char('L') => {
+                let new_tab = self.selected_tab.saturating_add(1);
+                self.set_selected_tab(new_tab);
+                self.focused_column = 0;
+            }
+            _ => {}
+        }
     }
 }

@@ -4,7 +4,7 @@
 use super::{kv_row, push_types_section};
 use crate::tree::types::{CellType, DetailRow, DetailSectionData};
 
-/// Build tabbed sections for DynamicLengthField DOP
+/// Build tabbed sections for `DynamicLengthField` DOP
 /// Shows bit/byte position and data object prop ref (link), not DOP variant/short name
 pub(super) fn build_dynamic_length_field_dop_tabs(
     dyn_field: &cda_database::datatypes::DynamicLengthDop<'_>,
@@ -13,8 +13,8 @@ pub(super) fn build_dynamic_length_field_dop_tabs(
 ) {
     // Remove DOP Variant and Short Name rows — not wanted for dynamic length fields
     types_rows.retain(|row| {
-        let key = row.cells.first().map(|c| c.as_str());
-        !matches!(key, Some("DOP Variant") | Some("Short Name"))
+        let key = row.cells.first().map(std::string::String::as_str);
+        !matches!(key, Some("DOP Variant" | "Short Name"))
     });
 
     let offset = dyn_field.offset();

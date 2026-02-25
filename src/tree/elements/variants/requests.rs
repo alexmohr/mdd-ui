@@ -13,7 +13,7 @@ use crate::tree::{
 };
 
 /// Add requests section to the tree
-/// This uses EXACTLY the same logic and display as DiagComm - just filtered
+/// This uses EXACTLY the same logic and display as `DiagComm` - just filtered
 /// to show only services with requests
 pub fn add_requests_section<'a>(
     b: &mut TreeBuilder,
@@ -44,7 +44,7 @@ pub fn add_requests_section<'a>(
             Vec::new()
         };
 
-    let total_count = own_services.len() + parent_services.len();
+    let total_count = own_services.len().saturating_add(parent_services.len());
 
     if total_count > 0 {
         // Build detail section for Requests header showing all services in a table
@@ -52,7 +52,7 @@ pub fn add_requests_section<'a>(
 
         b.push_service_list_header(
             depth,
-            format!("Requests ({})", total_count),
+            format!("Requests ({total_count})"),
             false,
             true,
             vec![detail_section],
@@ -60,7 +60,7 @@ pub fn add_requests_section<'a>(
         );
 
         // Add own services first - using EXACTLY the same display as DiagComm
-        for ds in own_services.iter() {
+        for ds in &own_services {
             let Some(display_name) = super::format_service_display_name(ds) else {
                 continue;
             };
@@ -72,11 +72,10 @@ pub fn add_requests_section<'a>(
             let has_params = ds
                 .request()
                 .and_then(|req| req.params())
-                .map(|p| !p.is_empty())
-                .unwrap_or(false);
+                .is_some_and(|p| !p.is_empty());
 
             b.push_details_structured(
-                depth + 1,
+                depth.saturating_add(1),
                 display_name.clone(),
                 false,
                 has_params,
@@ -95,7 +94,7 @@ pub fn add_requests_section<'a>(
                     let param_id = param.id();
 
                     b.push_param(
-                        depth + 2,
+                        depth.saturating_add(2),
                         param_name,
                         param_detail,
                         NodeType::Default,
@@ -105,7 +104,7 @@ pub fn add_requests_section<'a>(
         }
 
         // Add parent ref services with different node type (same as DiagComm)
-        for (ds, source_layer_name) in parent_services.iter() {
+        for (ds, source_layer_name) in &parent_services {
             let Some(display_name) = super::format_service_display_name(ds) else {
                 continue;
             };
@@ -117,11 +116,10 @@ pub fn add_requests_section<'a>(
             let has_params = ds
                 .request()
                 .and_then(|req| req.params())
-                .map(|p| !p.is_empty())
-                .unwrap_or(false);
+                .is_some_and(|p| !p.is_empty());
 
             b.push_details_structured(
-                depth + 1,
+                depth.saturating_add(1),
                 display_name.clone(),
                 false,
                 has_params,
@@ -140,7 +138,7 @@ pub fn add_requests_section<'a>(
                     let param_id = param.id();
 
                     b.push_param(
-                        depth + 2,
+                        depth.saturating_add(2),
                         param_name,
                         param_detail,
                         NodeType::Default,
@@ -152,7 +150,7 @@ pub fn add_requests_section<'a>(
 }
 
 /// Build the Request tab section - this is the core rendering logic for Request data
-/// DiagComm module should import and use this function to render the Request tab
+/// `DiagComm` module should import and use this function to render the Request tab
 pub fn build_request_section(ds: &DiagService<'_>) -> Option<DetailSectionData> {
     let req = ds.request()?;
     let params = req.params().into_iter().flatten().map(Parameter);
@@ -171,9 +169,9 @@ fn build_request_view_sections(
     let service_name = ds.diag_comm().and_then(|dc| dc.short_name()).unwrap_or("?");
     let id_str = super::format_service_id(ds);
     let header_title = if id_str.is_empty() {
-        format!("Request - {}", service_name)
+        format!("Request - {service_name}")
     } else {
-        format!("Request - {} - {}", id_str, service_name)
+        format!("Request - {id_str} - {service_name}")
     };
 
     sections.push(DetailSectionData {
@@ -374,7 +372,7 @@ fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionData> 
     // Header section
     let param_name = param.short_name().unwrap_or("?");
     sections.push(DetailSectionData {
-        title: format!("Parameter - {}", param_name),
+        title: format!("Parameter - {param_name}"),
         render_as_header: true,
         section_type: DetailSectionType::Header,
         content: DetailContent::PlainText(vec![]),
@@ -525,10 +523,10 @@ fn build_requests_table_section(
             .filter_map(|(ds, _)| build_row(ds, "true")),
     );
 
-    let total_count = own_services.len() + parent_services.len();
+    let total_count = own_services.len().saturating_add(parent_services.len());
 
     DetailSectionData {
-        title: format!("Requests ({})", total_count),
+        title: format!("Requests ({total_count})"),
         render_as_header: false,
         section_type: DetailSectionType::Requests,
         content: DetailContent::Table {

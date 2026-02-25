@@ -12,7 +12,7 @@ use crate::tree::{
 };
 
 /// Add Unit Spec section to the tree by collecting
-/// units from ComParamRef -> ProtStack -> ComParamSubSet
+/// units from `ComParamRef` -> `ProtStack` -> `ComParamSubSet`
 pub fn add_unit_spec(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
     let Some(cp_refs) = layer.com_param_refs() else {
         return;
@@ -23,7 +23,7 @@ pub fn add_unit_spec(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
     let mut seen_units = std::collections::HashSet::new();
     let mut seen_groups = std::collections::HashSet::new();
 
-    for cpr in cp_refs.iter() {
+    for cpr in cp_refs {
         let Some(prot_stack) = cpr.prot_stack() else {
             continue;
         };
@@ -31,13 +31,13 @@ pub fn add_unit_spec(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
             continue;
         };
 
-        for subset in subsets.iter() {
+        for subset in subsets {
             let Some(unit_spec) = subset.unit_spec() else {
                 continue;
             };
 
             if let Some(unit_list) = unit_spec.units() {
-                for unit in unit_list.iter() {
+                for unit in unit_list {
                     let name = unit.short_name().unwrap_or("?").to_owned();
                     if !seen_units.insert(name.clone()) {
                         continue;
@@ -62,12 +62,12 @@ pub fn add_unit_spec(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
             }
 
             if let Some(group_list) = unit_spec.unit_groups() {
-                for group in group_list.iter() {
+                for group in group_list {
                     let name = group.short_name().unwrap_or("?").to_owned();
                     if !seen_groups.insert(name.clone()) {
                         continue;
                     }
-                    let unit_count = group.unitrefs().map(|refs| refs.len()).unwrap_or(0);
+                    let unit_count = group.unitrefs().map_or(0, |refs| refs.len());
 
                     unit_groups.push(UnitGroupData {
                         short_name: name,
@@ -100,7 +100,7 @@ pub fn add_unit_spec(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
     for group in &unit_groups {
         let detail = build_unit_group_detail(group);
         b.push_details_structured(
-            depth + 1,
+            depth.saturating_add(1),
             group.short_name.clone(),
             false,
             false,
@@ -112,7 +112,7 @@ pub fn add_unit_spec(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
     for unit in &units {
         let detail = build_unit_detail(unit);
         b.push_details_structured(
-            depth + 1,
+            depth.saturating_add(1),
             unit.short_name.clone(),
             false,
             false,

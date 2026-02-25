@@ -17,7 +17,7 @@ pub fn add_additional_audiences(b: &mut TreeBuilder, layer: &DiagLayer<'_>, dept
         // Build table with additional audiences
         let mut rows = Vec::new();
 
-        for audience in additional_audiences.iter() {
+        for audience in additional_audiences {
             let short_name = audience.short_name().unwrap_or("?").to_owned();
             let long_name = audience
                 .long_name()

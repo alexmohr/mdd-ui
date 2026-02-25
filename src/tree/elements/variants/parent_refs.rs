@@ -45,7 +45,7 @@ pub fn add_parent_refs_with_details<'a>(
         let detail_sections = build_single_parent_ref_detail(parent_ref, &short_name, ref_type_str);
 
         b.push_details_structured(
-            depth + 1,
+            depth.saturating_add(1),
             short_name,
             false,
             false,

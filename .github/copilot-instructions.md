@@ -19,6 +19,26 @@ SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 ## Style guide
 
+### Prefer map_or
+
+```rust
+// Don't
+let s = Some("test").map(|s| s.to_uppercase()).unwrap_or("default");
+
+// Do
+let s = Some("test").map_or("default".to_string(), |s| s.to_uppercase());
+```
+
+```rust
+// Don't
+let s = Some("test").map(|s| s.to_uppercase()).unwrap_or_default();
+
+// Do
+let s = Some("test"). .map_or(<_>::default(), |s| s.to_uppercase());
+```
+
+
+
 ### Control Flow: Use Iterator Chains, Not for Loops
 
 ```rust

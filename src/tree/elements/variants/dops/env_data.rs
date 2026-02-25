@@ -4,7 +4,7 @@
 use super::push_types_section;
 use crate::tree::types::{CellType, DetailRow, DetailSectionData};
 
-/// Build tabbed sections for EnvDataDesc DOP
+/// Build tabbed sections for `EnvDataDesc` DOP
 pub(super) fn build_env_data_desc_dop_tabs(
     env_desc: &cda_database::datatypes::EnvDataDescDop<'_>,
     types_rows: &mut Vec<DetailRow>,
@@ -37,7 +37,7 @@ pub(super) fn build_env_data_desc_dop_tabs(
     push_types_section(std::mem::take(types_rows), sections);
 }
 
-/// Build tabbed sections for EnvData DOP
+/// Build tabbed sections for `EnvData` DOP
 pub(super) fn build_env_data_dop_tabs(
     env_data: &cda_database::datatypes::EnvDataDop<'_>,
     types_rows: &mut Vec<DetailRow>,

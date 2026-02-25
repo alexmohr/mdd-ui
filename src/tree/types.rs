@@ -4,7 +4,7 @@
  */
 
 /// Type of top-level section
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SectionType {
     General,
     Variants,
@@ -14,7 +14,7 @@ pub enum SectionType {
 }
 
 /// Type of service list section
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ServiceListType {
     DiagComms,
     Requests,
@@ -25,6 +25,7 @@ pub enum ServiceListType {
 
 /// Type of node for styling purposes
 #[derive(Clone, Debug, PartialEq, Eq)]
+// DOP, SDG are standard domain abbreviations
 #[allow(clippy::upper_case_acronyms)]
 pub enum NodeType {
     Container,
@@ -52,9 +53,9 @@ pub struct TreeNode {
     pub has_children: bool,
     pub detail_sections: Vec<DetailSectionData>,
     pub node_type: NodeType,
-    /// If this is a SectionHeader at depth 0, specifies which top-level section it represents
+    /// If this is a `SectionHeader` at depth 0, specifies which top-level section it represents
     pub section_type: Option<SectionType>,
-    /// If this is a SectionHeader, specifies which kind of service list it represents
+    /// If this is a `SectionHeader`, specifies which kind of service list it represents
     pub service_list_type: Option<ServiceListType>,
     /// If this is a parameter node, stores the parameter ID for lookup
     pub param_id: Option<u32>,
@@ -83,8 +84,6 @@ pub enum DetailRowType {
     Header,        // Table header row
     InheritedFrom, // "Inherited From" navigation row
     ChildElement,  // Child element summary row (clickable)
-    #[allow(dead_code)]
-    ServiceRef, // Reference to a service (clickable)
 }
 
 /// Type of child element in variant summary
@@ -124,23 +123,13 @@ impl ChildElementType {
 /// Metadata for special rows
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RowMetadata {
-    InheritedFrom {
-        layer_name: String,
-    },
-    ChildElement {
-        element_type: ChildElementType,
-    },
-    #[allow(dead_code)]
-    ServiceReference {
-        service_name: String,
-    },
-    ParameterRow {
-        param_id: u32,
-    },
+    InheritedFrom { layer_name: String },
+    ChildElement { element_type: ChildElementType },
+    ParameterRow { param_id: u32 },
 }
 
 /// Type of cell content for interaction purposes
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CellType {
     /// Regular text cell
     Text,
@@ -211,7 +200,7 @@ pub struct DetailSectionData {
 }
 
 impl DetailSectionData {
-    /// Create a new DetailSectionData with Custom type by default
+    /// Create a new `DetailSectionData` with Custom type by default
     pub fn new(title: String, content: DetailContent, render_as_header: bool) -> Self {
         Self {
             title,

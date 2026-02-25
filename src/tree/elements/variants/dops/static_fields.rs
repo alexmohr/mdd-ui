@@ -4,7 +4,7 @@
 use super::{kv_row, push_types_section};
 use crate::tree::types::{CellType, DetailRow, DetailSectionData};
 
-/// Build tabbed sections for StaticField DOP
+/// Build tabbed sections for `StaticField` DOP
 /// Shows byte size and fixed number of items (no DOP variant)
 pub(super) fn build_static_field_dop_tabs(
     static_field: &cda_database::datatypes::StaticFieldDop<'_>,
@@ -12,7 +12,8 @@ pub(super) fn build_static_field_dop_tabs(
     sections: &mut Vec<DetailSectionData>,
 ) {
     // Remove the DOP Variant row — keep Short Name
-    types_rows.retain(|row| row.cells.first().map(|c| c.as_str()) != Some("DOP Variant"));
+    types_rows
+        .retain(|row| row.cells.first().map(std::string::String::as_str) != Some("DOP Variant"));
 
     types_rows.push(kv_row(
         "Fixed Number of Items",
