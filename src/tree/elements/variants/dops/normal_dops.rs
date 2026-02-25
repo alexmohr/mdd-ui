@@ -7,46 +7,112 @@ use crate::tree::types::{
     DetailSectionType,
 };
 
-fn build_constraints_section(parsed_name: &ParsedDopName) -> DetailSectionData {
-    let mut constraints_rows = Vec::new();
+fn build_constraints_section(
+    normal_dop: &cda_database::datatypes::NormalDop<'_>,
+) -> DetailSectionData {
+    let header = DetailRow::header(
+        vec![
+            "Lower Type".to_owned(),
+            "Lower Limit".to_owned(),
+            "Upper Limit".to_owned(),
+            "Upper Type".to_owned(),
+            "Validity".to_owned(),
+        ],
+        vec![
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+        ],
+    );
 
-    if let Some(ref min) = parsed_name.range_min {
-        constraints_rows.push(DetailRow {
-            cells: vec!["Range Min (from name)".to_owned(), min.clone()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-        });
+    let mut rows = Vec::new();
+
+    if let Some(constr) = normal_dop.internal_constr() {
+        // Main constraint range
+        let lower_type = constr
+            .lower_limit()
+            .map_or("-".to_owned(), |l| format!("{:?}", l.interval_type()));
+        let lower_val = constr
+            .lower_limit()
+            .and_then(|l| l.value())
+            .unwrap_or("-")
+            .to_owned();
+        let upper_type = constr
+            .upper_limit()
+            .map_or("-".to_owned(), |l| format!("{:?}", l.interval_type()));
+        let upper_val = constr
+            .upper_limit()
+            .and_then(|l| l.value())
+            .unwrap_or("-")
+            .to_owned();
+
+        rows.push(DetailRow::normal(
+            vec![lower_type, lower_val, upper_val, upper_type, "-".to_owned()],
+            vec![
+                CellType::Text,
+                CellType::Text,
+                CellType::Text,
+                CellType::Text,
+                CellType::Text,
+            ],
+            0,
+        ));
+
+        // Scale constraints
+        rows.extend(
+            constr
+                .scale_constr()
+                .into_iter()
+                .flat_map(|sc| sc.iter())
+                .map(|sc| {
+                    let lower_type = sc
+                        .lower_limit()
+                        .map_or("-".to_owned(), |l| format!("{:?}", l.interval_type()));
+                    let lower_val = sc
+                        .lower_limit()
+                        .and_then(|l| l.value())
+                        .unwrap_or("-")
+                        .to_owned();
+                    let upper_type = sc
+                        .upper_limit()
+                        .map_or("-".to_owned(), |l| format!("{:?}", l.interval_type()));
+                    let upper_val = sc
+                        .upper_limit()
+                        .and_then(|l| l.value())
+                        .unwrap_or("-")
+                        .to_owned();
+                    let validity = format!("{:?}", sc.validity());
+
+                    DetailRow::normal(
+                        vec![lower_type, lower_val, upper_val, upper_type, validity],
+                        vec![
+                            CellType::Text,
+                            CellType::Text,
+                            CellType::Text,
+                            CellType::Text,
+                            CellType::Text,
+                        ],
+                        0,
+                    )
+                }),
+        );
     }
-
-    if let Some(ref max) = parsed_name.range_max {
-        constraints_rows.push(DetailRow {
-            cells: vec!["Range Max (from name)".to_owned(), max.clone()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-        });
-    }
-
-    let constraints_header = DetailRow {
-        cells: vec!["Property".to_owned(), "Value".to_owned()],
-        cell_types: vec![CellType::Text, CellType::Text],
-        indent: 0,
-        ..Default::default()
-    };
 
     DetailSectionData {
         title: "Internal-Constr".to_owned(),
         render_as_header: false,
         section_type: DetailSectionType::Custom,
         content: DetailContent::Table {
-            header: constraints_header,
-            rows: constraints_rows,
+            header,
+            rows,
             constraints: vec![
-                ColumnConstraint::Percentage(40),
-                ColumnConstraint::Percentage(60),
+                ColumnConstraint::Percentage(20),
+                ColumnConstraint::Percentage(20),
+                ColumnConstraint::Percentage(20),
+                ColumnConstraint::Percentage(20),
+                ColumnConstraint::Percentage(20),
             ],
             use_row_selection: true,
         },
@@ -56,94 +122,202 @@ fn build_constraints_section(parsed_name: &ParsedDopName) -> DetailSectionData {
 fn build_compu_internal_to_phys_section(
     normal_dop: &cda_database::datatypes::NormalDop<'_>,
 ) -> DetailSectionData {
-    let mut compu_i2p_rows = Vec::new();
+    let header = DetailRow::header(
+        vec![
+            "Lower Limit".to_owned(),
+            "Upper Limit".to_owned(),
+            "Compu Inverse Value".to_owned(),
+            "Compu Const".to_owned(),
+        ],
+        vec![
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+        ],
+    );
+
+    let mut rows = Vec::new();
+    let mut subsections = Vec::new();
 
     if let Some(compu_method) = normal_dop.compu_method() {
-        compu_i2p_rows.push(DetailRow {
-            cells: vec![
-                "Category".to_owned(),
-                format!("{:?}", compu_method.category()),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
+        subsections.push(DetailSectionData {
+            title: String::new(),
+            render_as_header: false,
+            section_type: DetailSectionType::Custom,
+            content: DetailContent::PlainText(vec![format!(
+                "Category: {:?}",
+                compu_method.category()
+            )]),
         });
 
-        if let Some(internal_to_phys) = compu_method.internal_to_phys()
-            && let Some(scales) = internal_to_phys.compu_scales()
-        {
-            compu_i2p_rows.push(DetailRow {
-                cells: vec!["Scales Count".to_owned(), scales.len().to_string()],
-                cell_types: vec![CellType::Text, CellType::NumericValue],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-            });
+        if let Some(i2p) = compu_method.internal_to_phys() {
+            rows.extend(
+                i2p.compu_scales()
+                    .into_iter()
+                    .flat_map(|scales| scales.iter())
+                    .map(|scale| {
+                        let lower = scale
+                            .lower_limit()
+                            .and_then(|l| l.value())
+                            .unwrap_or("-")
+                            .to_owned();
+                        let upper = scale
+                            .upper_limit()
+                            .and_then(|l| l.value())
+                            .unwrap_or("-")
+                            .to_owned();
+                        let inverse = scale.inverse_values().map_or("-".to_owned(), |iv| {
+                            iv.vt().map_or_else(
+                                || iv.v().map_or("-".to_owned(), |v| v.to_string()),
+                                str::to_owned,
+                            )
+                        });
+                        let consts = scale.consts().map_or("-".to_owned(), |c| {
+                            c.vt().map_or_else(
+                                || c.v().map_or("-".to_owned(), |v| v.to_string()),
+                                str::to_owned,
+                            )
+                        });
+
+                        DetailRow::normal(
+                            vec![lower, upper, inverse, consts],
+                            vec![
+                                CellType::Text,
+                                CellType::Text,
+                                CellType::Text,
+                                CellType::Text,
+                            ],
+                            0,
+                        )
+                    }),
+            );
         }
     }
 
-    let compu_i2p_header = DetailRow {
-        cells: vec!["Property".to_owned(), "Value".to_owned()],
-        cell_types: vec![CellType::Text, CellType::Text],
-        indent: 0,
-        ..Default::default()
-    };
+    subsections.push(DetailSectionData {
+        title: String::new(),
+        render_as_header: false,
+        section_type: DetailSectionType::Custom,
+        content: DetailContent::Table {
+            header,
+            rows,
+            constraints: vec![
+                ColumnConstraint::Percentage(25),
+                ColumnConstraint::Percentage(25),
+                ColumnConstraint::Percentage(25),
+                ColumnConstraint::Percentage(25),
+            ],
+            use_row_selection: true,
+        },
+    });
 
     DetailSectionData {
         title: "Compu-Internal-To-Phys".to_owned(),
         render_as_header: false,
         section_type: DetailSectionType::Custom,
-        content: DetailContent::Table {
-            header: compu_i2p_header,
-            rows: compu_i2p_rows,
-            constraints: vec![
-                ColumnConstraint::Percentage(40),
-                ColumnConstraint::Percentage(60),
-            ],
-            use_row_selection: true,
-        },
+        content: DetailContent::Composite(subsections),
     }
 }
 
 fn build_compu_phys_to_internal_section(
     normal_dop: &cda_database::datatypes::NormalDop<'_>,
 ) -> DetailSectionData {
-    let mut compu_p2i_rows = Vec::new();
+    let header = DetailRow::header(
+        vec![
+            "Lower Limit".to_owned(),
+            "Upper Limit".to_owned(),
+            "Compu Inverse Value".to_owned(),
+            "Compu Const".to_owned(),
+        ],
+        vec![
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+            CellType::Text,
+        ],
+    );
+
+    let mut rows = Vec::new();
+    let mut subsections = Vec::new();
 
     if let Some(compu_method) = normal_dop.compu_method()
-        && let Some(phys_to_internal) = compu_method.phys_to_internal()
-        && let Some(scales) = phys_to_internal.compu_scales()
+        && let Some(p2i) = compu_method.phys_to_internal()
     {
-        compu_p2i_rows.push(DetailRow {
-            cells: vec!["Scales Count".to_owned(), scales.len().to_string()],
-            cell_types: vec![CellType::Text, CellType::NumericValue],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
+        subsections.push(DetailSectionData {
+            title: String::new(),
+            render_as_header: false,
+            section_type: DetailSectionType::Custom,
+            content: DetailContent::PlainText(vec![format!(
+                "Category: {:?}",
+                compu_method.category()
+            )]),
         });
+
+        rows.extend(
+            p2i.compu_scales()
+                .into_iter()
+                .flat_map(|scales| scales.iter())
+                .map(|scale| {
+                    let lower = scale
+                        .lower_limit()
+                        .and_then(|l| l.value())
+                        .unwrap_or("-")
+                        .to_owned();
+                    let upper = scale
+                        .upper_limit()
+                        .and_then(|l| l.value())
+                        .unwrap_or("-")
+                        .to_owned();
+                    let inverse = scale.inverse_values().map_or("-".to_owned(), |iv| {
+                        iv.vt().map_or_else(
+                            || iv.v().map_or("-".to_owned(), |v| v.to_string()),
+                            str::to_owned,
+                        )
+                    });
+                    let consts = scale.consts().map_or("-".to_owned(), |c| {
+                        c.vt().map_or_else(
+                            || c.v().map_or("-".to_owned(), |v| v.to_string()),
+                            str::to_owned,
+                        )
+                    });
+
+                    DetailRow::normal(
+                        vec![lower, upper, inverse, consts],
+                        vec![
+                            CellType::Text,
+                            CellType::Text,
+                            CellType::Text,
+                            CellType::Text,
+                        ],
+                        0,
+                    )
+                }),
+        );
     }
 
-    let compu_p2i_header = DetailRow {
-        cells: vec!["Property".to_owned(), "Value".to_owned()],
-        cell_types: vec![CellType::Text, CellType::Text],
-        indent: 0,
-        ..Default::default()
-    };
+    subsections.push(DetailSectionData {
+        title: String::new(),
+        render_as_header: false,
+        section_type: DetailSectionType::Custom,
+        content: DetailContent::Table {
+            header,
+            rows,
+            constraints: vec![
+                ColumnConstraint::Percentage(25),
+                ColumnConstraint::Percentage(25),
+                ColumnConstraint::Percentage(25),
+                ColumnConstraint::Percentage(25),
+            ],
+            use_row_selection: true,
+        },
+    });
 
     DetailSectionData {
         title: "Compu-Phys-To-Internal".to_owned(),
         render_as_header: false,
         section_type: DetailSectionType::Custom,
-        content: DetailContent::Table {
-            header: compu_p2i_header,
-            rows: compu_p2i_rows,
-            constraints: vec![
-                ColumnConstraint::Percentage(40),
-                ColumnConstraint::Percentage(60),
-            ],
-            use_row_selection: true,
-        },
+        content: DetailContent::Composite(subsections),
     }
 }
 
@@ -189,7 +363,7 @@ pub(super) fn build_normal_dop_tabs(
 
     push_types_section(std::mem::take(types_rows), sections);
 
-    sections.push(build_constraints_section(parsed_name));
+    sections.push(build_constraints_section(normal_dop));
     sections.push(build_compu_internal_to_phys_section(normal_dop));
     sections.push(build_compu_phys_to_internal_section(normal_dop));
 }

@@ -265,19 +265,6 @@ pub(super) fn build_dtc_dop_tabs(
         });
     }
 
-    if let Some(compu_method) = dtc_dop.compu_method() {
-        types_rows.push(DetailRow {
-            cells: vec![
-                "Compu Category".to_owned(),
-                format!("{:?}", compu_method.category()),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-        });
-    }
-
     if let Some(dtcs) = dtc_dop.dtcs() {
         types_rows.push(DetailRow {
             cells: vec!["DTC Count".to_owned(), dtcs.len().to_string()],
@@ -291,6 +278,10 @@ pub(super) fn build_dtc_dop_tabs(
     push_types_section(std::mem::take(types_rows), sections);
 
     if let Some(dtcs) = dtc_dop.dtcs() {
+        let compu_category_label = dtc_dop
+            .compu_method()
+            .map(|cm| format!("Compu Category: {:?}", cm.category()));
+
         let dtcs_header = DetailRow {
             cells: vec![
                 "Short Name".to_owned(),
@@ -324,10 +315,10 @@ pub(super) fn build_dtc_dop_tabs(
             })
             .collect();
 
-        sections.push(DetailSectionData {
-            title: "DTCS".to_owned(),
+        let table_section = DetailSectionData {
+            title: String::new(),
             render_as_header: false,
-            section_type: DetailSectionType::Overview,
+            section_type: DetailSectionType::Custom,
             content: DetailContent::Table {
                 header: dtcs_header,
                 rows: dtcs_rows,
@@ -338,6 +329,24 @@ pub(super) fn build_dtc_dop_tabs(
                 ],
                 use_row_selection: true,
             },
+        };
+
+        let mut subsections = Vec::new();
+        if let Some(label) = compu_category_label {
+            subsections.push(DetailSectionData {
+                title: String::new(),
+                render_as_header: false,
+                section_type: DetailSectionType::Custom,
+                content: DetailContent::PlainText(vec![label]),
+            });
+        }
+        subsections.push(table_section);
+
+        sections.push(DetailSectionData {
+            title: "DTCS".to_owned(),
+            render_as_header: false,
+            section_type: DetailSectionType::Overview,
+            content: DetailContent::Composite(subsections),
         });
     }
 }

@@ -188,6 +188,59 @@ pub enum DetailContent {
     Composite(Vec<DetailSectionData>),
 }
 
+impl DetailContent {
+    /// Get a reference to the table rows, looking through `Composite` to find the first `Table`.
+    pub fn table_rows(&self) -> Option<&Vec<DetailRow>> {
+        match self {
+            DetailContent::Table { rows, .. } => Some(rows),
+            DetailContent::Composite(subs) => subs.iter().find_map(|s| s.content.table_rows()),
+            DetailContent::PlainText(_) => None,
+        }
+    }
+
+    /// Get the table constraints, looking through `Composite` to find the first `Table`.
+    pub fn table_constraints(&self) -> Option<&Vec<ColumnConstraint>> {
+        match self {
+            DetailContent::Table { constraints, .. } => Some(constraints),
+            DetailContent::Composite(subs) => {
+                subs.iter().find_map(|s| s.content.table_constraints())
+            }
+            DetailContent::PlainText(_) => None,
+        }
+    }
+
+    /// Get `use_row_selection`, looking through `Composite` to find the first `Table`.
+    pub fn table_use_row_selection(&self) -> Option<bool> {
+        match self {
+            DetailContent::Table {
+                use_row_selection, ..
+            } => Some(*use_row_selection),
+            DetailContent::Composite(subs) => subs
+                .iter()
+                .find_map(|s| s.content.table_use_row_selection()),
+            DetailContent::PlainText(_) => None,
+        }
+    }
+
+    /// Returns true if this content contains a table (directly or inside a Composite).
+    pub fn has_table(&self) -> bool {
+        match self {
+            DetailContent::Table { .. } => true,
+            DetailContent::Composite(subs) => subs.iter().any(|s| s.content.has_table()),
+            DetailContent::PlainText(_) => false,
+        }
+    }
+
+    /// Get the table header, looking through `Composite` to find the first `Table`.
+    pub fn table_header(&self) -> Option<&DetailRow> {
+        match self {
+            DetailContent::Table { header, .. } => Some(header),
+            DetailContent::Composite(subs) => subs.iter().find_map(|s| s.content.table_header()),
+            DetailContent::PlainText(_) => None,
+        }
+    }
+}
+
 /// A detail section with a title and content
 #[derive(Clone, Debug)]
 pub struct DetailSectionData {

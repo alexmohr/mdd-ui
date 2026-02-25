@@ -205,7 +205,7 @@ fn build_sd_elements_table_section(sd_elements: &[SdElement]) -> DetailSectionDa
         .collect();
 
     DetailSectionData::new(
-        "Service Data (SD)".to_owned(),
+        "Special Data (SD)".to_owned(),
         DetailContent::Table {
             header,
             rows,

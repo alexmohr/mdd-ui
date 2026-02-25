@@ -144,15 +144,14 @@ fn build_sdg_section(dtc: &Dtc<'_>) -> DetailSectionData {
         .and_then(|sdgs| sdgs.sdgs())
         .into_iter()
         .flat_map(|list| list.iter())
-        .filter_map(|sdg| {
-            sdg.caption_sn().map(|caption| {
-                let si = sdg.si().unwrap_or("-").to_owned();
-                DetailRow::normal(
-                    vec![caption.to_owned(), si],
-                    vec![CellType::Text, CellType::Text],
-                    0,
-                )
-            })
+        .map(|sdg| {
+            let caption = sdg.caption_sn().unwrap_or("").to_owned();
+            let si = sdg.si().unwrap_or("-").to_owned();
+            DetailRow::normal(
+                vec![caption, si],
+                vec![CellType::Text, CellType::Text],
+                0,
+            )
         })
         .collect();
 

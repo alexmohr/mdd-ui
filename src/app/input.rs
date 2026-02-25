@@ -76,11 +76,6 @@ impl App {
                 self.end();
             }
 
-            // Toggle mouse mode (works in search mode too)
-            KeyCode::Char('m') => {
-                self.toggle_mouse_mode();
-            }
-
             // Regular character input for search
             KeyCode::Char(c) => {
                 self.search.push(c);
@@ -217,18 +212,11 @@ impl App {
             KeyCode::Char('n') => self.next_search_match(),
             KeyCode::Char('N') => self.prev_search_match(),
 
-            // Column resizing (only when detail pane is focused)
-            KeyCode::Char('[') if self.focus_state == FocusState::Detail => {
-                self.resize_column(-10);
-            }
-            KeyCode::Char(']') if self.focus_state == FocusState::Detail => {
-                self.resize_column(10);
-            }
-            KeyCode::Char(',') if self.focus_state == FocusState::Detail => {
-                self.focused_column = self.focused_column.saturating_sub(1);
-            }
-            KeyCode::Char('.') if self.focus_state == FocusState::Detail => {
-                self.focused_column = self.focused_column.saturating_add(1);
+            // Column/scroll keys (only when detail pane is focused)
+            KeyCode::Char('[' | ']' | ',' | '.' | '<' | '>')
+                if self.focus_state == FocusState::Detail =>
+            {
+                self.handle_detail_column_key(code);
             }
 
             // Toggle mouse mode (works everywhere)
@@ -251,6 +239,27 @@ impl App {
             _ => {}
         }
         Action::Continue
+    }
+
+    /// Handle column resize, focus, and horizontal scroll keys in the detail pane.
+    fn handle_detail_column_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Char('[') => self.resize_column(-10),
+            KeyCode::Char(']') => self.resize_column(10),
+            KeyCode::Char(',') => {
+                self.focused_column = self.focused_column.saturating_sub(1);
+                let section_idx = self.get_section_index();
+                self.ensure_focused_column_visible(section_idx);
+            }
+            KeyCode::Char('.') => {
+                self.focused_column = self.focused_column.saturating_add(1);
+                let section_idx = self.get_section_index();
+                self.ensure_focused_column_visible(section_idx);
+            }
+            KeyCode::Char('<') => self.scroll_horizontal(-10),
+            KeyCode::Char('>') => self.scroll_horizontal(10),
+            _ => {}
+        }
     }
 
     /// Handle navigation keys, dispatching to detail or tree navigation.

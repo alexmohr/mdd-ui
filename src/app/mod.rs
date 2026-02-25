@@ -124,6 +124,8 @@ pub(crate) enum SortDirection {
 pub(crate) struct TableSortState {
     pub column: usize,
     pub direction: SortDirection,
+    /// Optional secondary column for tie-breaking (e.g., Bit position after Byte)
+    pub secondary_column: Option<usize>,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -132,6 +134,16 @@ enum DragState {
     Divider,
     TreeScrollbar,
     DetailScrollbar,
+    DetailHScrollbar,
+    ColumnBorder(usize),
+}
+
+/// Key for persisting column widths across element switches
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ColumnWidthCacheKey {
+    section_type: DetailSectionType,
+    title: String,
+    column_count: usize,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -146,7 +158,6 @@ pub struct App {
     visible: Vec<usize>,
     cursor: usize,
     scroll_offset: usize,
-    detail_scroll: usize,
     pub(crate) search: String,
     pub(crate) searching: bool,
     pub(crate) search_stack: Vec<(String, SearchScope)>, // Stack of (search_term, scope) pairs
@@ -159,11 +170,15 @@ pub struct App {
     pub(crate) focused_section: usize, // Which detail pane section is focused (0 = first)
     pub(crate) section_scrolls: Vec<usize>, // Scroll position for each section
     pub(crate) section_cursors: Vec<usize>, // Selected row in each section
-    pub(crate) column_widths: Vec<Vec<u16>>, // Column widths for each section (percentages)
-    pub(crate) focused_column: usize, // Currently focused column for resizing
+    pub(crate) column_widths: Vec<Vec<u16>>, // Column widths for each section
+    // Whether each section uses absolute (pixel) widths
+    pub(crate) column_widths_absolute: Vec<bool>,
+    pub(crate) horizontal_scroll: Vec<u16>, // Horizontal scroll offset (pixels) per section
+    persisted_column_widths: HashMap<ColumnWidthCacheKey, Vec<u16>>, // Persistent absolute widths
+    pub(crate) focused_column: usize,       // Currently focused column for resizing
     pub(crate) detail_popup: Option<PopupData>, // Generic popup state
-    pub(crate) tree_width_percentage: u16, // Tree pane width (0-100)
-    pub(crate) diagcomm_sort_by_id: bool, // true = sort by ID (default), false = sort by name
+    pub(crate) tree_width_percentage: u16,  // Tree pane width (0-100)
+    pub(crate) diagcomm_sort_by_id: bool,   // true = sort by ID (default), false = sort by name
     // Sort state for each table section (None = default order)
     pub(crate) table_sort_state: Vec<Option<TableSortState>>,
     tree_area: Rect,                    // Cached tree area for mouse handling
@@ -184,9 +199,13 @@ pub struct App {
     drag_state: DragState,   // Drag state for dividers and scrollbars
     tree_scrollbar_area: Option<Rect>, // Cached tree scrollbar area for mouse handling
     detail_scrollbar_area: Option<Rect>, // Cached detail scrollbar area for mouse handling
+    detail_hscrollbar_area: Option<Rect>, // Cached horizontal scrollbar area for mouse handling
+    cached_total_table_width: u16, // Total table width for horizontal scrollbar drag
     last_diagcomm_tab: usize, // Last selected tab when viewing service/job nodes (for persistence)
     last_section_tabs: HashMap<DetailSectionType, usize>, // Last selected tab per section type
-    jump_buffer: String,     // Characters typed for type-to-jump in table views
+    last_selected_section_type: Option<DetailSectionType>,
+    last_selected_section_title: Option<String>,
+    jump_buffer: String, // Characters typed for type-to-jump in table views
     jump_buffer_time: Option<Instant>, // Timestamp of last type-to-jump character for auto-reset
 }
 
@@ -203,7 +222,6 @@ impl App {
             visible: Vec::new(),
             cursor: 0,
             scroll_offset: 0,
-            detail_scroll: 0,
             search: String::new(),
             searching: false,
             search_stack: Vec::new(),
@@ -217,6 +235,9 @@ impl App {
             section_scrolls: Vec::new(),
             section_cursors: Vec::new(),
             column_widths: Vec::new(),
+            column_widths_absolute: Vec::new(),
+            horizontal_scroll: Vec::new(),
+            persisted_column_widths: HashMap::new(),
             focused_column: 0,
             detail_popup: None,
             tree_width_percentage: 35,
@@ -238,8 +259,12 @@ impl App {
             drag_state: DragState::None,
             tree_scrollbar_area: None,
             detail_scrollbar_area: None,
+            detail_hscrollbar_area: None,
+            cached_total_table_width: 0,
             last_diagcomm_tab: 0,
             last_section_tabs: HashMap::new(),
+            last_selected_section_type: None,
+            last_selected_section_title: None,
             jump_buffer: String::new(),
             jump_buffer_time: None,
         };
@@ -370,11 +395,12 @@ impl App {
 
             // Save tab for any node with detail sections that have a section type
             if !node.detail_sections.is_empty() {
-                // Get the section type from the currently selected tab
                 let section_offset = self.get_section_offset();
                 let section_idx = new_tab.saturating_add(section_offset);
                 if let Some(section) = node.detail_sections.get(section_idx) {
                     self.last_section_tabs.insert(section.section_type, new_tab);
+                    self.last_selected_section_type = Some(section.section_type);
+                    self.last_selected_section_title = Some(section.title.clone());
                 }
             }
         }
@@ -399,10 +425,10 @@ impl App {
         };
 
         // Get table rows (apply sorting if active)
-        let rows = match &section.content {
-            DetailContent::Table { rows, .. } => self.apply_table_sort(rows, section_idx),
-            _ => return,
+        let Some(rows) = section.content.table_rows() else {
+            return;
         };
+        let rows = self.apply_table_sort(rows, section_idx);
 
         let buffer_lower = self.jump_buffer.to_lowercase();
 
@@ -424,35 +450,45 @@ impl App {
 
     /// Apply sorting to rows if a sort state exists for the given section
     fn apply_table_sort(&self, rows: &[DetailRow], section_idx: usize) -> Vec<DetailRow> {
-        if let Some(sort_state) = self
+        let Some(sort_state) = self
             .table_sort_state
             .get(section_idx)
             .and_then(|s| s.as_ref())
-        {
-            let mut sorted = rows.to_vec();
-            let col = sort_state.column;
-            let dir = sort_state.direction;
-            sorted.sort_by(|a, b| {
-                let a_cell = a.cells.get(col).map_or("", String::as_str);
-                let b_cell = b.cells.get(col).map_or("", String::as_str);
+        else {
+            return rows.to_vec();
+        };
 
-                // Try to parse as numbers first, fall back to string comparison
-                let cmp = match (a_cell.parse::<f64>(), b_cell.parse::<f64>()) {
-                    (Ok(a_num), Ok(b_num)) => a_num
-                        .partial_cmp(&b_num)
-                        .unwrap_or(std::cmp::Ordering::Equal),
-                    _ => a_cell.cmp(b_cell),
-                };
+        let mut sorted = rows.to_vec();
+        let col = sort_state.column;
+        let dir = sort_state.direction;
+        let secondary = sort_state.secondary_column;
+        sorted.sort_by(|a, b| {
+            let cmp = Self::compare_cells_by_column(a, b, col);
+            let cmp = match cmp {
+                std::cmp::Ordering::Equal => secondary.map_or(std::cmp::Ordering::Equal, |sec| {
+                    Self::compare_cells_by_column(a, b, sec)
+                }),
+                other => other,
+            };
 
-                // Apply direction
-                match dir {
-                    SortDirection::Ascending => cmp,
-                    SortDirection::Descending => cmp.reverse(),
-                }
-            });
-            return sorted;
+            match dir {
+                SortDirection::Ascending => cmp,
+                SortDirection::Descending => cmp.reverse(),
+            }
+        });
+        sorted
+    }
+
+    fn compare_cells_by_column(a: &DetailRow, b: &DetailRow, col: usize) -> std::cmp::Ordering {
+        let a_cell = a.cells.get(col).map_or("", String::as_str);
+        let b_cell = b.cells.get(col).map_or("", String::as_str);
+
+        match (a_cell.parse::<f64>(), b_cell.parse::<f64>()) {
+            (Ok(a_num), Ok(b_num)) => a_num
+                .partial_cmp(&b_num)
+                .unwrap_or(std::cmp::Ordering::Equal),
+            _ => a_cell.cmp(b_cell),
         }
-        rows.to_vec()
     }
 
     // -------------------------------------------------------------------
@@ -620,18 +656,60 @@ impl App {
     /// Apply a single search filter to the include vector
     fn apply_search_filter(&self, include: &[bool], query: &str, scope: &SearchScope) -> Vec<bool> {
         let q = query.to_lowercase();
-        let mut new_include = vec![false; self.all_nodes.len()];
+        let len = self.all_nodes.len();
+        let mut new_include = vec![false; len];
 
-        for (i, &included) in include.iter().enumerate().take(self.all_nodes.len()) {
+        // Pass 1: Mark matching nodes and all their children
+        let mut skip_below: Option<usize> = None; // depth of matched parent
+        for (i, &included) in include.iter().enumerate().take(len) {
+            let Some(node) = self.all_nodes.get(i) else {
+                continue;
+            };
+
+            // If inside a matched subtree, include if previously included
+            if let Some(depth) = skip_below {
+                if node.depth > depth {
+                    if included && let Some(slot) = new_include.get_mut(i) {
+                        *slot = true;
+                    }
+                    continue;
+                }
+                skip_below = None;
+            }
+
             if !included {
                 continue;
             }
 
-            let Some(node) = self.all_nodes.get(i) else {
-                continue;
-            };
             if self.node_matches_scope_and_query(node, i, scope, &q) {
-                self.include_node_and_hierarchy(i, &mut new_include);
+                if let Some(slot) = new_include.get_mut(i) {
+                    *slot = true;
+                }
+                skip_below = Some(node.depth);
+            }
+        }
+
+        // Pass 2: Include parents using a depth-indexed stack for O(N) total
+        let max_depth = self.all_nodes.iter().map(|n| n.depth).max().unwrap_or(0);
+        let mut parent_at_depth = vec![0usize; max_depth.saturating_add(1)];
+
+        for (i, node) in self.all_nodes.iter().enumerate() {
+            if let Some(slot) = parent_at_depth.get_mut(node.depth) {
+                *slot = i;
+            }
+
+            if new_include.get(i).copied().unwrap_or(false) && node.depth > 0 {
+                for d in (0..node.depth).rev() {
+                    let Some(&ancestor) = parent_at_depth.get(d) else {
+                        break;
+                    };
+                    if new_include.get(ancestor).copied().unwrap_or(false) {
+                        break;
+                    }
+                    if let Some(slot) = new_include.get_mut(ancestor) {
+                        *slot = true;
+                    }
+                }
             }
         }
 
@@ -707,56 +785,6 @@ impl App {
         };
 
         matches_scope && node.text.to_lowercase().contains(query)
-    }
-
-    /// Include a node and its entire hierarchy (parents and children)
-    fn include_node_and_hierarchy(&self, node_idx: usize, new_include: &mut [bool]) {
-        let Some(node) = self.all_nodes.get(node_idx) else {
-            return;
-        };
-        let Some(include_slot) = new_include.get_mut(node_idx) else {
-            return;
-        };
-        *include_slot = true;
-
-        // Include all children
-        let match_depth = node.depth;
-        if let Some(children_slice) = self.all_nodes.get(node_idx.saturating_add(1)..) {
-            for (offset, child) in children_slice.iter().enumerate() {
-                if child.depth <= match_depth {
-                    break;
-                }
-                let child_idx = node_idx.saturating_add(1).saturating_add(offset);
-                if let Some(include_slot) = new_include.get_mut(child_idx) {
-                    *include_slot = true;
-                }
-            }
-        }
-
-        // Include all parents
-        if node.depth > 0 {
-            self.include_all_parents(node_idx, node.depth, new_include);
-        }
-    }
-
-    /// Include all parent nodes up to the root
-    fn include_all_parents(&self, node_idx: usize, target_depth: usize, new_include: &mut [bool]) {
-        let mut parent_depth = target_depth.saturating_sub(1);
-
-        for j in (0..node_idx).rev() {
-            let Some(node) = self.all_nodes.get(j) else {
-                continue;
-            };
-            if node.depth == parent_depth {
-                if let Some(include_slot) = new_include.get_mut(j) {
-                    *include_slot = true;
-                }
-                if parent_depth == 0 {
-                    break;
-                }
-                parent_depth = parent_depth.saturating_sub(1);
-            }
-        }
     }
 
     /// Build visible list from include filter, respecting collapse state
@@ -852,7 +880,6 @@ impl App {
                 && visible_node.depth < my_depth
             {
                 self.cursor = i;
-                self.detail_scroll = 0;
                 break;
             }
         }
@@ -997,7 +1024,6 @@ impl App {
         if let Some(sort_state) = self.table_sort_state.get_mut(section_idx) {
             *sort_state = match *sort_state {
                 Some(state) if state.column == column => {
-                    // Same column clicked: toggle direction
                     let new_direction = match state.direction {
                         SortDirection::Ascending => SortDirection::Descending,
                         SortDirection::Descending => SortDirection::Ascending,
@@ -1005,15 +1031,14 @@ impl App {
                     Some(TableSortState {
                         column,
                         direction: new_direction,
+                        secondary_column: None,
                     })
                 }
-                _ => {
-                    // Different column or no sort: sort ascending by this column
-                    Some(TableSortState {
-                        column,
-                        direction: SortDirection::Ascending,
-                    })
-                }
+                _ => Some(TableSortState {
+                    column,
+                    direction: SortDirection::Ascending,
+                    secondary_column: None,
+                }),
             };
         }
 
@@ -1156,7 +1181,6 @@ impl App {
 
     /// Reset detail pane state when changing nodes
     fn reset_detail_state(&mut self) {
-        self.detail_scroll = 0;
         self.jump_buffer.clear();
         self.jump_buffer_time = None;
 
@@ -1185,6 +1209,8 @@ impl App {
         self.section_scrolls.clear();
         self.section_cursors.clear();
         self.column_widths.clear();
+        self.column_widths_absolute.clear();
+        self.horizontal_scroll.clear();
         self.table_sort_state.clear();
     }
 
@@ -1200,17 +1226,32 @@ impl App {
                         && node.detail_sections.first()?.render_as_header,
                 );
 
-                // Find first section with saved tab preference
-                node.detail_sections
+                let target_type = self.last_selected_section_type;
+                let target_title = self.last_selected_section_title.as_deref();
+                let mut sections = node
+                    .detail_sections
                     .iter()
                     .enumerate()
-                    .filter(|(idx, _)| *idx >= section_offset)
-                    .find_map(|(idx, section)| {
-                        self.last_section_tabs.get(&section.section_type).map(|_| {
-                            self.selected_tab = idx.saturating_sub(section_offset);
-                            true
-                        })
-                    })
+                    .filter(|(idx, _)| *idx >= section_offset);
+
+                // First pass: match both title and type (precise match for Custom sections)
+                let by_title = target_title.and_then(|title| {
+                    node.detail_sections
+                        .iter()
+                        .enumerate()
+                        .filter(|(idx, _)| *idx >= section_offset)
+                        .find(|(_, s)| target_type == Some(s.section_type) && s.title == title)
+                        .map(|(idx, _)| idx)
+                });
+
+                // Second pass: match type only (fallback)
+                let by_type = sections
+                    .find(|(_, s)| target_type == Some(s.section_type))
+                    .map(|(idx, _)| idx);
+
+                by_title.or(by_type).map(|idx| {
+                    self.selected_tab = idx.saturating_sub(section_offset);
+                })
             })
             .is_some();
 
@@ -1373,8 +1414,31 @@ impl App {
         self.rebuild_visible();
         self.cursor = 0;
         self.reset_detail_state();
-        self.search_matches.clear();
+        self.populate_search_matches();
         self.search_match_cursor = 0;
+    }
+
+    /// Populate `search_matches` with visible indices of nodes that directly match
+    /// the most recent search query, enabling n/N navigation between matches.
+    fn populate_search_matches(&mut self) {
+        self.search_matches.clear();
+
+        let Some((query, scope)) = self.search_stack.last().cloned() else {
+            return;
+        };
+        let q = query.to_lowercase();
+
+        self.search_matches = self
+            .visible
+            .iter()
+            .enumerate()
+            .filter(|&(_, &node_idx)| {
+                self.all_nodes.get(node_idx).is_some_and(|node| {
+                    self.node_matches_scope_and_query(node, node_idx, &scope, &q)
+                })
+            })
+            .map(|(visible_idx, _)| visible_idx)
+            .collect();
     }
 
     pub(crate) fn clear_search_stack(&mut self) {
@@ -1601,7 +1665,7 @@ impl App {
 
         // Check for Overview section with "Inherited From" row
         if section.section_type == DetailSectionType::Overview
-            && let crate::tree::DetailContent::Table { rows, .. } = &section.content
+            && let Some(rows) = section.content.table_rows()
         {
             let row_cursor = self.section_cursors.get(section_idx).copied().unwrap_or(0);
             let sorted_rows = self.apply_table_sort(rows, section_idx);
@@ -1759,7 +1823,7 @@ impl App {
         let node = self.all_nodes.get(node_idx)?;
         let section = node.detail_sections.first()?;
 
-        let crate::tree::DetailContent::Table { rows, .. } = &section.content else {
+        let Some(rows) = section.content.table_rows() else {
             "Details should be a table".clone_into(&mut self.status);
             return None;
         };
@@ -1942,9 +2006,7 @@ impl App {
 
         let overview_section = node.detail_sections.get(overview_idx)?;
 
-        let crate::tree::DetailContent::Table { rows, .. } = &overview_section.content else {
-            return None;
-        };
+        let rows = overview_section.content.table_rows()?;
 
         let row_cursor = self.section_cursors.get(overview_idx).copied().unwrap_or(0);
         let sorted_rows = self.apply_table_sort(rows, overview_idx);
@@ -2166,15 +2228,9 @@ impl App {
     /// Get table rows from section
     fn get_table_rows(node: &TreeNode, section_idx: usize) -> Option<(&Vec<DetailRow>, bool)> {
         let section = node.detail_sections.get(section_idx)?;
-
-        match &section.content {
-            DetailContent::Table {
-                rows,
-                use_row_selection,
-                ..
-            } => Some((rows, *use_row_selection)),
-            _ => None,
-        }
+        let rows = section.content.table_rows()?;
+        let use_row_selection = section.content.table_use_row_selection().unwrap_or(false);
+        Some((rows, use_row_selection))
     }
 
     /// Navigate from a `DiagComm` service to the corresponding Request/Response node.
@@ -2256,7 +2312,9 @@ impl App {
         }
     }
 
-    /// Navigate to a parameter node using param ID from metadata
+    /// Navigate to a parameter node using param ID from metadata.
+    /// Scopes the search to the current node's subtree first to avoid
+    /// jumping to a same-named parameter in a different section.
     fn navigate_to_parameter(&mut self, selected_row: &DetailRow) {
         // Extract param ID from metadata
         let Some(crate::tree::RowMetadata::ParameterRow { param_id }) = &selected_row.metadata
@@ -2266,8 +2324,15 @@ impl App {
         };
         let param_id = *param_id;
 
-        // Find parameter node by ID
-        let Some(param_idx) = self.find_param_by_id(param_id) else {
+        // Get current node index to scope the search
+        let current_node_idx = self.visible.get(self.cursor).copied();
+
+        // Find parameter node by ID, preferring children of the current node
+        let param_idx = current_node_idx
+            .and_then(|node_idx| self.find_param_in_subtree(node_idx, param_id))
+            .or_else(|| self.find_param_by_id(param_id));
+
+        let Some(param_idx) = param_idx else {
             self.status = format!("Parameter with ID {param_id} not found");
             return;
         };
@@ -2286,6 +2351,20 @@ impl App {
         } else {
             self.status = format!("Parameter found but not visible (ID: {param_id})");
         }
+    }
+
+    /// Find parameter node by `param_id` within a node's subtree
+    fn find_param_in_subtree(&self, parent_idx: usize, param_id: u32) -> Option<usize> {
+        let parent = self.all_nodes.get(parent_idx)?;
+        let parent_depth = parent.depth;
+
+        self.all_nodes
+            .iter()
+            .enumerate()
+            .skip(parent_idx.saturating_add(1))
+            .take_while(|(_, node)| node.depth > parent_depth)
+            .find(|(_, node)| node.param_id == Some(param_id))
+            .map(|(idx, _)| idx)
     }
 
     /// Find parameter node by `param_id`
@@ -2320,7 +2399,7 @@ impl App {
         };
 
         // Get table rows
-        let DetailContent::Table { rows, .. } = &section.content else {
+        let Some(rows) = section.content.table_rows() else {
             return;
         };
 
@@ -2456,7 +2535,7 @@ impl App {
         };
 
         // Get table rows
-        let DetailContent::Table { rows, .. } = &section.content else {
+        let Some(rows) = section.content.table_rows() else {
             return;
         };
 
@@ -2588,7 +2667,7 @@ impl App {
         }
 
         // Get table rows
-        let DetailContent::Table { rows, .. } = &section.content else {
+        let Some(rows) = section.content.table_rows() else {
             return;
         };
 
@@ -2660,7 +2739,7 @@ impl App {
         }
 
         // Get table rows
-        let DetailContent::Table { rows, .. } = &section.content else {
+        let Some(rows) = section.content.table_rows() else {
             return;
         };
 
@@ -2757,8 +2836,6 @@ impl App {
 
     /// Navigate to a variant from the Variants overview table
     pub(crate) fn try_navigate_to_variant(&mut self) {
-        use crate::tree::DetailContent;
-
         if self.cursor >= self.visible.len() {
             return;
         }
@@ -2778,7 +2855,7 @@ impl App {
         };
 
         // Get table rows
-        let DetailContent::Table { rows, .. } = &section.content else {
+        let Some(rows) = section.content.table_rows() else {
             return;
         };
 
@@ -2842,8 +2919,6 @@ impl App {
 
     /// Navigate from variant overview to a child element
     pub(crate) fn try_navigate_from_variant_overview(&mut self) {
-        use crate::tree::DetailContent;
-
         if self.cursor >= self.visible.len() {
             return;
         }
@@ -2868,7 +2943,7 @@ impl App {
         }
 
         // Get table rows
-        let DetailContent::Table { rows, .. } = &section.content else {
+        let Some(rows) = section.content.table_rows() else {
             return;
         };
 
@@ -2938,8 +3013,6 @@ impl App {
     /// like "DTC-DOPS", navigates to the category child node.
     /// For DOP category nodes: rows are individual DOPs, navigates to the DOP child node.
     fn try_navigate_to_dop_child(&mut self) {
-        use crate::tree::DetailContent;
-
         if self.cursor >= self.visible.len() {
             return;
         }
@@ -2962,13 +3035,8 @@ impl App {
             return;
         };
 
-        // Only handle Overview section type
-        if section.section_type != DetailSectionType::Overview {
-            return;
-        }
-
         // Get table rows
-        let DetailContent::Table { rows, .. } = &section.content else {
+        let Some(rows) = section.content.table_rows() else {
             return;
         };
 
@@ -2988,6 +3056,19 @@ impl App {
             return;
         };
 
+        // Check if the selected row has a DopReference cell — navigate to that DOP
+        let dop_ref = selected_row
+            .cell_types
+            .iter()
+            .zip(selected_row.cells.iter())
+            .find(|(ct, _)| **ct == CellType::DopReference)
+            .map(|(_, cell)| cell.clone());
+
+        if let Some(dop_name) = dop_ref {
+            self.navigate_to_dop(&dop_name);
+            return;
+        }
+
         // Get the first cell text (category name or DOP name)
         let target_name = match selected_row.cells.first() {
             Some(name) if !name.is_empty() => name.clone(),
@@ -2998,37 +3079,18 @@ impl App {
         let current_depth = node.depth;
         let target_depth = current_depth.saturating_add(1);
 
-        let mut target_idx: Option<usize> = None;
-        for i in node_idx.saturating_add(1)..self.all_nodes.len() {
-            let Some(child_node) = self.all_nodes.get(i) else {
-                continue;
-            };
-
-            // Stop if we've moved past this node's children
-            if child_node.depth <= current_depth {
-                break;
-            }
-
-            // Check if this is a direct child that starts with the target name
-            if child_node.depth == target_depth && child_node.text.starts_with(&target_name) {
-                target_idx = Some(i);
-                break;
-            }
-        }
+        let target_idx = self
+            .all_nodes
+            .iter()
+            .enumerate()
+            .skip(node_idx.saturating_add(1))
+            .take_while(|(_, child)| child.depth > current_depth)
+            .find(|(_, child)| child.depth == target_depth && child.text.starts_with(&target_name))
+            .map(|(i, _)| i);
 
         if let Some(target_node_idx) = target_idx {
-            // Ensure the target node is visible (expand if needed)
-            self.ensure_node_visible(target_node_idx);
-
-            // Find the target in the visible list and navigate to it
-            if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == target_node_idx) {
-                self.push_to_history();
-                self.focus_state = FocusState::Tree;
-                self.cursor = new_cursor;
-                self.reset_detail_state();
-                self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to: {target_name}");
-            }
+            self.navigate_to_node(target_node_idx);
+            self.status = format!("Navigated to: {target_name}");
         } else {
             self.status = format!("'{target_name}' not found");
         }
@@ -3098,6 +3160,153 @@ impl App {
         }
     }
 
+    /// Build a cache key for persisting column widths by section identity
+    fn make_column_width_key(
+        &self,
+        section_idx: usize,
+        column_count: usize,
+    ) -> ColumnWidthCacheKey {
+        let (section_type, title) = self
+            .visible
+            .get(self.cursor)
+            .and_then(|&node_idx| self.all_nodes.get(node_idx))
+            .and_then(|node| node.detail_sections.get(section_idx))
+            .map_or((DetailSectionType::Custom, String::new()), |s| {
+                (s.section_type, s.title.clone())
+            });
+
+        ColumnWidthCacheKey {
+            section_type,
+            title,
+            column_count,
+        }
+    }
+
+    /// Convert percentage-based column widths to absolute pixel widths
+    fn convert_to_absolute_widths(&mut self, section_idx: usize) {
+        let table_width = self.table_content_area.map_or(100, |a| a.width);
+        let column_spacing = 3u16;
+
+        let Some(widths) = self.column_widths.get(section_idx) else {
+            return;
+        };
+        let num_cols = widths.len();
+        let num_gaps = u16::try_from(num_cols.saturating_sub(1)).unwrap_or(0);
+        let spacing_total = column_spacing.saturating_mul(num_gaps);
+        let available = table_width.saturating_sub(spacing_total);
+
+        let pixel_widths: Vec<u16> = widths
+            .iter()
+            .map(|&pct| {
+                let px = u32::from(pct)
+                    .saturating_mul(u32::from(available))
+                    .saturating_div(100);
+                u16::try_from(px.clamp(3, u32::from(available))).unwrap_or(3)
+            })
+            .collect();
+
+        if let Some(w) = self.column_widths.get_mut(section_idx) {
+            *w = pixel_widths;
+        }
+
+        while self.column_widths_absolute.len() <= section_idx {
+            self.column_widths_absolute.push(false);
+        }
+        if let Some(abs) = self.column_widths_absolute.get_mut(section_idx) {
+            *abs = true;
+        }
+    }
+
+    /// Save current column widths to the persistent store
+    fn save_column_widths_to_persistent(&mut self, section_idx: usize) {
+        let Some(widths) = self.column_widths.get(section_idx) else {
+            return;
+        };
+        if widths.is_empty() {
+            return;
+        }
+        let key = self.make_column_width_key(section_idx, widths.len());
+        self.persisted_column_widths.insert(key, widths.clone());
+    }
+
+    /// Scroll the table horizontally by the given pixel delta
+    pub(crate) fn scroll_horizontal(&mut self, delta: i16) {
+        let section_idx = self.get_section_index();
+
+        while self.horizontal_scroll.len() <= section_idx {
+            self.horizontal_scroll.push(0);
+        }
+
+        let current = self
+            .horizontal_scroll
+            .get(section_idx)
+            .copied()
+            .unwrap_or(0);
+
+        let new_offset = if delta < 0 {
+            let abs_delta = u16::try_from(0i16.saturating_sub(delta)).unwrap_or(0);
+            current.saturating_sub(abs_delta)
+        } else {
+            let abs_delta = u16::try_from(delta).unwrap_or(0);
+            current.saturating_add(abs_delta)
+        };
+
+        if let Some(hs) = self.horizontal_scroll.get_mut(section_idx) {
+            *hs = new_offset;
+        }
+    }
+
+    /// Ensure the focused column is visible by adjusting horizontal scroll
+    fn ensure_focused_column_visible(&mut self, section_idx: usize) {
+        let column_spacing = 3u16;
+
+        let Some(widths) = self.column_widths.get(section_idx) else {
+            return;
+        };
+        if !self
+            .column_widths_absolute
+            .get(section_idx)
+            .copied()
+            .unwrap_or(false)
+        {
+            return;
+        }
+
+        let viewport_width = self.table_content_area.map_or(100, |a| a.width);
+
+        // Calculate start/end pixel of focused column
+        let mut col_start = 0u16;
+        for (i, &w) in widths.iter().enumerate() {
+            if i == self.focused_column {
+                let col_end = col_start.saturating_add(w);
+
+                while self.horizontal_scroll.len() <= section_idx {
+                    self.horizontal_scroll.push(0);
+                }
+                let h_scroll = self
+                    .horizontal_scroll
+                    .get(section_idx)
+                    .copied()
+                    .unwrap_or(0);
+
+                // Scroll right if column end is past viewport
+                if col_end > h_scroll.saturating_add(viewport_width)
+                    && let Some(hs) = self.horizontal_scroll.get_mut(section_idx)
+                {
+                    *hs = col_end.saturating_sub(viewport_width);
+                }
+                // Scroll left if column start is before viewport
+                if col_start < h_scroll
+                    && let Some(hs) = self.horizontal_scroll.get_mut(section_idx)
+                {
+                    *hs = col_start;
+                }
+                return;
+            }
+            col_start = col_start.saturating_add(w).saturating_add(column_spacing);
+        }
+    }
+
     fn initialize_column_widths(
         &mut self,
         constraints: &[crate::tree::ColumnConstraint],
@@ -3149,58 +3358,14 @@ impl App {
         }
     }
 
-    fn normalize_and_adjust_column_widths(&mut self, section_idx: usize) {
-        let Some(section_widths) = self.column_widths.get(section_idx) else {
-            return;
-        };
-        let total: u16 = section_widths.iter().sum();
-        if total > 0 && total != 100 {
-            let normalized: Vec<u16> = section_widths
-                .iter()
-                .map(|&w| {
-                    // f32 percentage value always fits in u16 (0..=100)
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    let result = ((f32::from(w) / f32::from(total)) * 100.0).round() as u16;
-                    result
-                })
-                .collect();
-
-            let Some(section_widths_mut) = self.column_widths.get_mut(section_idx) else {
-                return;
-            };
-            *section_widths_mut = normalized;
-
-            let Some(section_widths) = self.column_widths.get(section_idx) else {
-                return;
-            };
-            let new_total: u16 = section_widths.iter().sum();
-            if new_total != 100 {
-                let diff = 100i16.saturating_sub(i16::try_from(new_total).unwrap_or(0));
-                let Some(&focused_width_u16) = section_widths.get(self.focused_column) else {
-                    return;
-                };
-                let focused_width = i16::try_from(focused_width_u16).unwrap_or(0);
-                let adjusted = focused_width.saturating_add(diff).max(1);
-                let adjusted_u16 = u16::try_from(adjusted).unwrap_or(1);
-                let Some(focused_width_mut) = self
-                    .column_widths
-                    .get_mut(section_idx)
-                    .and_then(|widths| widths.get_mut(self.focused_column))
-                else {
-                    return;
-                };
-                *focused_width_mut = adjusted_u16;
-            }
-        }
-    }
-
     pub(crate) fn resize_column(&mut self, delta: i16) {
-        use crate::tree::DetailContent;
-
         let section_idx = self.get_section_index();
 
         while self.column_widths.len() <= section_idx {
             self.column_widths.push(Vec::new());
+        }
+        while self.column_widths_absolute.len() <= section_idx {
+            self.column_widths_absolute.push(false);
         }
 
         if self.cursor >= self.visible.len() {
@@ -3218,7 +3383,7 @@ impl App {
         let Some(section) = node.detail_sections.get(section_idx) else {
             return;
         };
-        let DetailContent::Table { constraints, .. } = &section.content else {
+        let Some(constraints) = section.content.table_constraints() else {
             "Column resizing only available in tables".clone_into(&mut self.status);
             return;
         };
@@ -3231,6 +3396,16 @@ impl App {
             self.initialize_column_widths(&constraints, section_idx);
         }
 
+        // Switch to absolute pixel widths on first resize
+        let is_absolute = self
+            .column_widths_absolute
+            .get(section_idx)
+            .copied()
+            .unwrap_or(false);
+        if !is_absolute {
+            self.convert_to_absolute_widths(section_idx);
+        }
+
         let Some(section_widths) = self.column_widths.get(section_idx) else {
             return;
         };
@@ -3239,84 +3414,29 @@ impl App {
             return;
         }
 
-        let Some(&current_width_u16) = section_widths.get(self.focused_column) else {
+        let Some(&focused_w) = section_widths.get(self.focused_column) else {
             return;
         };
-        let current_width = i16::try_from(current_width_u16).unwrap_or(0);
-        let new_current_i16 = current_width.saturating_add(delta).clamp(3, 95);
-        let new_current = u16::try_from(new_current_i16).unwrap_or(3);
-        let actual_delta = new_current_i16.saturating_sub(current_width);
 
-        if actual_delta == 0 {
-            "Cannot resize: at min/max width".clone_into(&mut self.status);
+        let focused_i = i16::try_from(focused_w).unwrap_or(0);
+        let new_width = focused_i.saturating_add(delta).max(3);
+        let new_width_u16 = u16::try_from(new_width).unwrap_or(3);
+
+        if new_width_u16 == focused_w {
+            "Cannot resize: at min width".clone_into(&mut self.status);
             return;
         }
 
-        let Some(focused_width_mut) = self
-            .column_widths
-            .get_mut(section_idx)
-            .and_then(|widths| widths.get_mut(self.focused_column))
-        else {
-            return;
-        };
-        *focused_width_mut = new_current;
-
-        let num_other_cols = num_cols.saturating_sub(1);
-        if num_other_cols > 0 {
-            let Some(section_widths) = self.column_widths.get(section_idx) else {
-                return;
-            };
-            let total_other: u16 = section_widths
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| *i != self.focused_column)
-                .map(|(_, w)| *w)
-                .sum();
-
-            if total_other > 0 {
-                for i in 0..num_cols {
-                    if i != self.focused_column {
-                        let Some(section_widths) = self.column_widths.get(section_idx) else {
-                            continue;
-                        };
-                        let Some(&old_width_u16) = section_widths.get(i) else {
-                            continue;
-                        };
-                        let old_width = i16::try_from(old_width_u16).unwrap_or(0);
-                        let proportion = f32::from(old_width_u16) / f32::from(total_other);
-                        let adjustment_f32 = -f32::from(actual_delta) * proportion;
-                        // adjustment is a small column-width delta that fits in i16
-                        #[allow(clippy::cast_possible_truncation)]
-                        let adjustment = adjustment_f32.round() as i16;
-                        let new_width_i16 = old_width.saturating_add(adjustment).max(3);
-                        let new_width = u16::try_from(new_width_i16).unwrap_or(3);
-                        let Some(col_width_mut) = self
-                            .column_widths
-                            .get_mut(section_idx)
-                            .and_then(|widths| widths.get_mut(i))
-                        else {
-                            continue;
-                        };
-                        *col_width_mut = new_width;
-                    }
-                }
-            }
+        if let Some(widths) = self.column_widths.get_mut(section_idx)
+            && let Some(fw) = widths.get_mut(self.focused_column)
+        {
+            *fw = new_width_u16;
         }
 
-        self.normalize_and_adjust_column_widths(section_idx);
+        self.save_column_widths_to_persistent(section_idx);
+        self.ensure_focused_column_visible(section_idx);
 
-        let Some(section_widths) = self.column_widths.get(section_idx) else {
-            return;
-        };
-        let Some(&focused_width) = section_widths.get(self.focused_column) else {
-            return;
-        };
-        self.status = format!(
-            "Column {} width: {}% (total: {}%)",
-            self.focused_column,
-            focused_width,
-            section_widths.iter().sum::<u16>()
-        );
+        self.status = format!("Column {} width: {}px", self.focused_column, new_width_u16,);
     }
 
     // -------------------------------------------------------------------
@@ -3348,11 +3468,21 @@ impl App {
                     self.drag_state = DragState::DetailScrollbar;
                     self.handle_scrollbar_drag(row);
                     return Action::Continue;
+                } else if self.is_in_detail_hscrollbar(column, row) {
+                    self.drag_state = DragState::DetailHScrollbar;
+                    self.handle_hscrollbar_drag(column);
+                    return Action::Continue;
                 }
 
                 // Check if clicking near the divider to start drag
                 if self.is_near_divider(column) {
                     self.drag_state = DragState::Divider;
+                    return Action::Continue;
+                }
+
+                // Check if clicking near a column border in the table header
+                if let Some(col_idx) = self.find_column_border(column, row) {
+                    self.drag_state = DragState::ColumnBorder(col_idx);
                     return Action::Continue;
                 }
 
@@ -3390,10 +3520,16 @@ impl App {
                     DragState::TreeScrollbar | DragState::DetailScrollbar
                 ) {
                     self.handle_scrollbar_drag(row);
+                } else if self.drag_state == DragState::DetailHScrollbar {
+                    self.handle_hscrollbar_drag(column);
                 }
                 // Handle drag to resize tree pane
                 else if self.drag_state == DragState::Divider {
                     self.handle_divider_drag(column);
+                }
+                // Handle drag to resize table columns
+                else if let DragState::ColumnBorder(col_idx) = self.drag_state {
+                    self.handle_column_border_drag(col_idx, column);
                 }
             }
             MouseEventKind::ScrollDown => {
@@ -3410,6 +3546,18 @@ impl App {
                 } else if self.is_in_detail_area(column, row) {
                     self.focus_state = FocusState::Detail;
                     self.move_up();
+                }
+            }
+            MouseEventKind::ScrollLeft => {
+                if self.is_in_detail_area(column, row) {
+                    self.focus_state = FocusState::Detail;
+                    self.scroll_horizontal(-5);
+                }
+            }
+            MouseEventKind::ScrollRight => {
+                if self.is_in_detail_area(column, row) {
+                    self.focus_state = FocusState::Detail;
+                    self.scroll_horizontal(5);
                 }
             }
             // Mouse back button not supported by crossterm 0.29 (only Left/Right/Middle)
@@ -3470,7 +3618,7 @@ impl App {
                         && node
                             .detail_sections
                             .first()
-                            .is_some_and(|s| matches!(&s.content, DetailContent::Table { .. }));
+                            .is_some_and(|s| s.content.has_table());
 
                 // Check if this is any service-related node type (generic check)
                 let is_service_node = matches!(
@@ -3531,7 +3679,7 @@ impl App {
                         ) {
                             should_navigate_from_param_table = true;
                         } else if section.section_type == DetailSectionType::Overview
-                            && let crate::tree::DetailContent::Table { rows, .. } = &section.content
+                            && let Some(rows) = section.content.table_rows()
                         {
                             let row_cursor =
                                 self.section_cursors.get(section_idx).copied().unwrap_or(0);
@@ -3620,6 +3768,94 @@ impl App {
         column >= divider_col.saturating_sub(1) && column <= divider_col.saturating_add(1)
     }
 
+    /// Check if the mouse is near a column border in the table header area.
+    /// Returns the index of the column to the left of the border.
+    fn find_column_border(&self, column: u16, row: u16) -> Option<usize> {
+        use ratatui::layout::{Direction, Layout};
+
+        let area = self.table_content_area?;
+
+        // Only detect on the header rows (first 3 rows of the table)
+        if row < area.y || row >= area.y.saturating_add(3) {
+            return None;
+        }
+
+        if self.cached_ratatui_constraints.len() < 2 {
+            return None;
+        }
+
+        let column_areas = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(self.cached_ratatui_constraints.clone())
+            .spacing(3)
+            .split(area);
+
+        // Check each border between adjacent columns (in the spacing gap)
+        // A border exists at the right edge of each column (except the last)
+        column_areas
+            .iter()
+            .enumerate()
+            .take(column_areas.len().saturating_sub(1))
+            .find(|(_, col_area)| {
+                let border = col_area.x.saturating_add(col_area.width);
+                // ±2 pixels of the border
+                column >= border.saturating_sub(1) && column <= border.saturating_add(3)
+            })
+            .map(|(idx, _)| idx)
+    }
+
+    /// Handle dragging a column border to resize table columns
+    fn handle_column_border_drag(&mut self, col_idx: usize, column: u16) {
+        use ratatui::layout::{Direction, Layout};
+
+        let Some(area) = self.table_content_area else {
+            return;
+        };
+
+        if self.cached_ratatui_constraints.len() < 2 {
+            return;
+        }
+
+        let column_areas = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(self.cached_ratatui_constraints.clone())
+            .spacing(3)
+            .split(area);
+
+        let Some(left_area) = column_areas.get(col_idx) else {
+            return;
+        };
+
+        let section_idx = self.get_section_index();
+
+        // Ensure we're in absolute mode
+        let is_absolute = self
+            .column_widths_absolute
+            .get(section_idx)
+            .copied()
+            .unwrap_or(false);
+        if !is_absolute {
+            self.convert_to_absolute_widths(section_idx);
+        }
+
+        // Calculate new width for the dragged column based on mouse position
+        let new_width = column.saturating_sub(left_area.x).max(3);
+
+        let current_width = left_area.width;
+        if new_width == current_width {
+            return;
+        }
+
+        if let Some(widths) = self.column_widths.get_mut(section_idx)
+            && let Some(lw) = widths.get_mut(col_idx)
+        {
+            *lw = new_width;
+        }
+
+        self.focused_column = col_idx;
+        self.save_column_widths_to_persistent(section_idx);
+    }
+
     /// Handle dragging the divider to resize tree pane
     fn handle_divider_drag(&mut self, column: u16) {
         // Get the total width of main area (tree + detail)
@@ -3662,6 +3898,48 @@ impl App {
                 && row < area.y.saturating_add(area.height)
         } else {
             false
+        }
+    }
+
+    /// Check if the mouse is in the horizontal scrollbar area
+    fn is_in_detail_hscrollbar(&self, column: u16, row: u16) -> bool {
+        if let Some(area) = self.detail_hscrollbar_area {
+            column >= area.x
+                && column < area.x.saturating_add(area.width)
+                && row >= area.y
+                && row < area.y.saturating_add(area.height)
+        } else {
+            false
+        }
+    }
+
+    /// Handle dragging on the horizontal scrollbar
+    fn handle_hscrollbar_drag(&mut self, column: u16) {
+        let Some(area) = self.detail_hscrollbar_area else {
+            return;
+        };
+        let total_width = self.cached_total_table_width;
+        let viewport_width = area.width;
+        if total_width <= viewport_width {
+            return;
+        }
+        let max_scroll = total_width.saturating_sub(viewport_width);
+        let relative_x = column.saturating_sub(area.x);
+        let new_scroll = if area.width > 1 {
+            let numerator = u32::from(relative_x).saturating_mul(u32::from(max_scroll));
+            let divisor = u32::from(area.width.saturating_sub(1));
+            #[allow(clippy::cast_possible_truncation)]
+            let result = numerator.checked_div(divisor).unwrap_or(0) as u16;
+            result.min(max_scroll)
+        } else {
+            0
+        };
+        let section_idx = self.get_section_index();
+        while self.horizontal_scroll.len() <= section_idx {
+            self.horizontal_scroll.push(0);
+        }
+        if let Some(hs) = self.horizontal_scroll.get_mut(section_idx) {
+            *hs = new_scroll;
         }
     }
 
@@ -3732,9 +4010,10 @@ impl App {
                 let row_count = match &section.content {
                     DetailContent::Table { rows, .. } => rows.len(),
                     DetailContent::PlainText(lines) => lines.len(),
-                    DetailContent::Composite(_sections) => {
-                        return;
-                    }
+                    DetailContent::Composite(subs) => subs
+                        .iter()
+                        .find_map(|s| s.content.table_rows())
+                        .map_or(0, Vec::len),
                 };
                 let viewport_height = area.height as usize;
 
@@ -3862,7 +4141,6 @@ impl App {
     }
 
     fn handle_table_click(&mut self, column: u16, row: u16) {
-        use crate::tree::DetailContent;
         const HEADER_HEIGHT: usize = 3;
 
         let Some(area) = self.table_content_area else {
@@ -3893,14 +4171,10 @@ impl App {
         let Some(section) = node.detail_sections.get(section_idx) else {
             return;
         };
-        let (rows, use_row_selection) = match &section.content {
-            DetailContent::Table {
-                rows,
-                use_row_selection,
-                ..
-            } => (rows, *use_row_selection),
-            _ => return,
+        let Some(rows) = section.content.table_rows() else {
+            return;
         };
+        let use_row_selection = section.content.table_use_row_selection().unwrap_or(false);
 
         // Validate table has content
         if rows.is_empty() {
@@ -4124,7 +4398,8 @@ impl App {
 
 // Helper functions for service sorting
 fn extract_service_id(text: &str) -> u32 {
-    // Extract ID from format like "0x10    - ServiceName" or "0x22F501 - ServiceName"
+    // Extract ID from format like "[Service] 0x10 - ServiceName" or "0x22F501 - ServiceName"
+    let text = text.strip_prefix("[Service] ").unwrap_or(text);
     if let Some(hex_part) = text.strip_prefix("0x")
         && let Some(dash_pos) = hex_part.find(" - ")
     {

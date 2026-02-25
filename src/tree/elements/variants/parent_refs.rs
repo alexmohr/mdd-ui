@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Alexander Mohr
 
-use cda_database::datatypes::{DiagLayer, ParentRef};
+use cda_database::datatypes::ParentRef;
 
 use crate::tree::{
     builder::TreeBuilder,
@@ -15,7 +15,6 @@ use crate::tree::{
 /// and individual parent refs as children in the tree with their own detail views.
 pub fn add_parent_refs_with_details<'a>(
     b: &mut TreeBuilder,
-    _layer: &DiagLayer<'_>,
     depth: usize,
     parent_refs: Option<impl Iterator<Item = ParentRef<'a>>>,
 ) {

@@ -74,7 +74,6 @@ pub fn add_diag_comms<'a>(
     b: &mut TreeBuilder,
     layer: &DiagLayer<'a>,
     depth: usize,
-    _layer_name: &str,
     variant_parent_refs: Option<impl Iterator<Item = ParentRef<'a>> + 'a>,
 ) {
     // Collect own services
@@ -421,6 +420,24 @@ fn build_overview_section(
         rows.push(DetailRow::inherited_from(parent_name));
     }
 
+    // Add pre-condition states
+    if let Some(dc) = ds.diag_comm() {
+        let states: Vec<String> = dc
+            .pre_condition_state_refs()
+            .into_iter()
+            .flat_map(|refs| refs.iter())
+            .filter_map(|pc| pc.state().and_then(|s| s.short_name()).map(str::to_owned))
+            .collect();
+
+        if !states.is_empty() {
+            rows.push(DetailRow::normal(
+                vec!["State".to_owned(), states.join(", ")],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+    }
+
     DetailSectionData::new(
         "Overview".to_owned(),
         DetailContent::Table {
@@ -538,8 +555,8 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
         .and_then(|sdgs| sdgs.sdgs())
         .into_iter()
         .flat_map(|sdg_list| sdg_list.iter())
-        .filter_map(|sdg| {
-            let caption = sdg.caption_sn()?;
+        .flat_map(|sdg| {
+            let caption = sdg.caption_sn().unwrap_or("");
             let si = sdg.si().unwrap_or("-");
 
             let mut rows = vec![DetailRow::normal(
@@ -566,7 +583,7 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
                     .map(|sd| {
                         DetailRow::normal(
                             vec![
-                                format!("  SD: {}", sd.value().unwrap_or("-")),
+                                format!("SD: {}", sd.value().unwrap_or("-")),
                                 sd.si().unwrap_or("-").to_owned(),
                                 sd.ti().unwrap_or("-").to_owned(),
                                 String::new(),
@@ -582,9 +599,8 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
                     }),
             );
 
-            Some(rows)
+            rows
         })
-        .flatten()
         .collect();
 
     if sdg_rows.is_empty() {

@@ -445,7 +445,7 @@ fn build_overview_section(
 fn build_response_param_section<'a, I>(
     title: &str,
     params: I,
-    _section_type: DetailSectionType,
+    section_type: DetailSectionType,
 ) -> DetailSectionData
 where
     I: IntoIterator<Item = Parameter<'a>>,
@@ -523,7 +523,7 @@ where
     DetailSectionData {
         title: title.to_owned(),
         render_as_header: false,
-        section_type: DetailSectionType::PosResponses,
+        section_type,
         content: DetailContent::Table {
             header,
             rows,

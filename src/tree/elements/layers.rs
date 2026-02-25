@@ -27,8 +27,6 @@ pub trait LayerExt {
         &mut self,
         layer: &DiagLayer<'a>,
         depth: usize,
-        layer_name: &str,
-        _expand: bool,
         variant_parent_refs: Option<impl Iterator<Item = ParentRef<'a>> + 'a>,
         all_variants: Option<impl Iterator<Item = Variant<'a>> + 'a>,
     );
@@ -39,8 +37,6 @@ impl LayerExt for TreeBuilder {
         &mut self,
         layer: &DiagLayer<'a>,
         depth: usize,
-        layer_name: &str,
-        _expand: bool,
         variant_parent_refs: Option<impl Iterator<Item = ParentRef<'a>> + 'a>,
         all_variants: Option<impl Iterator<Item = Variant<'a>> + 'a>,
     ) {
@@ -61,7 +57,6 @@ impl LayerExt for TreeBuilder {
             self,
             layer,
             depth,
-            layer_name,
             parent_refs_vec.as_ref().map(|v| v.iter().cloned()),
         );
 
@@ -82,7 +77,6 @@ impl LayerExt for TreeBuilder {
         // Parent Refs
         add_parent_refs_with_details(
             self,
-            layer,
             depth,
             parent_refs_vec.as_ref().map(|v| v.iter().cloned()),
         );

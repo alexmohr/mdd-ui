@@ -131,14 +131,7 @@ pub fn add_variants(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                     .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef));
                 // Pass all variants for cross-variant lookups
                 let all_variants_iter = all_variants_vec.iter().cloned();
-                b.add_diag_layer_structured(
-                    &layer,
-                    2,
-                    &name,
-                    is_base,
-                    parent_refs_iter,
-                    Some(all_variants_iter),
-                );
+                b.add_diag_layer_structured(&layer, 2, parent_refs_iter, Some(all_variants_iter));
             }
         }
     }
@@ -181,8 +174,6 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                 b.add_diag_layer_structured(
                     &layer,
                     2,
-                    name,
-                    false,
                     parent_refs_iter,
                     None::<std::iter::Empty<cda_database::datatypes::Variant>>,
                 );
@@ -275,8 +266,6 @@ pub fn add_ecu_shared_data(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                 b.add_diag_layer_structured(
                     &layer,
                     2,
-                    name,
-                    false,
                     None::<std::iter::Empty<cda_database::datatypes::ParentRef>>,
                     None::<std::iter::Empty<cda_database::datatypes::Variant>>,
                 );
@@ -361,8 +350,6 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
             b.add_diag_layer_structured(
                 &layer,
                 2,
-                name,
-                false,
                 None::<std::iter::Empty<cda_database::datatypes::ParentRef>>,
                 None::<std::iter::Empty<cda_database::datatypes::Variant>>,
             );

@@ -24,7 +24,7 @@ use crate::tree::{CellType, DetailContent, DetailRow, DetailSectionData, NodeTyp
 fn node_style(node: &TreeNode) -> Style {
     match node.node_type {
         NodeType::Container => style(Color::Blue, true),
-        NodeType::SectionHeader | NodeType::ParentRefs | NodeType::DOP | NodeType::SDG => {
+        NodeType::SectionHeader | NodeType::ParentRefs | NodeType::DOP => {
             style(Color::Yellow, true)
         }
         // Gray for inherited services
@@ -35,6 +35,7 @@ fn node_style(node: &TreeNode) -> Style {
         | NodeType::NegResponse
         | NodeType::FunctionalClass
         | NodeType::Job
+        | NodeType::SDG
         | NodeType::Default => Style::default().fg(Color::White),
     }
 }
@@ -396,6 +397,7 @@ impl App {
             "  Shift+S            Toggle sort on focused column",
             "  [ / ]              Decrease/increase column width",
             "  , / .              Select previous/next column",
+            "  < / >              Scroll table left/right",
             "  a-z, 0-9           Type-to-jump to matching row (resets after 1s)",
             "",
             "WINDOW",
@@ -509,7 +511,7 @@ impl App {
             return;
         };
 
-        self.render_content_area(frame, content_area, tab_sections, sections, node_name);
+        self.render_content_area(frame, content_area, tab_sections, sections);
     }
 
     /// Split sections into header and tabs
@@ -579,16 +581,48 @@ impl App {
         while self.column_widths.len() < sections.len() {
             self.column_widths.push(Vec::new());
         }
+
+        while self.column_widths_absolute.len() < sections.len() {
+            self.column_widths_absolute.push(false);
+        }
+
+        while self.horizontal_scroll.len() < sections.len() {
+            self.horizontal_scroll.push(0);
+        }
     }
 
     /// Initialize table sort state for a section
     fn initialize_table_sort(section: Option<&DetailSectionData>) -> Option<super::TableSortState> {
-        section
-            .filter(|s| matches!(&s.content, DetailContent::Table { .. }))
-            .map(|_| super::TableSortState {
+        let section = section?;
+        let header = section.content.table_header()?;
+
+        // Detect Byte and Bit columns for default positional sort
+        let byte_col = header
+            .cells
+            .iter()
+            .position(|c| c == "Byte" || c == "Byte Pos");
+        let bit_col = header
+            .cells
+            .iter()
+            .position(|c| c == "Bit" || c == "Bit Pos");
+
+        match (byte_col, bit_col) {
+            (Some(byte), Some(bit)) => Some(super::TableSortState {
+                column: byte,
+                direction: super::SortDirection::Ascending,
+                secondary_column: Some(bit),
+            }),
+            (Some(byte), None) => Some(super::TableSortState {
+                column: byte,
+                direction: super::SortDirection::Ascending,
+                secondary_column: None,
+            }),
+            _ => Some(super::TableSortState {
                 column: 0,
                 direction: super::SortDirection::Ascending,
-            })
+                secondary_column: None,
+            }),
+        }
     }
 
     /// Render header section
@@ -607,7 +641,6 @@ impl App {
         content_area: Rect,
         tab_sections: &[DetailSectionData],
         all_sections: &[DetailSectionData],
-        _node_name: &str,
     ) {
         let show_tabs = tab_sections.len() > 1;
         let section_offset = usize::from(all_sections.len() > tab_sections.len());
@@ -616,7 +649,7 @@ impl App {
             return;
         };
         let help_text = if self.focus_state == FocusState::Detail {
-            " H/L:tabs  J/K:row  ,/.:column  [/]:resize  Enter:Select  S:sort  a-z:jump"
+            " H/L:tabs  J/K:row  ,/.:col  [/]:resize  </> :scroll  S:sort  a-z:jump"
         } else {
             ""
         };
@@ -646,7 +679,6 @@ impl App {
         self.render_section_content(
             frame,
             inner,
-            content_area,
             section,
             self.selected_tab.saturating_add(section_offset),
         );
@@ -682,13 +714,7 @@ impl App {
         self.tab_titles.clone_from(&tab_titles);
 
         // Render tabs
-        Self::render_wrapped_tabs(
-            frame,
-            tab_area,
-            &tab_titles,
-            self.selected_tab,
-            self.focus_state == FocusState::Detail,
-        );
+        Self::render_wrapped_tabs(frame, tab_area, &tab_titles, self.selected_tab);
 
         content_inner
     }
@@ -698,7 +724,6 @@ impl App {
         &mut self,
         frame: &mut Frame,
         inner: Rect,
-        area: Rect,
         section: &DetailSectionData,
         section_idx: usize,
     ) {
@@ -717,7 +742,6 @@ impl App {
                 self.render_table_content(
                     frame,
                     inner,
-                    area,
                     header,
                     rows,
                     constraints,
@@ -726,30 +750,34 @@ impl App {
                 );
             }
             DetailContent::Composite(subsections) => {
-                Self::render_composite_content(frame, inner, subsections);
+                self.render_composite_content(frame, inner, subsections, section_idx);
             }
         }
     }
 
     fn render_composite_content(
+        &mut self,
         frame: &mut Frame,
         area: Rect,
         subsections: &[crate::tree::DetailSectionData],
+        section_idx: usize,
     ) {
-        use ratatui::{
-            layout::{Constraint, Direction, Layout},
-            widgets::Block,
-        };
+        use ratatui::layout::{Constraint, Direction, Layout};
 
         if subsections.is_empty() {
             return;
         }
 
-        // Create vertical layout for subsections
-        let subsection_count = subsections.len();
-        let pct = 100u16.saturating_div(u16::try_from(subsection_count).unwrap_or(1).max(1));
-        let constraints: Vec<Constraint> = (0..subsection_count)
-            .map(|_| Constraint::Percentage(pct))
+        // Size PlainText to its content, give remaining space to tables.
+        let constraints: Vec<Constraint> = subsections
+            .iter()
+            .map(|s| match &s.content {
+                crate::tree::DetailContent::PlainText(lines) => {
+                    let height = lines.len().max(1);
+                    Constraint::Length(u16::try_from(height).unwrap_or(1))
+                }
+                _ => Constraint::Fill(1),
+            })
             .collect();
 
         let chunks = Layout::default()
@@ -757,117 +785,36 @@ impl App {
             .constraints(constraints)
             .split(area);
 
-        // Render each subsection in its own box
         for (i, subsection) in subsections.iter().enumerate() {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
-                .title(format!(" {} ", subsection.title));
-
             let Some(&chunk) = chunks.get(i) else {
                 continue;
             };
-            let inner = block.inner(chunk);
-            frame.render_widget(block, chunk);
 
-            // Render the content of the subsection
             match &subsection.content {
                 crate::tree::DetailContent::PlainText(lines) => {
                     let text = lines.join("\n");
                     let para = Paragraph::new(text).style(Style::default().fg(Color::White));
-                    frame.render_widget(para, inner);
+                    frame.render_widget(para, chunk);
                 }
                 crate::tree::DetailContent::Table {
                     header,
                     rows,
                     constraints,
-                    ..
+                    use_row_selection,
                 } => {
-                    // For composite tables, we don't track cursors/scrolling per subsection yet
-                    // This is a simplified rendering
-                    Self::render_simple_table(frame, inner, header, rows, constraints);
+                    self.render_table_content(
+                        frame,
+                        chunk,
+                        header,
+                        rows,
+                        constraints,
+                        section_idx,
+                        *use_row_selection,
+                    );
                 }
-                crate::tree::DetailContent::Composite(_) => {
-                    // Nested composites not supported
-                    let text = "(Nested composites not supported)";
-                    let para = Paragraph::new(text).style(Style::default().fg(Color::Red));
-                    frame.render_widget(para, inner);
-                }
+                crate::tree::DetailContent::Composite(_) => {}
             }
         }
-    }
-
-    fn render_simple_table(
-        frame: &mut Frame,
-        area: Rect,
-        header: &DetailRow,
-        rows: &[DetailRow],
-        constraints: &[crate::tree::ColumnConstraint],
-    ) {
-        let max_columns = rows
-            .iter()
-            .map(|r| r.cells.len())
-            .max()
-            .unwrap_or(header.cells.len());
-
-        // Convert constraints to ratatui Constraints
-        let mut ratatui_constraints: Vec<Constraint> = constraints
-            .iter()
-            .map(|c| match c {
-                crate::tree::ColumnConstraint::Fixed(w) => Constraint::Length(*w),
-                crate::tree::ColumnConstraint::Percentage(p) => Constraint::Percentage(*p),
-            })
-            .collect();
-
-        // Ensure we have enough constraints
-        while ratatui_constraints.len() < max_columns {
-            ratatui_constraints.push(Constraint::Percentage(10));
-        }
-
-        // Create header
-        let header_cells: Vec<Cell> = header
-            .cells
-            .iter()
-            .map(|c| {
-                Cell::from(c.as_str()).style(
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                )
-            })
-            .collect();
-        let header_row = Row::new(header_cells);
-
-        // Create data rows
-        let data_rows: Vec<Row> = rows
-            .iter()
-            .map(|row_data| {
-                let indent_str = "  ".repeat(row_data.indent / 2);
-                let mut cells: Vec<Cell> = row_data
-                    .cells
-                    .iter()
-                    .enumerate()
-                    .map(|(col_idx, cell_text)| {
-                        let text = if col_idx == 0 {
-                            format!("{indent_str}{cell_text}")
-                        } else {
-                            cell_text.clone()
-                        };
-                        Cell::from(text).style(Style::default().fg(Color::White))
-                    })
-                    .collect();
-
-                while cells.len() < max_columns {
-                    cells.push(Cell::from(""));
-                }
-                Row::new(cells)
-            })
-            .collect();
-
-        let table = Table::new(data_rows, ratatui_constraints)
-            .column_spacing(1)
-            .header(header_row);
-        frame.render_widget(table, area);
     }
 
     fn sort_rows(&self, rows: &[DetailRow], section_idx: usize) -> Vec<DetailRow> {
@@ -884,15 +831,14 @@ impl App {
         let mut sorted = rows.to_vec();
         let col = sort_state.column;
         let dir = sort_state.direction;
+        let secondary = sort_state.secondary_column;
         sorted.sort_by(|a, b| {
-            let a_cell = a.cells.get(col).map_or("", String::as_str);
-            let b_cell = b.cells.get(col).map_or("", String::as_str);
-
-            let cmp = match (a_cell.parse::<f64>(), b_cell.parse::<f64>()) {
-                (Ok(a_num), Ok(b_num)) => a_num
-                    .partial_cmp(&b_num)
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                _ => a_cell.cmp(b_cell),
+            let cmp = Self::compare_cells(a, b, col);
+            let cmp = match cmp {
+                std::cmp::Ordering::Equal => secondary.map_or(std::cmp::Ordering::Equal, |sec| {
+                    Self::compare_cells(a, b, sec)
+                }),
+                other => other,
             };
 
             match dir {
@@ -901,6 +847,18 @@ impl App {
             }
         });
         sorted
+    }
+
+    fn compare_cells(a: &DetailRow, b: &DetailRow, col: usize) -> std::cmp::Ordering {
+        let a_cell = a.cells.get(col).map_or("", String::as_str);
+        let b_cell = b.cells.get(col).map_or("", String::as_str);
+
+        match (a_cell.parse::<f64>(), b_cell.parse::<f64>()) {
+            (Ok(a_num), Ok(b_num)) => a_num
+                .partial_cmp(&b_num)
+                .unwrap_or(std::cmp::Ordering::Equal),
+            _ => a_cell.cmp(b_cell),
+        }
     }
 
     fn clamp_section_cursor_and_scroll(
@@ -939,7 +897,6 @@ impl App {
         &mut self,
         frame: &mut Frame,
         inner: Rect,
-        _area: Rect,
         header: &DetailRow,
         rows: &[DetailRow],
         constraints: &[crate::tree::ColumnConstraint],
@@ -983,31 +940,108 @@ impl App {
         // Get column widths for this section, or use defaults from constraints
         let column_widths = self.get_column_widths(section_idx, constraints);
 
-        // Convert to ratatui Constraint using custom widths
-        let ratatui_constraints: Vec<Constraint> = column_widths
-            .iter()
-            .map(|&w| Constraint::Percentage(w))
-            .collect();
+        let is_absolute = self
+            .column_widths_absolute
+            .get(section_idx)
+            .copied()
+            .unwrap_or(false);
 
-        // Cache the exact constraints for accurate click detection
-        self.cached_ratatui_constraints
-            .clone_from(&ratatui_constraints);
+        // Calculate total table width and determine if horizontal scrolling is needed
+        let column_spacing = 3u16;
+        let num_gaps = max_columns.saturating_sub(1);
+        let total_table_width: u16 = if is_absolute {
+            let cols_total: u16 = column_widths.iter().sum();
+            let gaps = u16::try_from(num_gaps).unwrap_or(0);
+            cols_total.saturating_add(column_spacing.saturating_mul(gaps))
+        } else {
+            inner.width
+        };
 
-        // Build header row
-        let header_row = self.build_header_row(header, section_idx, max_columns, focused_col);
+        let needs_hscroll = is_absolute && total_table_width > inner.width;
 
-        let table = Table::new(visible_rows, ratatui_constraints)
-            .column_spacing(3)
-            .header(header_row);
-        frame.render_widget(table, inner);
+        // Reserve bottom row for horizontal scrollbar if needed
+        let table_area = if needs_hscroll {
+            Rect {
+                height: inner.height.saturating_sub(1),
+                ..inner
+            }
+        } else {
+            inner
+        };
 
+        // Determine horizontal scroll offset
+        while self.horizontal_scroll.len() <= section_idx {
+            self.horizontal_scroll.push(0);
+        }
+        let h_scroll = self
+            .horizontal_scroll
+            .get(section_idx)
+            .copied()
+            .unwrap_or(0);
+
+        // Clamp horizontal scroll
+        let max_h_scroll = total_table_width.saturating_sub(inner.width);
+        if let Some(hs) = self.horizontal_scroll.get_mut(section_idx) {
+            *hs = h_scroll.min(max_h_scroll);
+        }
+        let h_scroll = self
+            .horizontal_scroll
+            .get(section_idx)
+            .copied()
+            .unwrap_or(0);
+
+        self.cached_total_table_width = total_table_width;
+
+        if needs_hscroll {
+            self.render_hscrolled_table(
+                frame,
+                inner,
+                table_area,
+                header,
+                &visible_rows,
+                &column_widths,
+                column_spacing,
+                h_scroll,
+                total_table_width,
+                section_idx,
+            );
+        } else {
+            self.detail_hscrollbar_area = None;
+            // Standard rendering (no horizontal scroll needed)
+            let ratatui_constraints: Vec<Constraint> = column_widths
+                .iter()
+                .map(|&w| {
+                    if is_absolute {
+                        Constraint::Length(w)
+                    } else {
+                        Constraint::Percentage(w)
+                    }
+                })
+                .collect();
+
+            self.cached_ratatui_constraints
+                .clone_from(&ratatui_constraints);
+
+            let header_row = self.build_header_row(header, section_idx, max_columns);
+
+            let table = Table::new(visible_rows, ratatui_constraints)
+                .column_spacing(column_spacing)
+                .header(header_row);
+            frame.render_widget(table, table_area);
+        }
+
+        // Vertical scrollbar
+        let vscroll_height = if needs_hscroll {
+            table_area.height
+        } else {
+            inner.height
+        };
         if row_count > viewport_height {
-            // Render scrollbar below the header to avoid color overlap
             let scrollbar_area = Rect {
                 x: inner.x,
                 y: inner.y.saturating_add(header_height),
                 width: inner.width,
-                height: inner.height.saturating_sub(header_height),
+                height: vscroll_height.saturating_sub(header_height),
             };
             self.detail_scrollbar_area = render_scrollbar(
                 frame,
@@ -1019,6 +1053,155 @@ impl App {
         } else {
             self.detail_scrollbar_area = None;
         }
+    }
+
+    /// Render table with horizontal scrolling and scrollbar.
+    #[allow(clippy::too_many_arguments)]
+    fn render_hscrolled_table(
+        &mut self,
+        frame: &mut Frame,
+        inner: Rect,
+        table_area: Rect,
+        header: &DetailRow,
+        visible_rows: &[Row<'static>],
+        column_widths: &[u16],
+        column_spacing: u16,
+        h_scroll: u16,
+        total_table_width: u16,
+        section_idx: usize,
+    ) {
+        let (vis_constraints, vis_header, vis_rows, _first_vis_col) = Self::apply_horizontal_scroll(
+            column_widths,
+            column_spacing,
+            h_scroll,
+            table_area.width,
+            header,
+            visible_rows,
+            self.table_sort_state.get(section_idx).and_then(|s| *s),
+        );
+
+        self.cached_ratatui_constraints.clone_from(&vis_constraints);
+
+        let table = Table::new(vis_rows, vis_constraints)
+            .column_spacing(column_spacing)
+            .header(vis_header);
+        frame.render_widget(table, table_area);
+
+        let hscroll_area = Rect {
+            x: inner.x,
+            y: inner.y.saturating_add(inner.height.saturating_sub(1)),
+            width: inner.width,
+            height: 1,
+        };
+        render_horizontal_scrollbar(
+            frame,
+            hscroll_area,
+            total_table_width,
+            h_scroll,
+            inner.width,
+        );
+        self.detail_hscrollbar_area = Some(hscroll_area);
+    }
+
+    /// Apply horizontal scroll to determine visible columns and build clipped constraints/rows.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_horizontal_scroll(
+        column_widths: &[u16],
+        column_spacing: u16,
+        h_scroll: u16,
+        viewport_width: u16,
+        header: &DetailRow,
+        visible_rows: &[Row<'static>],
+        sort_state: Option<super::TableSortState>,
+    ) -> (Vec<Constraint>, Row<'static>, Vec<Row<'static>>, usize) {
+        // Calculate cumulative positions: (start_px, end_px) for each column
+        let mut col_positions: Vec<(u16, u16)> = Vec::with_capacity(column_widths.len());
+        let mut x = 0u16;
+        for (i, &w) in column_widths.iter().enumerate() {
+            col_positions.push((x, x.saturating_add(w)));
+            if i < column_widths.len().saturating_sub(1) {
+                x = x.saturating_add(w).saturating_add(column_spacing);
+            } else {
+                x = x.saturating_add(w);
+            }
+        }
+
+        let scroll_end = h_scroll.saturating_add(viewport_width);
+
+        // Find columns that overlap with the visible window [h_scroll, scroll_end)
+        let mut vis_col_indices: Vec<usize> = Vec::new();
+        let mut vis_widths: Vec<u16> = Vec::new();
+
+        for (i, &(start, end)) in col_positions.iter().enumerate() {
+            if end <= h_scroll || start >= scroll_end {
+                continue; // fully outside viewport
+            }
+            // Clamp to viewport
+            let vis_start = start.max(h_scroll);
+            let vis_end = end.min(scroll_end);
+            let vis_width = vis_end.saturating_sub(vis_start);
+            if vis_width > 0 {
+                vis_col_indices.push(i);
+                vis_widths.push(vis_width);
+            }
+        }
+
+        let first_vis_col = vis_col_indices.first().copied().unwrap_or(0);
+
+        // Build constraints
+        let constraints: Vec<Constraint> =
+            vis_widths.iter().map(|&w| Constraint::Length(w)).collect();
+
+        // Build header
+        let header_row = Self::build_scrolled_header_row(header, &vis_col_indices, sort_state);
+
+        // Build data rows by extracting visible columns
+        let data_rows: Vec<Row<'static>> = visible_rows.to_vec();
+
+        // For data rows, we need to rebuild them with only visible columns.
+        // Since ratatui Row doesn't let us extract cells after construction,
+        // we return the original rows and let the Constraint::Length handle clipping.
+        // Columns outside the viewport simply won't have space allocated.
+
+        (constraints, header_row, data_rows, first_vis_col)
+    }
+
+    /// Build a header row for horizontally scrolled view showing only visible columns
+    #[allow(clippy::too_many_arguments)]
+    fn build_scrolled_header_row(
+        header: &DetailRow,
+        vis_col_indices: &[usize],
+        sort_state: Option<super::TableSortState>,
+    ) -> Row<'static> {
+        use ratatui::text::Text;
+
+        let header_cells: Vec<Cell> = vis_col_indices
+            .iter()
+            .map(|&idx| {
+                let c = header.cells.get(idx).cloned().unwrap_or_default();
+
+                let sort_indicator =
+                    sort_state
+                        .filter(|state| state.column == idx)
+                        .map_or("", |state| match state.direction {
+                            super::SortDirection::Ascending => "▲",
+                            super::SortDirection::Descending => "▼",
+                        });
+
+                let text = if sort_indicator.is_empty() {
+                    format!("\n{c}")
+                } else {
+                    format!("{sort_indicator}\n{c}")
+                };
+
+                let style = Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD);
+                Cell::from(Text::from(text)).style(style)
+            })
+            .collect();
+
+        Row::new(header_cells).height(3)
     }
 
     // build_visible_rows needs viewport, column, and selection state for row rendering
@@ -1119,7 +1302,6 @@ impl App {
         header: &DetailRow,
         section_idx: usize,
         max_columns: usize,
-        focused_col: usize,
     ) -> Row<'static> {
         use ratatui::text::Text;
 
@@ -1138,20 +1320,10 @@ impl App {
                             SortDirection::Descending => "▼",
                         });
 
-                let underscore = if (self.focus_state == FocusState::Detail) && idx == focused_col {
-                    "_"
-                } else {
-                    ""
-                };
-
-                let text = if sort_indicator.is_empty() && underscore.is_empty() {
+                let text = if sort_indicator.is_empty() {
                     c.clone()
-                } else if sort_indicator.is_empty() {
-                    format!("{underscore}\n{c}")
-                } else if underscore.is_empty() {
-                    format!("{sort_indicator}\n{c}")
                 } else {
-                    format!("{sort_indicator} {underscore}\n{c}")
+                    format!("{sort_indicator}\n{c}")
                 };
 
                 let style = Style::default()
@@ -1175,61 +1347,73 @@ impl App {
         section_idx: usize,
         constraints: &[crate::tree::ColumnConstraint],
     ) -> Vec<u16> {
-        // Ensure we have enough entries in column_widths
+        // Ensure we have enough entries
         while self.column_widths.len() <= section_idx {
             self.column_widths.push(Vec::new());
         }
+        while self.column_widths_absolute.len() <= section_idx {
+            self.column_widths_absolute.push(false);
+        }
 
-        // If we don't have custom widths for this section, initialize from constraints
+        // If we don't have custom widths for this section, try persistent store or init defaults
         if self
             .column_widths
             .get(section_idx)
             .is_none_or(Vec::is_empty)
         {
-            // First pass: convert to initial widths
-            let mut widths: Vec<u16> = constraints
-                .iter()
-                .map(|c| match c {
-                    crate::tree::ColumnConstraint::Fixed(w) => {
-                        // Convert fixed width to a reasonable percentage (roughly 1.5% per char)
-                        w.saturating_mul(3).saturating_div(2).clamp(3, 15)
-                    }
-                    crate::tree::ColumnConstraint::Percentage(p) => *p,
-                })
-                .collect();
-
-            // Normalize to ensure total is exactly 100%
-            let total: u16 = widths.iter().sum();
-            if total > 0 && total != 100 {
-                // Scale all widths proportionally to sum to 100
-                let scaled_widths = widths
+            let key = self.make_column_width_key(section_idx, constraints.len());
+            if let Some(persisted) = self.persisted_column_widths.get(&key).cloned() {
+                // Restore persisted absolute widths
+                if let Some(col_widths) = self.column_widths.get_mut(section_idx) {
+                    *col_widths = persisted;
+                }
+                if let Some(abs) = self.column_widths_absolute.get_mut(section_idx) {
+                    *abs = true;
+                }
+            } else {
+                // Initialize from constraints as percentages
+                let mut widths: Vec<u16> = constraints
                     .iter()
-                    .map(|&w| {
-                        // f64 percentage value always fits in u16 (0..=100)
-                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                        {
-                            ((f64::from(w) / f64::from(total)) * 100.0).round() as u16
+                    .map(|c| match c {
+                        crate::tree::ColumnConstraint::Fixed(w) => {
+                            // Convert fixed width to a reasonable percentage
+                            w.saturating_mul(3).saturating_div(2).clamp(3, 15)
                         }
+                        crate::tree::ColumnConstraint::Percentage(p) => *p,
                     })
                     .collect();
-                widths = scaled_widths;
 
-                // Handle rounding errors: adjust the largest column
-                let new_total: u16 = widths.iter().sum();
-                if new_total != 100 && !widths.is_empty() {
-                    let max_idx = widths
+                // Normalize to ensure total is exactly 100%
+                let total: u16 = widths.iter().sum();
+                if total > 0 && total != 100 {
+                    let scaled_widths = widths
                         .iter()
-                        .enumerate()
-                        .max_by_key(|(_, w)| *w)
-                        .map_or(0, |(idx, _)| idx);
-                    if let Some(width) = widths.get_mut(max_idx) {
-                        *width = width.saturating_add(u16::saturating_sub(100, new_total));
+                        .map(|&w| {
+                            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                            {
+                                ((f64::from(w) / f64::from(total)) * 100.0).round() as u16
+                            }
+                        })
+                        .collect();
+                    widths = scaled_widths;
+
+                    let new_total: u16 = widths.iter().sum();
+                    if new_total != 100 && !widths.is_empty() {
+                        let max_idx = widths
+                            .iter()
+                            .enumerate()
+                            .max_by_key(|(_, w)| *w)
+                            .map_or(0, |(idx, _)| idx);
+                        if let Some(width) = widths.get_mut(max_idx) {
+                            *width = width.saturating_add(u16::saturating_sub(100, new_total));
+                        }
                     }
                 }
-            }
 
-            if let Some(col_widths) = self.column_widths.get_mut(section_idx) {
-                *col_widths = widths;
+                if let Some(col_widths) = self.column_widths.get_mut(section_idx) {
+                    *col_widths = widths;
+                }
+                // column_widths_absolute stays false (percentage mode)
             }
         }
 
@@ -1265,13 +1449,7 @@ impl App {
     }
 
     /// Render tabs with wrapping support for narrow windows
-    fn render_wrapped_tabs(
-        frame: &mut Frame,
-        area: Rect,
-        tab_titles: &[String],
-        selected: usize,
-        _focused: bool,
-    ) {
+    fn render_wrapped_tabs(frame: &mut Frame, area: Rect, tab_titles: &[String], selected: usize) {
         // No block needed - tabs are rendered directly in the provided area
         // Calculate how to distribute tabs across lines
         let available_width = area.width as usize;
@@ -1414,4 +1592,28 @@ fn render_scrollbar(
         width: 1,
         height: area.height,
     })
+}
+
+fn render_horizontal_scrollbar(
+    frame: &mut Frame,
+    area: Rect,
+    total_width: u16,
+    scroll_position: u16,
+    viewport_width: u16,
+) {
+    if total_width <= viewport_width {
+        return;
+    }
+    let mut state = ScrollbarState::new(usize::from(total_width))
+        .position(usize::from(scroll_position))
+        .viewport_content_length(usize::from(viewport_width));
+    frame.render_stateful_widget(
+        Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
+            .thumb_symbol("━")
+            .track_symbol(Some("─"))
+            .begin_symbol(Some("◂"))
+            .end_symbol(Some("▸")),
+        area,
+        &mut state,
+    );
 }
