@@ -16,28 +16,6 @@ impl TreeBuilder {
         Self { nodes: Vec::new() }
     }
 
-    /// Push a collapsible/expandable node.
-    pub(crate) fn push(
-        &mut self,
-        depth: usize,
-        text: String,
-        expanded: bool,
-        has_children: bool,
-        node_type: NodeType,
-    ) {
-        self.nodes.push(TreeNode {
-            depth,
-            text,
-            expanded,
-            has_children,
-            detail_sections: Vec::new(),
-            node_type,
-            section_type: None,
-            service_list_type: None,
-            param_id: None,
-        });
-    }
-
     /// Push a node that carries structured detail sections (preferred).
     pub(crate) fn push_details_structured(
         &mut self,

@@ -21,6 +21,10 @@ clap = { version = "4", features = ["derive"] }
 # Error handling
 anyhow = "1"
 
+# Configuration
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
 [patch.crates-io]
 flatbuffers = { git = "https://github.com/alexmohr/flatbuffers.git", rev = "0ba3307d" }
 

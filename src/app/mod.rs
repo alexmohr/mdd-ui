@@ -4,6 +4,7 @@
  */
 
 mod column_widths;
+pub(crate) mod config;
 mod cursor;
 mod history;
 mod input;
@@ -16,6 +17,7 @@ mod visibility;
 
 use std::{collections::HashMap, io, time::Instant};
 
+use config::ResolvedTheme;
 use crossterm::event::{self, Event, KeyEventKind, KeyModifiers};
 use input::Action;
 use ratatui::{
@@ -186,8 +188,8 @@ pub struct App {
     last_click_time: Option<Instant>, // Time of last click for double-click detection
     last_click_pos: (u16, u16),       // Position of last click (column, row)
     pub(crate) mouse_enabled: bool,   // Whether mouse input is enabled
-    // History of node indices in all_nodes (stable across expand/collapse)
-    navigation_history: Vec<usize>,
+    // History of navigation entries (stable across expand/collapse)
+    navigation_history: Vec<HistoryEntry>,
     history_position: usize, // Current position in history (for potential forward navigation)
     breadcrumb_area: Rect,   // Cached breadcrumb area for mouse handling
     breadcrumb_segments: Vec<(String, usize, u16, u16)>, // (text, node_idx, start_col, end_col)
@@ -202,6 +204,7 @@ pub struct App {
     last_selected_section_title: Option<String>,
     jump_buffer: String, // Characters typed for type-to-jump in table views
     jump_buffer_time: Option<Instant>, // Timestamp of last type-to-jump character for auto-reset
+    pub(crate) theme: ResolvedTheme, // Resolved colour theme
 }
 
 #[derive(Clone)]
@@ -210,8 +213,18 @@ pub struct PopupData {
     pub content: Vec<String>,
 }
 
+/// A single entry in the navigation history, storing the node index and the
+/// full path from root so that the target can be found even after
+/// expand/collapse changes.
+#[derive(Clone)]
+struct HistoryEntry {
+    node_idx: usize,
+    /// Path from root to target: `(depth, text)` pairs.
+    node_path: Vec<(usize, String)>,
+}
+
 impl App {
-    pub fn new(nodes: Vec<TreeNode>) -> Self {
+    pub fn new(nodes: Vec<TreeNode>, theme: ResolvedTheme) -> Self {
         let mut app = Self {
             all_nodes: nodes,
             visible: Vec::new(),
@@ -262,6 +275,7 @@ impl App {
             last_selected_section_title: None,
             jump_buffer: String::new(),
             jump_buffer_time: None,
+            theme,
         };
         // Apply initial sort order (default is by ID)
         app.sort_diagcomm_nodes_in_place();
@@ -443,6 +457,35 @@ impl App {
         self.status = format!("Jump: \"{}\" (no match)", self.jump_buffer);
     }
 
+    /// Jump to the first visible tree node whose text starts with the `jump_buffer`
+    fn jump_to_matching_tree_node(&mut self) {
+        if self.jump_buffer.is_empty() {
+            return;
+        }
+
+        let buffer_lower = self.jump_buffer.to_lowercase();
+
+        // Search from current cursor position forward, then wrap around
+        let len = self.visible.len();
+        let start = self.cursor.saturating_add(1).min(len);
+
+        let found = (start..len).chain(0..start).find(|&vis_idx| {
+            self.visible
+                .get(vis_idx)
+                .and_then(|&node_idx| self.all_nodes.get(node_idx))
+                .is_some_and(|node| node.text.to_lowercase().contains(&buffer_lower))
+        });
+
+        if let Some(target) = found {
+            self.cursor = target;
+            self.reset_detail_state();
+            self.scroll_offset = self.cursor.saturating_sub(5);
+            self.status = format!("Jump: \"{}\"", self.jump_buffer);
+        } else {
+            self.status = format!("Jump: \"{}\" (no match)", self.jump_buffer);
+        }
+    }
+
     /// Apply sorting to rows if a sort state exists for the given section
     fn apply_table_sort(&self, rows: &[DetailRow], section_idx: usize) -> Vec<DetailRow> {
         let Some(sort_state) = self
@@ -502,11 +545,10 @@ impl App {
                         continue;
                     }
                     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-                    let shift = key.modifiers.contains(KeyModifiers::SHIFT);
                     if self.searching {
                         self.handle_search_key(key.code)
                     } else {
-                        self.handle_normal_key(key.code, ctrl, shift)
+                        self.handle_normal_key(key.code, ctrl)
                     }
                 }
                 Event::Mouse(mouse) => {
@@ -558,7 +600,7 @@ impl App {
             self.draw_detail_popup(frame);
         }
         if self.focus_state == FocusState::HelpPopup {
-            Self::draw_help_popup(frame);
+            self.draw_help_popup(frame);
         }
     }
 }

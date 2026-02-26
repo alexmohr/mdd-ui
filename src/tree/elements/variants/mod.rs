@@ -536,7 +536,7 @@ fn build_com_param_refs_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
 
     Some(DetailRow {
         cells: vec!["ComParam Refs".to_owned(), cp_refs.len().to_string()],
-        cell_types: vec![CellType::Text, CellType::Text],
+        cell_types: vec![CellType::ParameterName, CellType::Text],
         cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
@@ -559,7 +559,7 @@ fn build_diag_comms_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
             "Diag-Comms".to_owned(),
             format!("{service_count} services, {job_count} jobs"),
         ],
-        cell_types: vec![CellType::Text, CellType::Text],
+        cell_types: vec![CellType::ParameterName, CellType::Text],
         cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
@@ -577,7 +577,7 @@ fn build_functional_classes_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
 
     Some(DetailRow {
         cells: vec!["Functional Classes".to_owned(), fcs.len().to_string()],
-        cell_types: vec![CellType::Text, CellType::Text],
+        cell_types: vec![CellType::ParameterName, CellType::Text],
         cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
@@ -605,7 +605,7 @@ fn build_neg_responses_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
 
     Some(DetailRow {
         cells: vec!["Neg-Responses".to_owned(), neg_count.to_string()],
-        cell_types: vec![CellType::Text, CellType::Text],
+        cell_types: vec![CellType::ParameterName, CellType::Text],
         cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
@@ -633,7 +633,7 @@ fn build_pos_responses_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
 
     Some(DetailRow {
         cells: vec!["Pos-Responses".to_owned(), pos_count.to_string()],
-        cell_types: vec![CellType::Text, CellType::Text],
+        cell_types: vec![CellType::ParameterName, CellType::Text],
         cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
@@ -657,7 +657,7 @@ fn build_requests_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
 
     Some(DetailRow {
         cells: vec!["Requests".to_owned(), request_count.to_string()],
-        cell_types: vec![CellType::Text, CellType::Text],
+        cell_types: vec![CellType::ParameterName, CellType::Text],
         cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
@@ -676,7 +676,7 @@ fn build_sdgs_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
 
     Some(DetailRow {
         cells: vec!["SDGs".to_owned(), count.to_string()],
-        cell_types: vec![CellType::Text, CellType::Text],
+        cell_types: vec![CellType::ParameterName, CellType::Text],
         cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
@@ -693,8 +693,8 @@ fn build_state_charts_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
     }
 
     Some(DetailRow {
-        cells: vec!["State-Charts".to_owned(), charts.len().to_string()],
-        cell_types: vec![CellType::Text, CellType::Text],
+        cells: vec!["State Charts".to_owned(), charts.len().to_string()],
+        cell_types: vec![CellType::ParameterName, CellType::Text],
         cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,

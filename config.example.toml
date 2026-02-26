@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Alexander Mohr
+#
+# mdd-ui color theme configuration
+#
+# Copy this file to:
+#   Linux:  $XDG_CONFIG_HOME/mdd-ui/config.toml  (usually ~/.config/mdd-ui/config.toml)
+#   macOS:  ~/Library/Application Support/mdd-ui/config.toml
+#   Windows: %APPDATA%\mdd-ui\config.toml
+#
+# All fields are optional — omitted values use the defaults shown below.
+#
+# Supported color formats:
+#   Named:      "red", "blue", "darkgray", "lightcyan", etc.
+#   Hex:        "#ff00ff" or "ff00ff"
+#   ANSI index: "123" (0–255)
+
+[colors.tree]
+container = "blue"             # Container / parent nodes (bold)
+section_header = "yellow"      # Section headers, parent-refs, DOP nodes (bold)
+inherited_service = "darkgray" # Inherited / parent-ref service nodes
+default_node = "white"         # All other tree nodes
+
+[colors.ui]
+border_focused = "cyan"       # Border of the focused pane
+border_unfocused = "darkgray" # Border of unfocused panes
+cursor_fg = "white"           # Foreground of the selected row
+cursor_bg = "darkgray"        # Background of the selected row
+breadcrumb_fg = "cyan"        # Breadcrumb text
+breadcrumb_bg = "black"       # Breadcrumb background
+status_fg = "gray"            # Status-bar text
+separator = "darkgray"        # Separator lines (│)
+
+[colors.table]
+header = "yellow"            # Table column headers (bold, underlined)
+cell = "white"               # Default cell text
+jump_cell = "blue"           # Clickable / jump-source cells
+tab_active_fg = "none"       # Active tab foreground
+tab_active_bg = "cyan"       # Active tab background
+tab_inactive_fg = "white"    # Inactive tab foreground
+tab_inactive_bg = "darkgray" # Inactive tab background
+
+[colors.popup]
+help_border = "cyan"     # Help popup border
+help_text = "white"      # Help popup text
+detail_border = "yellow" # Detail popup border
+detail_bg = "black"      # Detail popup background
+detail_text = "white"    # Detail popup text

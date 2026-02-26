@@ -88,7 +88,7 @@ impl App {
     }
 
     /// Handle a key press in normal (non-search) mode.
-    pub(super) fn handle_normal_key(&mut self, code: KeyCode, ctrl: bool, shift: bool) -> Action {
+    pub(super) fn handle_normal_key(&mut self, code: KeyCode, ctrl: bool) -> Action {
         // Early return for help popup
         if self.focus_state == FocusState::HelpPopup {
             if matches!(code, KeyCode::Esc | KeyCode::Char('?')) {
@@ -114,20 +114,11 @@ impl App {
         }
 
         match code {
-            KeyCode::Char('q') | KeyCode::Esc => return Action::Quit,
+            KeyCode::Char('Q') | KeyCode::Esc => return Action::Quit,
             KeyCode::Char('c') if ctrl => return Action::Quit,
 
             KeyCode::Backspace => {
-                // Navigate in tree (when not in search mode and not in detail pane)
-                if self.focus_state != FocusState::Detail {
-                    if shift {
-                        // Shift+Backspace: Navigate up one layer in hierarchy
-                        self.navigate_up_one_layer();
-                    } else {
-                        // Backspace: Jump to last element in history
-                        self.navigate_to_previous_in_history();
-                    }
-                }
+                self.navigate_to_previous_in_history();
             }
 
             KeyCode::Tab => {
@@ -149,8 +140,9 @@ impl App {
                 self.tree_width_percentage = (self.tree_width_percentage.saturating_sub(5)).max(20);
             }
 
+            // Arrow keys and uppercase vim keys navigate in all modes
             KeyCode::Up
-            | KeyCode::Char('K' | 'k' | 'J' | 'j' | 'H' | 'h' | 'L' | 'l')
+            | KeyCode::Char('K' | 'J' | 'H' | 'L')
             | KeyCode::Down
             | KeyCode::PageUp
             | KeyCode::PageDown
@@ -158,6 +150,11 @@ impl App {
             | KeyCode::End
             | KeyCode::Left
             | KeyCode::Right => {
+                self.handle_navigation_key(code);
+            }
+            // Lowercase vim keys navigate only when NOT in detail pane
+            // (in detail pane they go to type-to-jump)
+            KeyCode::Char('k' | 'j' | 'h' | 'l') if self.focus_state != FocusState::Detail => {
                 self.handle_navigation_key(code);
             }
             KeyCode::Enter => {
@@ -229,11 +226,18 @@ impl App {
                 self.focus_state = FocusState::HelpPopup;
             }
 
-            // Type-to-jump: alphanumeric keys jump to matching row when detail pane is focused
-            KeyCode::Char(c) if (self.focus_state == FocusState::Detail) && c.is_alphanumeric() => {
+            // Type-to-jump: alphanumeric keys jump to matching row in detail pane
+            KeyCode::Char(c) if self.focus_state == FocusState::Detail && c.is_alphanumeric() => {
                 self.jump_buffer.push(c.to_ascii_lowercase());
                 self.jump_buffer_time = Some(std::time::Instant::now());
                 self.jump_to_matching_row();
+            }
+
+            // Type-to-jump: alphanumeric keys jump to matching tree node
+            KeyCode::Char(c) if self.focus_state != FocusState::Detail && c.is_alphanumeric() => {
+                self.jump_buffer.push(c.to_ascii_lowercase());
+                self.jump_buffer_time = Some(std::time::Instant::now());
+                self.jump_to_matching_tree_node();
             }
 
             _ => {}

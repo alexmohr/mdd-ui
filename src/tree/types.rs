@@ -110,7 +110,7 @@ impl ChildElementType {
             ChildElementType::PosResponses => "Pos-Responses",
             ChildElementType::Requests => "Requests",
             ChildElementType::SDGs => "SDGs",
-            ChildElementType::StateCharts => "State-Charts",
+            ChildElementType::StateCharts => "State Charts",
         }
     }
 

@@ -6,8 +6,8 @@ use cda_database::datatypes::DiagLayer;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType, DetailSectionData,
-        DetailSectionType, NodeType,
+        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
+        DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -20,11 +20,15 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
         return;
     }
 
-    b.push(
+    // Build overview table for the section header
+    let overview = build_state_charts_overview_table(layer);
+
+    b.push_details_structured(
         depth,
         format!("State Charts ({})", charts.len()),
         false,
         true,
+        overview,
         NodeType::SectionHeader,
     );
 
@@ -164,4 +168,60 @@ fn build_states_section(mut states: Vec<DetailRow>) -> DetailSectionData {
             }
         },
     }
+}
+
+/// Build an overview table listing all state chart short names for the section header
+fn build_state_charts_overview_table(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
+    let Some(charts) = layer.state_charts() else {
+        return vec![];
+    };
+
+    let header = DetailRow::header(
+        vec![
+            "Name".to_owned(),
+            "States".to_owned(),
+            "Transitions".to_owned(),
+        ],
+        vec![CellType::Text, CellType::Text, CellType::Text],
+    );
+
+    let mut sorted_charts: Vec<_> = charts.iter().collect();
+    sorted_charts.sort_by_cached_key(|chart| chart.short_name().unwrap_or("").to_lowercase());
+
+    let rows: Vec<DetailRow> = sorted_charts
+        .iter()
+        .map(|chart| {
+            let name = chart.short_name().unwrap_or("unnamed").to_owned();
+            let state_count = chart.states().map_or(0, |s| s.len());
+            let transition_count = chart.state_transitions().map_or(0, |t| t.len());
+            DetailRow::with_jump_targets(
+                vec![name, state_count.to_string(), transition_count.to_string()],
+                vec![
+                    CellType::ParameterName,
+                    CellType::NumericValue,
+                    CellType::NumericValue,
+                ],
+                vec![Some(CellJumpTarget::TreeNodeByName), None, None],
+                0,
+            )
+        })
+        .collect();
+
+    vec![
+        DetailSectionData::new(
+            "State Charts Overview".to_owned(),
+            DetailContent::Table {
+                header,
+                rows,
+                constraints: vec![
+                    ColumnConstraint::Percentage(60),
+                    ColumnConstraint::Percentage(20),
+                    ColumnConstraint::Percentage(20),
+                ],
+                use_row_selection: true,
+            },
+            false,
+        )
+        .with_type(DetailSectionType::Overview),
+    ]
 }

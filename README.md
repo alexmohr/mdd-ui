@@ -10,7 +10,7 @@ A terminal-based user interface for browsing and exploring MDD (Marvelous Diagno
 **DISCLAIMER**
 This tool is 99% vibe coded, so manually editing stuff _might_ be hard.
 This project is in early development and may contain bugs or incomplete features.
-Use at your own risk. 
+Use at your own risk.
 Contributions _are_ welcome but things still moved around _a lot_ so I would recommend opening an issue before starting work on something.
 
 ## Features
@@ -22,8 +22,10 @@ Contributions _are_ welcome but things still moved around _a lot_ so I would rec
 - **Multi-Tab Detail Panes**: View comprehensive information with table-based formatting across multiple tabs
 - **Multi-Section Views**: Separate tabs for Request, Positive Response, and Negative Response with independent scrolling
 - **Advanced Search**: Hierarchical search stack system with scope filtering (All/Variants/FunctionalGroups/EcuSharedData/Services/DiagComms/Requests/Responses)
-- **Keyboard-First**: Vim-style navigation (h/j/k/l) with full keyboard control
+- **Keyboard-First**: Vim-style navigation (h/j/k/l in tree, Shift+H/J/K/L in detail) with full keyboard control
+- **Type-to-Jump**: Quickly jump to tree nodes by typing matching text
 - **Mouse Support**: Full mouse interaction including click-to-select, scrolling, and double-click to expand/show details
+- **Configurable Colors**: Customize the entire color scheme via a TOML configuration file
 
 ### 📁 Database Structure Support
 The tool provides full navigation and detailed views for:
@@ -164,6 +166,24 @@ Blue-colored cells indicate navigable references. Press Enter or double-click to
 - **Mouse Scroll**: Scroll wheel support for both tree and detail panes
 - **Toggle Mouse Support**: Press `m` to enable/disable mouse input
 
+## Configuration
+
+The color scheme is fully configurable via a TOML file. On startup, `mdd-ui` looks for a config file at the platform-specific location (or use `--theme` to specify a custom path):
+
+| Platform | Path |
+|----------|------|
+| Linux | `$XDG_CONFIG_HOME/mdd-ui/config.toml` (usually `~/.config/mdd-ui/config.toml`) |
+| macOS | `~/Library/Application Support/mdd-ui/config.toml` |
+
+If the file does not exist, built-in defaults are used. All fields are optional — you only need to specify the colors you want to change.
+
+See [`config.example.toml`](config.example.toml) for the full list of available settings with their default values.
+
+Colors can be specified as:
+- **Named colors**: `red`, `blue`, `cyan`, `darkgray`, `lightgreen`, etc.
+- **Hex RGB**: `#ff00ff` or `ff00ff`
+- **ANSI 256-color index**: `123` (0–255)
+
 ## Installation
 
 ### Prerequisites
@@ -184,10 +204,19 @@ The binary will be available at `target/release/mdd-ui`.
 mdd-ui <path-to-mdd-database>
 ```
 
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--theme <path>` | Path to a custom theme configuration file (TOML format) |
+
 ### Example
 ```bash
 # Load and browse an MDD database
 mdd-ui /path/to/diagnostic.mdd
+
+# Load with a custom theme
+mdd-ui --theme ~/my-theme.toml /path/to/diagnostic.mdd
 
 # Navigate with keyboard or mouse
 # Press ? for help popup with all controls
@@ -210,15 +239,16 @@ mdd-ui /path/to/diagnostic.mdd
 | `Home` | Jump to first node |
 | `End` | Jump to last node |
 | `PageUp` / `PageDown` | Page through nodes |
+| `a-z`, `0-9` | Type-to-jump: jump to next tree node matching typed text |
 
 #### Detail Pane Navigation (When Focused)
 | Key | Action |
 |-----|--------|
-| `j` / `Down` | Move to next row |
-| `k` / `Up` | Move to previous row |
-| `h` / `Left` | Switch to previous tab |
-| `l` / `Right` | Switch to next tab |
-| `s` | Sort by focused column (toggle direction) |
+| `Shift+J` / `Down` | Move to next row |
+| `Shift+K` / `Up` | Move to previous row |
+| `Shift+H` / `Left` | Switch to previous tab |
+| `Shift+L` / `Right` | Switch to next tab |
+| `Shift+S` | Sort by focused column (toggle direction) |
 | `Enter` | Navigate to referenced element (blue cells: DOP, parameter, service, etc.) |
 | `Home` | Jump to first row in section |
 | `End` | Jump to last row in section |
@@ -241,12 +271,12 @@ mdd-ui /path/to/diagnostic.mdd
 | Key | Action |
 |-----|--------|
 | `Tab` | Toggle focus between tree and detail pane |
-| `Backspace` | Navigate back in history (or pop last search if in search mode) |
+| `Backspace` | Navigate back in history |
 | `+` / `=` | Increase tree pane width (max 80%) |
 | `-` / `_` | Decrease tree pane width (min 20%) |
 | `m` | Toggle mouse support on/off |
 | `?` | Show help popup with keyboard shortcuts |
-| `q` / `Esc` | Quit (or close popup/search mode if open) |
+| `Q` / `Esc` | Quit (or close popup/search mode if open) |
 | `Ctrl+C` | Force quit |
 
 #### Mouse Controls (when enabled)
@@ -373,6 +403,9 @@ When a node is selected, the detail pane displays comprehensive information in a
 - **cda-interfaces**: MDD interface definitions (from eclipse-opensovd)
 - **clap**: Command-line argument parsing
 - **anyhow**: Error handling
+- **serde**: Configuration deserialization
+- **toml**: TOML configuration parsing
+- **dirs**: Platform-specific configuration directory lookup
 
 ### Architecture
 - **Event-driven**: Responsive keyboard and mouse input handling with 10ms polling
@@ -381,8 +414,8 @@ When a node is selected, the detail pane displays comprehensive information in a
 - **Flexible**: Table-based layout adapts to terminal size with dynamic column constraints
 - **Interactive**: Full mouse support with click, double-click, and scroll detection
 - **Hierarchical Search**: Stack-based search system for complex filtering with scope awareness
-- **Customizable**: Resizable columns (per-section), adjustable pane widths (20-80%), and sortable tables
-- **Navigation History**: Internal tracking of visited nodes for potential back/forward navigation
+- **Customizable**: Resizable columns (per-section), adjustable pane widths (20-80%), sortable tables, and configurable color theme via TOML
+- **Navigation History**: Internal tracking of visited nodes with expand/collapse state restoration for back navigation
 - **Cross-Reference Metadata**: Per-cell jump targets encode navigation intent (parameter ID, DOP name, tree node name, container name)
 - **Multi-Tab State**: Independent scroll and cursor state per detail tab/section
 

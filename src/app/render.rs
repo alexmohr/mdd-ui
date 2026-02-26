@@ -15,20 +15,34 @@ use ratatui::{
 };
 
 use super::{App, FocusState, SortDirection};
-use crate::tree::{CellType, DetailContent, DetailRow, DetailSectionData, NodeType, TreeNode};
+use crate::{
+    app::config::ResolvedTheme,
+    tree::{CellType, DetailContent, DetailRow, DetailSectionData, NodeType, TreeNode},
+};
 
 // -----------------------------------------------------------------------
-// Colour theme
+// Colour theme helpers (use the configurable ResolvedTheme)
 // -----------------------------------------------------------------------
 
-fn node_style(node: &TreeNode) -> Style {
+/// Describes how a particular cell should be highlighted.
+#[derive(Clone, Copy)]
+enum CellHighlight {
+    /// The cell is in the focused column of the selected row.
+    FocusedCell,
+    /// The cell is in the selected row (row selection mode).
+    SelectedRow,
+    /// Default state — not selected.
+    Normal,
+}
+
+fn node_style(node: &TreeNode, theme: &ResolvedTheme) -> Style {
     match node.node_type {
-        NodeType::Container => style(Color::Blue, true),
+        NodeType::Container => styled(theme.tree_container, true),
         NodeType::SectionHeader | NodeType::ParentRefs | NodeType::DOP => {
-            style(Color::Yellow, true)
+            styled(theme.tree_section_header, true)
         }
         // Gray for inherited services
-        NodeType::ParentRefService => Style::default().fg(Color::DarkGray),
+        NodeType::ParentRefService => Style::default().fg(theme.tree_inherited_service),
         NodeType::Service
         | NodeType::Request
         | NodeType::PosResponse
@@ -36,11 +50,11 @@ fn node_style(node: &TreeNode) -> Style {
         | NodeType::FunctionalClass
         | NodeType::Job
         | NodeType::SDG
-        | NodeType::Default => Style::default().fg(Color::White),
+        | NodeType::Default => Style::default().fg(theme.tree_default_node),
     }
 }
 
-fn style(fg: Color, bold: bool) -> Style {
+fn styled(fg: Color, bold: bool) -> Style {
     let s = Style::default().fg(fg);
     if bold {
         s.add_modifier(Modifier::BOLD)
@@ -49,19 +63,19 @@ fn style(fg: Color, bold: bool) -> Style {
     }
 }
 
-fn border(focused: bool) -> Style {
+fn border_style(focused: bool, theme: &ResolvedTheme) -> Style {
     Style::default().fg(if focused {
-        Color::Cyan
+        theme.border_focused
     } else {
-        Color::DarkGray
+        theme.border_unfocused
     })
 }
 
-fn row_style(node: &TreeNode, is_cursor: bool) -> Style {
+fn row_style(node: &TreeNode, is_cursor: bool, theme: &ResolvedTheme) -> Style {
     if is_cursor {
-        Style::default().bg(Color::DarkGray).fg(Color::White)
+        Style::default().bg(theme.cursor_bg).fg(theme.cursor_fg)
     } else {
-        node_style(node)
+        node_style(node, theme)
     }
 }
 
@@ -105,7 +119,10 @@ impl App {
 
         let tree_block = Block::default()
             .borders(Borders::ALL)
-            .border_style(border(self.focus_state != FocusState::Detail))
+            .border_style(border_style(
+                self.focus_state != FocusState::Detail,
+                &self.theme,
+            ))
             .title(format!(" {ecu_name} "));
 
         let tree_inner = tree_block.inner(area);
@@ -123,7 +140,7 @@ impl App {
             .take(viewport_height)
             .filter_map(|(vi, &node_idx)| {
                 let node = self.all_nodes.get(node_idx)?;
-                let row_style = row_style(node, vi == self.cursor);
+                let row_style = row_style(node, vi == self.cursor, &self.theme);
 
                 let indent = "  ".repeat(node.depth);
                 let icon = expand_icon(node);
@@ -150,7 +167,10 @@ impl App {
         let Some(&node_idx) = self.visible.get(self.cursor) else {
             let block = Block::default()
                 .borders(Borders::ALL)
-                .border_style(border(self.focus_state == FocusState::Detail))
+                .border_style(border_style(
+                    self.focus_state == FocusState::Detail,
+                    &self.theme,
+                ))
                 .title(" Details ");
             frame.render_widget(block, area);
             return;
@@ -166,7 +186,10 @@ impl App {
             // Draw a default/dummy pane with helpful information
             let block = Block::default()
                 .borders(Borders::ALL)
-                .border_style(border(self.focus_state == FocusState::Detail))
+                .border_style(border_style(
+                    self.focus_state == FocusState::Detail,
+                    &self.theme,
+                ))
                 .title(" Details ");
 
             let inner = block.inner(area);
@@ -183,7 +206,7 @@ impl App {
             ];
 
             let paragraph = Paragraph::new(help_message.join("\n"))
-                .style(Style::default().fg(Color::DarkGray))
+                .style(Style::default().fg(self.theme.border_unfocused))
                 .alignment(ratatui::layout::Alignment::Center)
                 .wrap(ratatui::widgets::Wrap { trim: false });
 
@@ -262,8 +285,11 @@ impl App {
             .collect::<Vec<_>>()
             .join(" > ");
 
-        let paragraph = Paragraph::new(breadcrumb_text)
-            .style(Style::default().fg(Color::Cyan).bg(Color::Black));
+        let paragraph = Paragraph::new(breadcrumb_text).style(
+            Style::default()
+                .fg(self.theme.breadcrumb_fg)
+                .bg(self.theme.breadcrumb_bg),
+        );
         frame.render_widget(paragraph, area);
     }
 
@@ -289,12 +315,14 @@ impl App {
                     current_search_info,
                     self.search_scope
                 ),
-                Style::default().fg(Color::Yellow).bg(Color::DarkGray),
+                Style::default()
+                    .fg(self.theme.table_header)
+                    .bg(self.theme.cursor_bg),
             )
         } else if !self.status.is_empty() {
             (
                 format!(" {}", self.status),
-                Style::default().fg(Color::Gray),
+                Style::default().fg(self.theme.status_fg),
             )
         } else {
             let focus = if self.focus_state == FocusState::Detail {
@@ -324,16 +352,15 @@ impl App {
                     self.search_scope.status_indicator(),
                     search_info,
                 ),
-                Style::default().fg(Color::Gray),
+                Style::default().fg(self.theme.status_fg),
             )
         };
         frame.render_widget(Paragraph::new(text).style(st), area);
     }
 
-    pub(super) fn draw_help_popup(frame: &mut Frame) {
+    pub(super) fn draw_help_popup(&self, frame: &mut Frame) {
         use ratatui::{
             layout::{Alignment, Rect},
-            style::{Color, Style},
             widgets::{Block, Borders, Clear, Paragraph, Wrap},
         };
 
@@ -358,7 +385,7 @@ impl App {
         let block = Block::default()
             .title(" Help - Press ? or Esc to close ")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan));
+            .border_style(Style::default().fg(self.theme.help_border));
 
         let inner_area = block.inner(popup_rect);
         frame.render_widget(block, popup_rect);
@@ -373,7 +400,6 @@ impl App {
             "  Space           Toggle expand/collapse current node",
             "  Tab             Switch focus between tree and detail pane",
             "  Backspace       Jump to last element in navigation history",
-            "  Shift+Backspace Navigate up one layer (parent node)",
             "",
             "TREE OPERATIONS",
             "  e               Expand all nodes",
@@ -400,16 +426,19 @@ impl App {
             "  < / >              Scroll table left/right",
             "  a-z, 0-9           Type-to-jump to matching row (resets after 1s)",
             "",
+            "TYPE-TO-JUMP (tree)",
+            "  a-z, 0-9           Jump to tree node matching typed text",
+            "",
             "WINDOW",
             "  + / -           Increase/decrease tree pane width",
             "  Mouse drag      Drag the divider between tree and detail to resize",
             "  m               Toggle mouse mode (enable/disable terminal text selection)",
             "  ?               Show this help",
-            "  q or Esc        Quit application",
+            "  Q or Esc        Quit application",
         ];
 
         let help_paragraph = Paragraph::new(help_text.join("\n"))
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.help_text))
             .wrap(Wrap { trim: false })
             .alignment(Alignment::Left);
 
@@ -419,7 +448,6 @@ impl App {
     pub(super) fn draw_detail_popup(&self, frame: &mut Frame) {
         use ratatui::{
             layout::{Alignment, Rect},
-            style::{Color, Style},
             widgets::{Block, Borders, Clear, Paragraph, Wrap},
         };
 
@@ -447,11 +475,11 @@ impl App {
         // Create the popup block
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow))
+            .border_style(Style::default().fg(self.theme.detail_border))
             .title(format!(" {} ", popup_data.title))
             .title_alignment(Alignment::Center)
             .title_bottom(" Press Esc to close ")
-            .style(Style::default().bg(Color::Black));
+            .style(Style::default().bg(self.theme.detail_bg));
 
         let inner = block.inner(popup_rect);
         frame.render_widget(block, popup_rect);
@@ -459,7 +487,7 @@ impl App {
         // Render the content
         let content_text = popup_data.content.join("\n");
         let paragraph = Paragraph::new(content_text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.detail_text))
             .wrap(Wrap { trim: true });
 
         frame.render_widget(paragraph, inner);
@@ -483,7 +511,10 @@ impl App {
         let detail_title = format!(" {node_name} ");
         let outer_block = Block::default()
             .borders(Borders::ALL)
-            .border_style(border(self.focus_state == FocusState::Detail))
+            .border_style(border_style(
+                self.focus_state == FocusState::Detail,
+                &self.theme,
+            ))
             .title(detail_title);
         let outer_inner = outer_block.inner(area);
         frame.render_widget(outer_block, area);
@@ -503,7 +534,7 @@ impl App {
         if let (Some(hdr), Some(&area)) =
             (header_section, header_height.and_then(|_| chunks.first()))
         {
-            Self::render_header_section(frame, area, hdr);
+            self.render_header_section(frame, area, hdr);
         }
 
         // Render content area
@@ -626,10 +657,10 @@ impl App {
     }
 
     /// Render header section
-    fn render_header_section(frame: &mut Frame, area: Rect, header: &DetailSectionData) {
+    fn render_header_section(&self, frame: &mut Frame, area: Rect, header: &DetailSectionData) {
         if let DetailContent::PlainText(lines) = &header.content {
             let text = lines.join("\n");
-            let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+            let para = Paragraph::new(text).style(Style::default().fg(self.theme.table_cell));
             frame.render_widget(para, area);
         }
     }
@@ -657,7 +688,10 @@ impl App {
         // Content block with borders
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(border(self.focus_state == FocusState::Detail))
+            .border_style(border_style(
+                self.focus_state == FocusState::Detail,
+                &self.theme,
+            ))
             .title_bottom(help_text);
 
         let block_inner = block.inner(content_area);
@@ -714,7 +748,7 @@ impl App {
         self.tab_titles.clone_from(&tab_titles);
 
         // Render tabs
-        Self::render_wrapped_tabs(frame, tab_area, &tab_titles, self.selected_tab);
+        self.render_wrapped_tabs(frame, tab_area, &tab_titles, self.selected_tab);
 
         content_inner
     }
@@ -730,7 +764,7 @@ impl App {
         match &section.content {
             DetailContent::PlainText(lines) => {
                 let text = lines.join("\n");
-                let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+                let para = Paragraph::new(text).style(Style::default().fg(self.theme.table_cell));
                 frame.render_widget(para, inner);
             }
             DetailContent::Table {
@@ -793,7 +827,8 @@ impl App {
             match &subsection.content {
                 crate::tree::DetailContent::PlainText(lines) => {
                     let text = lines.join("\n");
-                    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+                    let para =
+                        Paragraph::new(text).style(Style::default().fg(self.theme.table_cell));
                     frame.render_widget(para, chunk);
                 }
                 crate::tree::DetailContent::Table {
@@ -1070,7 +1105,7 @@ impl App {
         total_table_width: u16,
         section_idx: usize,
     ) {
-        let (vis_constraints, vis_header, vis_rows, _first_vis_col) = Self::apply_horizontal_scroll(
+        let (vis_constraints, vis_header, vis_rows, _first_vis_col) = self.apply_horizontal_scroll(
             column_widths,
             column_spacing,
             h_scroll,
@@ -1106,6 +1141,7 @@ impl App {
     /// Apply horizontal scroll to determine visible columns and build clipped constraints/rows.
     #[allow(clippy::too_many_arguments)]
     fn apply_horizontal_scroll(
+        &self,
         column_widths: &[u16],
         column_spacing: u16,
         h_scroll: u16,
@@ -1153,7 +1189,7 @@ impl App {
             vis_widths.iter().map(|&w| Constraint::Length(w)).collect();
 
         // Build header
-        let header_row = Self::build_scrolled_header_row(header, &vis_col_indices, sort_state);
+        let header_row = self.build_scrolled_header_row(header, &vis_col_indices, sort_state);
 
         // Build data rows by extracting visible columns
         let data_rows: Vec<Row<'static>> = visible_rows.to_vec();
@@ -1169,6 +1205,7 @@ impl App {
     /// Build a header row for horizontally scrolled view showing only visible columns
     #[allow(clippy::too_many_arguments)]
     fn build_scrolled_header_row(
+        &self,
         header: &DetailRow,
         vis_col_indices: &[usize],
         sort_state: Option<super::TableSortState>,
@@ -1195,7 +1232,7 @@ impl App {
                 };
 
                 let style = Style::default()
-                    .fg(Color::Yellow)
+                    .fg(self.theme.table_header)
                     .add_modifier(Modifier::BOLD);
                 Cell::from(Text::from(text)).style(style)
             })
@@ -1229,6 +1266,8 @@ impl App {
                 let is_selected_row =
                     (self.focus_state == FocusState::Detail) && absolute_row_idx == cursor_pos;
 
+                let is_child_element =
+                    matches!(row_data.row_type, crate::tree::DetailRowType::ChildElement);
                 let mut cells: Vec<Cell> = row_data
                     .cells
                     .iter()
@@ -1246,12 +1285,20 @@ impl App {
                             .copied()
                             .unwrap_or(CellType::Text);
 
-                        let style = Self::cell_style(
-                            is_selected_row,
-                            use_row_selection,
-                            col_idx == focused_col,
-                            cell_type,
-                        );
+                        let has_jump = row_data
+                            .cell_jump_targets
+                            .get(col_idx)
+                            .is_some_and(Option::is_some)
+                            || is_child_element;
+
+                        let highlight = if is_selected_row && col_idx == focused_col {
+                            CellHighlight::FocusedCell
+                        } else if is_selected_row && use_row_selection {
+                            CellHighlight::SelectedRow
+                        } else {
+                            CellHighlight::Normal
+                        };
+                        let style = self.cell_style(highlight, cell_type, has_jump);
 
                         Cell::from(text).style(style)
                     })
@@ -1260,42 +1307,37 @@ impl App {
                 while cells.len() < max_columns {
                     cells.push(Cell::from(""));
                 }
-                Row::new(cells)
+                let row = Row::new(cells);
+                // Apply background to the entire row (including column gaps)
+                // so the selected row has a uniform highlight
+                if is_selected_row && use_row_selection {
+                    row.style(Style::default().bg(self.theme.cursor_bg))
+                } else {
+                    row
+                }
             })
             .collect()
     }
 
-    fn cell_style(
-        is_selected_row: bool,
-        use_row_selection: bool,
-        is_focused_col: bool,
-        cell_type: CellType,
-    ) -> Style {
-        if is_selected_row {
-            if is_focused_col {
-                // Focused cell within selected row: highlighted distinctly
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
-            } else if use_row_selection {
-                // Row selection: entire row highlighted
-                Style::default()
-                    .fg(Color::White)
-                    .bg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Self::jump_target_style(cell_type)
-            }
-        } else {
-            Self::jump_target_style(cell_type)
+    fn cell_style(&self, highlight: CellHighlight, cell_type: CellType, has_jump: bool) -> Style {
+        match highlight {
+            CellHighlight::FocusedCell => Style::default()
+                .fg(self.theme.focused_cell_fg)
+                .bg(self.theme.focused_cell_bg)
+                .add_modifier(Modifier::BOLD),
+            CellHighlight::SelectedRow => Style::default()
+                .fg(self.theme.table_cell)
+                .bg(self.theme.cursor_bg)
+                .add_modifier(Modifier::BOLD),
+            CellHighlight::Normal => self.jump_target_style(cell_type, has_jump),
         }
     }
 
-    fn jump_target_style(cell_type: CellType) -> Style {
-        match cell_type {
-            CellType::DopReference | CellType::ParameterName => Style::default().fg(Color::Blue),
-            _ => Style::default().fg(Color::White),
+    fn jump_target_style(&self, cell_type: CellType, has_jump: bool) -> Style {
+        if has_jump && matches!(cell_type, CellType::DopReference | CellType::ParameterName) {
+            Style::default().fg(self.theme.table_jump_cell)
+        } else {
+            Style::default().fg(self.theme.table_cell)
         }
     }
 
@@ -1329,7 +1371,7 @@ impl App {
                 };
 
                 let style = Style::default()
-                    .fg(Color::Yellow)
+                    .fg(self.theme.table_header)
                     .add_modifier(Modifier::BOLD);
                 Cell::from(Text::from(text)).style(style)
             })
@@ -1451,7 +1493,13 @@ impl App {
     }
 
     /// Render tabs with wrapping support for narrow windows
-    fn render_wrapped_tabs(frame: &mut Frame, area: Rect, tab_titles: &[String], selected: usize) {
+    fn render_wrapped_tabs(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        tab_titles: &[String],
+        selected: usize,
+    ) {
         // No block needed - tabs are rendered directly in the provided area
         // Calculate how to distribute tabs across lines
         let available_width = area.width as usize;
@@ -1505,15 +1553,17 @@ impl App {
                 let is_selected = *tab_idx == selected;
                 let style = if is_selected {
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(self.theme.tab_active_bg)
                         .add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::Gray)
+                    Style::default()
+                        .fg(self.theme.tab_inactive_fg)
+                        .bg(self.theme.tab_inactive_bg)
                 };
 
                 // Add separator before tab (except first on line)
                 if i > 0 {
-                    let sep_span = Span::styled("│", Style::default().fg(Color::DarkGray));
+                    let sep_span = Span::styled("│", Style::default().fg(self.theme.separator));
                     frame.render_widget(
                         Paragraph::new(Line::from(sep_span)),
                         Rect {
@@ -1554,7 +1604,7 @@ impl App {
         if num_tab_lines > 0 && area.height > num_tab_lines_u16 {
             let separator_y = area.y.saturating_add(num_tab_lines_u16);
             let separator_line = "─".repeat(available_width);
-            let sep_style = Style::default().fg(Color::DarkGray);
+            let sep_style = Style::default().fg(self.theme.separator);
 
             frame.render_widget(
                 Paragraph::new(Line::from(Span::styled(separator_line, sep_style))),

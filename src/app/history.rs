@@ -3,20 +3,92 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use super::{App, FocusState};
+use super::{App, FocusState, HistoryEntry};
 
 impl App {
-    /// Add current node to navigation history (stores `all_nodes` index for stability)
+    /// Build the path from root to the given node index as a list of
+    /// `(depth, text)` pairs. Walking backwards from `node_idx`, we collect
+    /// each ancestor (first node at each successively lower depth).
+    fn build_node_path(&self, node_idx: usize) -> Vec<(usize, String)> {
+        let Some(target) = self.all_nodes.get(node_idx) else {
+            return vec![];
+        };
+
+        let mut path = vec![(target.depth, target.text.clone())];
+        let mut current_depth = target.depth;
+
+        // Walk backwards to collect ancestors
+        for i in (0..node_idx).rev() {
+            if current_depth == 0 {
+                break;
+            }
+            let Some(node) = self.all_nodes.get(i) else {
+                continue;
+            };
+            if node.depth < current_depth {
+                path.push((node.depth, node.text.clone()));
+                current_depth = node.depth;
+            }
+        }
+
+        path.reverse();
+        path
+    }
+
+    /// Resolve a stored path back to a `node_idx` by walking the tree and
+    /// expanding ancestors as needed so the target becomes visible.
+    fn resolve_path(&mut self, path: &[(usize, String)]) -> Option<usize> {
+        // Walk through the path entries, ensuring each ancestor is expanded
+        let mut last_found_idx: Option<usize> = None;
+
+        for (target_depth, target_text) in path {
+            let search_start = last_found_idx.map_or(0, |i| i.saturating_add(1));
+
+            let found = self
+                .all_nodes
+                .iter()
+                .enumerate()
+                .skip(search_start)
+                .find(|(_, node)| node.depth == *target_depth && node.text == *target_text)
+                .map(|(i, _)| i);
+
+            let Some(idx) = found else {
+                // Path entry not found; return last match as best effort
+                return last_found_idx;
+            };
+
+            // Expand this node so subsequent children are visible
+            if let Some(node) = self.all_nodes.get_mut(idx)
+                && node.has_children
+            {
+                node.expanded = true;
+            }
+
+            last_found_idx = Some(idx);
+        }
+
+        // Rebuild visible list with the expanded ancestors
+        self.rebuild_visible();
+        last_found_idx
+    }
+
+    /// Add current node to navigation history, storing the full path for
+    /// robust lookup even after expand/collapse changes.
     pub(crate) fn push_to_history(&mut self) {
-        // Limit history size to prevent unbounded growth
         const MAX_HISTORY: usize = 100;
 
         let Some(&node_idx) = self.visible.get(self.cursor) else {
             return;
         };
 
+        let path = self.build_node_path(node_idx);
+
         // Don't store duplicate consecutive entries
-        if self.navigation_history.last() == Some(&node_idx) {
+        if self
+            .navigation_history
+            .last()
+            .is_some_and(|e| e.node_path == path)
+        {
             return;
         }
 
@@ -25,7 +97,12 @@ impl App {
             self.navigation_history.truncate(self.history_position);
         }
 
-        self.navigation_history.push(node_idx);
+        let entry = HistoryEntry {
+            node_idx,
+            node_path: path,
+        };
+
+        self.navigation_history.push(entry);
         self.history_position = self.navigation_history.len();
         if self.navigation_history.len() > MAX_HISTORY {
             self.navigation_history.remove(0);
@@ -35,7 +112,6 @@ impl App {
 
     /// Navigate to the previous element in navigation history
     pub(crate) fn navigate_to_previous_in_history(&mut self) {
-        // Need at least 2 elements (current + previous)
         if self.navigation_history.len() < 2 {
             "No previous element in history".clone_into(&mut self.status);
             return;
@@ -47,18 +123,34 @@ impl App {
         }
 
         self.history_position = self.history_position.saturating_sub(1);
-        let Some(&target_node_idx) = self
+        let Some(entry) = self
             .navigation_history
             .get(self.history_position.saturating_sub(1))
+            .cloned()
         else {
             "History access failed".clone_into(&mut self.status);
             return;
         };
 
-        // Ensure ancestors are expanded so the target node becomes visible
-        self.ensure_node_visible(target_node_idx);
+        // First try the stored node_idx (fast path — still correct if tree
+        // structure hasn't changed)
+        let target_node_idx = if self
+            .all_nodes
+            .get(entry.node_idx)
+            .is_some_and(|n| entry.node_path.last().is_some_and(|(_, t)| *t == n.text))
+        {
+            // Index still points to the same node; ensure it's visible
+            self.ensure_node_visible(entry.node_idx);
+            entry.node_idx
+        } else {
+            // Fall back to path-based resolution
+            let Some(idx) = self.resolve_path(&entry.node_path) else {
+                "Previous element no longer reachable".clone_into(&mut self.status);
+                return;
+            };
+            idx
+        };
 
-        // Find the target node in the (now-updated) visible list
         let Some(cursor_pos) = self.visible.iter().position(|&idx| idx == target_node_idx) else {
             "Previous element no longer reachable".clone_into(&mut self.status);
             return;
@@ -70,54 +162,6 @@ impl App {
         self.focus_state = FocusState::Tree;
         if let Some(node) = self.all_nodes.get(target_node_idx) {
             self.status = format!("Navigated to: {}", node.text);
-        }
-    }
-
-    /// Navigate up one level in hierarchy (parent node)
-    pub(crate) fn navigate_up_one_layer(&mut self) {
-        // Get the current node
-        if self.cursor >= self.visible.len() {
-            "No parent to navigate to".clone_into(&mut self.status);
-            return;
-        }
-
-        let Some(&node_idx) = self.visible.get(self.cursor) else {
-            return;
-        };
-        let Some(current_node) = self.all_nodes.get(node_idx) else {
-            return;
-        };
-        let current_depth = current_node.depth;
-
-        // If we're at the root level, can't go up
-        if current_depth == 0 {
-            "Already at root level".clone_into(&mut self.status);
-            return;
-        }
-
-        // Find parent by looking for previous node with lower depth
-        let mut found_parent = false;
-        for i in (0..node_idx).rev() {
-            if let Some(node_at_i) = self.all_nodes.get(i)
-                && node_at_i.depth < current_depth
-            {
-                // Found parent node, now find it in visible list
-                if let Some(visible_pos) = self.visible.iter().position(|&idx| idx == i) {
-                    self.cursor = visible_pos;
-                    self.reset_detail_state();
-                    self.scroll_offset = self.cursor.saturating_sub(5); // Center the view
-                    self.focus_state = FocusState::Tree;
-                    if let Some(parent_node) = self.all_nodes.get(i) {
-                        self.status = format!("Navigated up to: {}", parent_node.text);
-                    }
-                    found_parent = true;
-                }
-                break;
-            }
-        }
-
-        if !found_parent {
-            "Parent not visible in tree".clone_into(&mut self.status);
         }
     }
 }

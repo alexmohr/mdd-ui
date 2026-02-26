@@ -203,8 +203,8 @@ fn build_compu_internal_to_phys_section(
             header,
             rows,
             constraints: vec![
-                ColumnConstraint::Percentage(25),
-                ColumnConstraint::Percentage(25),
+                ColumnConstraint::Percentage(15),
+                ColumnConstraint::Percentage(15),
                 ColumnConstraint::Percentage(25),
                 ColumnConstraint::Percentage(25),
             ],
@@ -304,8 +304,8 @@ fn build_compu_phys_to_internal_section(
             header,
             rows,
             constraints: vec![
-                ColumnConstraint::Percentage(25),
-                ColumnConstraint::Percentage(25),
+                ColumnConstraint::Percentage(15),
+                ColumnConstraint::Percentage(15),
                 ColumnConstraint::Percentage(25),
                 ColumnConstraint::Percentage(25),
             ],

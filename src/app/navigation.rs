@@ -232,7 +232,9 @@ impl App {
                 self.navigate_to_dop(name);
             }
             CellJumpTarget::TreeNodeByName => {
-                let found_idx = self.all_nodes.iter().position(|n| n.text == cell_value);
+                let found_idx = self
+                    .find_in_hierarchy(|n| n.text == cell_value)
+                    .or_else(|| self.all_nodes.iter().position(|n| n.text == cell_value));
                 if let Some(idx) = found_idx {
                     self.navigate_to_node(idx);
                 } else {
@@ -718,9 +720,12 @@ impl App {
         };
 
         let found = self
-            .all_nodes
-            .iter()
-            .position(|n| n.node_type == target_node_type && n.text == service_name);
+            .find_in_hierarchy(|n| n.node_type == target_node_type && n.text == service_name)
+            .or_else(|| {
+                self.all_nodes
+                    .iter()
+                    .position(|n| n.node_type == target_node_type && n.text == service_name)
+            });
 
         match found {
             Some(idx) => self.navigate_to_node(idx),
@@ -735,9 +740,14 @@ impl App {
         self.focused_column.min(cell_types.len().saturating_sub(1))
     }
 
-    /// Navigate to a DOP node by name
+    /// Navigate to a DOP node by name.
+    /// Scopes the search to the current container's subtree first, then
+    /// walks up through parent ref containers before falling back to a
+    /// global search.
     fn navigate_to_dop(&mut self, dop_name: &str) {
-        let found_idx = self.all_nodes.iter().position(|node| node.text == dop_name);
+        let found_idx = self
+            .find_in_hierarchy(|node| node.text == dop_name)
+            .or_else(|| self.all_nodes.iter().position(|node| node.text == dop_name));
 
         match found_idx {
             Some(dop_idx) => {
@@ -802,6 +812,123 @@ impl App {
         self.all_nodes
             .iter()
             .position(|node| node.param_id == Some(param_id))
+    }
+
+    /// Find the containing depth-1 Container node for a given node index
+    /// by walking backwards from the node to its nearest Container ancestor.
+    fn find_current_container(&self, from_node_idx: usize) -> Option<usize> {
+        let from_node = self.all_nodes.get(from_node_idx)?;
+
+        // If already a depth-1 container, return it
+        if from_node.depth == 1 && matches!(from_node.node_type, NodeType::Container) {
+            return Some(from_node_idx);
+        }
+
+        // Walk backwards to find the nearest depth-1 Container ancestor
+        (0..from_node_idx).rev().find(|&i| {
+            self.all_nodes
+                .get(i)
+                .is_some_and(|n| n.depth == 1 && matches!(n.node_type, NodeType::Container))
+        })
+    }
+
+    /// Get the subtree range (`start_idx` inclusive, `end_idx` exclusive)
+    /// for a given node. The subtree includes the node itself and all
+    /// children with deeper depth.
+    fn subtree_range(&self, node_idx: usize) -> (usize, usize) {
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return (node_idx, node_idx);
+        };
+        let node_depth = node.depth;
+
+        let end = self
+            .all_nodes
+            .iter()
+            .enumerate()
+            .skip(node_idx.saturating_add(1))
+            .find(|(_, n)| n.depth <= node_depth)
+            .map_or(self.all_nodes.len(), |(i, _)| i);
+
+        (node_idx, end)
+    }
+
+    /// Search for a node within a subtree using a predicate.
+    fn find_in_subtree(
+        &self,
+        start: usize,
+        end: usize,
+        predicate: impl Fn(&TreeNode) -> bool,
+    ) -> Option<usize> {
+        self.all_nodes
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(end.saturating_sub(start))
+            .find(|(_, node)| predicate(node))
+            .map(|(idx, _)| idx)
+    }
+
+    /// Search for a node following the database hierarchy:
+    /// 1. Search within the current container's subtree
+    /// 2. Look for parent ref containers referenced by the current container
+    ///    and search within each
+    /// 3. Returns `None` if not found (caller should fall back to global search)
+    fn find_in_hierarchy(&self, predicate: impl Fn(&TreeNode) -> bool) -> Option<usize> {
+        let current_node_idx = self.visible.get(self.cursor).copied()?;
+        let container_idx = self.find_current_container(current_node_idx)?;
+
+        // 1. Search within current container's subtree
+        let (start, end) = self.subtree_range(container_idx);
+        if let Some(found) = self.find_in_subtree(start, end, &predicate) {
+            return Some(found);
+        }
+
+        // 2. Walk parent ref containers
+        // Find the "Parent Refs" child section of this container
+        let parent_refs_names: Vec<String> = self
+            .all_nodes
+            .iter()
+            .enumerate()
+            .skip(start.saturating_add(1))
+            .take(end.saturating_sub(start).saturating_sub(1))
+            .filter(|(_, n)| n.node_type == NodeType::ParentRefs)
+            .flat_map(|(pr_idx, pr_node)| {
+                // Collect the names of parent ref children (depth = pr_node.depth + 1)
+                let pr_depth = pr_node.depth;
+                self.all_nodes
+                    .iter()
+                    .skip(pr_idx.saturating_add(1))
+                    .take_while(move |n| n.depth > pr_depth)
+                    .filter(move |n| n.depth == pr_depth.saturating_add(1))
+                    .map(|n| {
+                        n.text
+                            .find(" [")
+                            .map_or(n.text.clone(), |idx| n.text[..idx].to_string())
+                    })
+            })
+            .collect();
+
+        for parent_name in &parent_refs_names {
+            // Find the container node for this parent ref
+            let parent_container_idx = self.all_nodes.iter().enumerate().find(|(_, n)| {
+                matches!(n.node_type, NodeType::Container) && {
+                    let name = n
+                        .text
+                        .find(" [")
+                        .map_or(n.text.as_str(), |idx| &n.text[..idx]);
+                    name == parent_name
+                }
+            });
+
+            if let Some((pc_idx, _)) = parent_container_idx {
+                let (pc_start, pc_end) = self.subtree_range(pc_idx);
+                if let Some(found) = self.find_in_subtree(pc_start, pc_end, &predicate) {
+                    return Some(found);
+                }
+            }
+        }
+
+        None
     }
 
     /// Navigate to a parent ref target when pressing Enter on a parent ref child
@@ -978,61 +1105,7 @@ impl App {
 
         // Search for the element in the tree based on type
         if element_type == "service" {
-            // Search for a Service or ParentRefService node with matching name
-            let mut found_service_idx: Option<usize> = None;
-
-            for (ni, n) in self.all_nodes.iter().enumerate() {
-                if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
-                    // Service nodes have format "0xXXXX - ShortName"
-                    let service_name = if let Some(dash_idx) = n.text.find(" - ") {
-                        n.text.get(dash_idx.saturating_add(3)..).unwrap_or(&n.text)
-                    } else {
-                        &n.text
-                    };
-
-                    if service_name == target_short_name {
-                        found_service_idx = Some(ni);
-                        break;
-                    }
-                }
-            }
-
-            if let Some(service_node_idx) = found_service_idx {
-                // Expand all parents of the target node to make it visible
-                let Some(service_node) = self.all_nodes.get(service_node_idx) else {
-                    return;
-                };
-                let service_depth = service_node.depth;
-
-                // Expand parent nodes
-                if service_depth > 0 {
-                    for i in 0..service_node_idx {
-                        if let Some(node) = self.all_nodes.get_mut(i)
-                            && node.depth < service_depth
-                            && node.has_children
-                        {
-                            node.expanded = true;
-                        }
-                    }
-                }
-
-                // Rebuild visible list
-                self.rebuild_visible();
-
-                // Navigate to the service
-                if let Some(new_cursor) =
-                    self.visible.iter().position(|&idx| idx == service_node_idx)
-                {
-                    self.push_to_history();
-                    self.focus_state = FocusState::Tree;
-                    self.cursor = new_cursor;
-                    self.reset_detail_state();
-                    self.scroll_offset = self.cursor.saturating_sub(5);
-                    self.status = format!("Navigated to service: {target_short_name}");
-                }
-            } else {
-                self.status = format!("Service '{target_short_name}' not found in tree");
-            }
+            self.navigate_to_service_or_job(&target_short_name);
         }
     }
 
@@ -1183,64 +1256,8 @@ impl App {
             return;
         };
 
-        // Search for a layer node in the tree with matching name
-        // The layer name in the table is just the short name (e.g., "IDC_GEN6_C_17.00.09")
-        // In the tree, variant nodes are at depth 1 under "Variants" section
-        // and have text format: "short_name" or "short_name [base]"
-        let mut found_layer_idx: Option<usize> = None;
-
-        for (ni, n) in self.all_nodes.iter().enumerate() {
-            // Look for Container nodes (variants) that have the matching layer name
-            // The node text is either exactly the layer_name or "layer_name [base]"
-            if n.node_type == NodeType::Container {
-                // Strip any suffix like " [base]" before comparing
-                let node_name = if let Some(idx) = n.text.find(" [") {
-                    &n.text[..idx]
-                } else {
-                    &n.text
-                };
-
-                if node_name == layer_name {
-                    found_layer_idx = Some(ni);
-                    break;
-                }
-            }
-        }
-
-        if let Some(layer_node_idx) = found_layer_idx {
-            // Expand all parents of the target node to make it visible
-            let Some(layer_node) = self.all_nodes.get(layer_node_idx) else {
-                return;
-            };
-            let layer_depth = layer_node.depth;
-
-            // Expand parent nodes
-            if layer_depth > 0 {
-                for i in 0..layer_node_idx {
-                    if let Some(node) = self.all_nodes.get_mut(i)
-                        && node.depth < layer_depth
-                        && node.has_children
-                    {
-                        node.expanded = true;
-                    }
-                }
-            }
-
-            // Rebuild visible list
-            self.rebuild_visible();
-
-            // Navigate to the layer
-            if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == layer_node_idx) {
-                self.push_to_history();
-                self.focus_state = FocusState::Tree;
-                self.cursor = new_cursor;
-                self.reset_detail_state();
-                self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to layer: {layer_name}");
-            }
-        } else {
-            self.status = format!("Layer '{layer_name}' not found in tree");
-        }
+        // Navigate to the container using the shared helper
+        self.navigate_to_container_by_name(&layer_name);
     }
 
     /// Navigate to a variant from the Variants overview table
@@ -1286,44 +1303,7 @@ impl App {
             return;
         };
 
-        // Search for a variant node in the tree that matches this name
-        // Variant nodes are at depth 1 under "Variants" section
-        // and have text format: "variant_name" or "variant_name [base]"
-        let mut found_variant_idx: Option<usize> = None;
-
-        for (ni, n) in self.all_nodes.iter().enumerate() {
-            // Check if this is a variant Container node
-            if matches!(n.node_type, NodeType::Container) && n.depth == 1 {
-                // Extract name from text (may include [base] suffix)
-                let name = if let Some(idx) = n.text.find(" [") {
-                    &n.text[..idx]
-                } else {
-                    &n.text
-                };
-
-                if name == target_variant_name {
-                    found_variant_idx = Some(ni);
-                    break;
-                }
-            }
-        }
-
-        if let Some(variant_node_idx) = found_variant_idx {
-            // Ensure the variant node is visible (expand parents if needed)
-            self.ensure_node_visible(variant_node_idx);
-
-            // Find the variant in the visible list and navigate to it
-            if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == variant_node_idx) {
-                self.push_to_history();
-                self.focus_state = FocusState::Tree;
-                self.cursor = new_cursor;
-                self.reset_detail_state();
-                self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to variant: {target_variant_name}");
-            }
-        } else {
-            self.status = format!("Variant '{target_variant_name}' not found in tree");
-        }
+        self.navigate_to_container_by_name(&target_variant_name);
     }
 
     /// Navigate from variant overview to a child element
@@ -1505,67 +1485,42 @@ impl App {
         }
     }
 
-    /// Helper function to navigate to a service or job by name
+    /// Helper function to navigate to a service or job by name.
+    /// Searches within the current container's hierarchy first, then globally.
     fn navigate_to_service_or_job(&mut self, target_short_name: &str) {
-        // Search for a Service, ParentRefService, or Job node with matching name
-        let mut found_service_idx: Option<usize> = None;
-
-        for (ni, n) in self.all_nodes.iter().enumerate() {
-            let matches = if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
-                // Service nodes have format "0xXXXX - ShortName"
-                let service_name = if let Some(dash_idx) = n.text.find(" - ") {
-                    &n.text[dash_idx.saturating_add(3)..]
-                } else {
-                    &n.text
-                };
+        let matches_service = |n: &TreeNode| -> bool {
+            if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
+                let service_name = n
+                    .text
+                    .find(" - ")
+                    .map_or(n.text.as_str(), |idx| &n.text[idx.saturating_add(3)..]);
                 service_name == target_short_name
             } else if n.node_type == NodeType::Job {
-                // Job nodes have format "[Job] ShortName"
                 let job_name = n.text.strip_prefix("[Job] ").unwrap_or(&n.text);
                 job_name == target_short_name
             } else {
                 false
-            };
-
-            if matches {
-                found_service_idx = Some(ni);
-                break;
             }
-        }
+        };
 
-        if let Some(service_node_idx) = found_service_idx {
-            // Expand all parents of the target node to make it visible
-            let Some(service_node) = self.all_nodes.get(service_node_idx) else {
-                return;
-            };
-            let service_depth = service_node.depth;
+        let found_service_idx = self
+            .find_in_hierarchy(matches_service)
+            .or_else(|| self.all_nodes.iter().position(matches_service));
 
-            // Expand parent nodes
-            if service_depth > 0 {
-                for i in 0..service_node_idx {
-                    let Some(node) = self.all_nodes.get_mut(i) else {
-                        continue;
-                    };
-                    if node.depth < service_depth && node.has_children {
-                        node.expanded = true;
-                    }
-                }
-            }
-
-            // Rebuild visible list
-            self.rebuild_visible();
-
-            // Navigate to the service/job
-            if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == service_node_idx) {
-                self.push_to_history();
-                self.focus_state = FocusState::Tree;
-                self.cursor = new_cursor;
-                self.reset_detail_state();
-                self.scroll_offset = self.cursor.saturating_sub(5);
-                self.status = format!("Navigated to: {target_short_name}");
-            }
-        } else {
+        let Some(service_node_idx) = found_service_idx else {
             self.status = format!("Service/Job '{target_short_name}' not found in tree");
+            return;
+        };
+
+        self.ensure_node_visible(service_node_idx);
+
+        if let Some(new_cursor) = self.visible.iter().position(|&idx| idx == service_node_idx) {
+            self.push_to_history();
+            self.focus_state = FocusState::Tree;
+            self.cursor = new_cursor;
+            self.reset_detail_state();
+            self.scroll_offset = self.cursor.saturating_sub(5);
+            self.status = format!("Navigated to: {target_short_name}");
         }
     }
 }
