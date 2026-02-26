@@ -6,8 +6,8 @@ use cda_database::datatypes::{DiagLayer, DiagService, Variant};
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DetailSectionType,
-        NodeType,
+        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData,
+        DetailSectionType, NodeType,
     },
 };
 
@@ -286,7 +286,7 @@ fn build_service_row(service: &DiagService<'_>, layer_name: &str) -> Option<Deta
     let semantic = dc.semantic().unwrap_or("-").to_owned();
     let addressing = format!("{:?}", service.addressing());
 
-    Some(DetailRow::normal(
+    Some(DetailRow::with_jump_targets(
         vec![
             short_name,
             service_type,
@@ -296,19 +296,27 @@ fn build_service_row(service: &DiagService<'_>, layer_name: &str) -> Option<Deta
             layer_name.to_owned(),
         ],
         vec![
+            CellType::ParameterName,
             CellType::Text,
             CellType::Text,
             CellType::Text,
             CellType::Text,
-            CellType::Text,
-            CellType::Text,
+            CellType::ParameterName,
+        ],
+        vec![
+            Some(CellJumpTarget::TreeNodeByName),
+            None,
+            None,
+            None,
+            None,
+            Some(CellJumpTarget::ContainerByName),
         ],
         0,
     ))
 }
 
 fn build_job_row(job_name: &str, layer_name: &str) -> DetailRow {
-    DetailRow::normal(
+    DetailRow::with_jump_targets(
         vec![
             job_name.to_owned(),
             "Job".to_owned(),
@@ -318,12 +326,20 @@ fn build_job_row(job_name: &str, layer_name: &str) -> DetailRow {
             layer_name.to_owned(),
         ],
         vec![
+            CellType::ParameterName,
             CellType::Text,
             CellType::Text,
             CellType::Text,
             CellType::Text,
-            CellType::Text,
-            CellType::Text,
+            CellType::ParameterName,
+        ],
+        vec![
+            Some(CellJumpTarget::TreeNodeByName),
+            None,
+            None,
+            None,
+            None,
+            Some(CellJumpTarget::ContainerByName),
         ],
         0,
     )

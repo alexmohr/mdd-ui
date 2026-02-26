@@ -16,6 +16,10 @@ SPDX-FileCopyrightText: 2026 Alexander Mohr
 * Never change code that is downloaded from a dependency. If you think a change is needed, ask first and we can submit a PR to the dependency.
 * Jump or link means that clicking on the element in the UI should navigate to the target element in the UI. This should be implemented using the existing navigation system and not by re-rendering the entire tree or using a different mechanism, also don't implemenet a popup or something like that. The target element should be focused and highlighted as if the user had navigated to it manually.
 * Do not disable clippy warnings or prefix parameters with _ to silence warnings. If clippy is complaining, fix the underlying issue or ask if it is a false positive.
+* If files get too large, split them into multiple files. For example, if a file contains multiple tree elements, consider splitting each element into its own file.
+  * A good indicator is if you put block comments with the element name in the file to separate the elements, then it is probably a good idea to split them into separate files.
+* If you are adding a new feature, make sure to update the readme with the new feature and how to use it.
+* Make sure to update the help popup with the new feature and its keybinding if applicable.
 
 ## Style guide
 

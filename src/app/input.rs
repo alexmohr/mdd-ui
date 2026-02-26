@@ -163,7 +163,7 @@ impl App {
             KeyCode::Enter => {
                 if self.focus_state == FocusState::Detail {
                     self.handle_enter_in_detail_pane();
-                } else {
+                } else if !self.try_navigate_parent_ref_from_tree() {
                     self.try_expand();
                 }
             }

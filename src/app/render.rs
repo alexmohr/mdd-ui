@@ -378,7 +378,7 @@ impl App {
             "TREE OPERATIONS",
             "  e               Expand all nodes",
             "  c               Collapse all nodes",
-            "  s               Toggle DiagComm sort (by ID/name)",
+            "  s               Toggle sort (by ID/name for services, by name for others)",
             "",
             "SEARCH & FILTER",
             "  /               Start search (type, then Enter to add to stack)",
@@ -1272,15 +1272,17 @@ impl App {
         cell_type: CellType,
     ) -> Style {
         if is_selected_row {
-            if use_row_selection {
-                Style::default()
-                    .fg(Color::White)
-                    .bg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD)
-            } else if is_focused_col {
+            if is_focused_col {
+                // Focused cell within selected row: highlighted distinctly
                 Style::default()
                     .fg(Color::Black)
                     .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else if use_row_selection {
+                // Row selection: entire row highlighted
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Self::jump_target_style(cell_type)

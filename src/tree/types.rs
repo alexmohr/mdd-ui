@@ -141,11 +141,27 @@ pub enum CellType {
     ParameterName,
 }
 
+/// Per-cell jump target metadata: tells the navigation system where clicking
+/// a blue cell should navigate to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CellJumpTarget {
+    /// Navigate to a parameter node by its ID
+    Parameter { param_id: u32 },
+    /// Navigate to a DOP node by name
+    Dop { name: String },
+    /// Navigate to a tree node whose text matches the cell value
+    TreeNodeByName,
+    /// Navigate to a container (variant / layer) by name
+    ContainerByName,
+}
+
 /// A row in a detail table
 #[derive(Clone, Debug)]
 pub struct DetailRow {
     pub cells: Vec<String>,
     pub cell_types: Vec<CellType>,
+    /// Per-cell jump targets. Same length as `cells`; `None` means not navigable.
+    pub cell_jump_targets: Vec<Option<CellJumpTarget>>,
     pub indent: usize,
     pub row_type: DetailRowType,
     pub metadata: Option<RowMetadata>,
@@ -156,6 +172,7 @@ impl Default for DetailRow {
         Self {
             cells: Vec::new(),
             cell_types: Vec::new(),
+            cell_jump_targets: Vec::new(),
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -273,9 +290,28 @@ impl DetailSectionData {
 impl DetailRow {
     /// Create a normal data row
     pub fn normal(cells: Vec<String>, cell_types: Vec<CellType>, indent: usize) -> Self {
+        let jump_targets = vec![None; cells.len()];
         Self {
             cells,
             cell_types,
+            cell_jump_targets: jump_targets,
+            indent,
+            row_type: DetailRowType::Normal,
+            metadata: None,
+        }
+    }
+
+    /// Create a normal data row with per-cell jump targets
+    pub fn with_jump_targets(
+        cells: Vec<String>,
+        cell_types: Vec<CellType>,
+        cell_jump_targets: Vec<Option<CellJumpTarget>>,
+        indent: usize,
+    ) -> Self {
+        Self {
+            cells,
+            cell_types,
+            cell_jump_targets,
             indent,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -284,9 +320,11 @@ impl DetailRow {
 
     /// Create a table header row
     pub fn header(cells: Vec<String>, cell_types: Vec<CellType>) -> Self {
+        let jump_targets = vec![None; cells.len()];
         Self {
             cells,
             cell_types,
+            cell_jump_targets: jump_targets,
             indent: 0,
             row_type: DetailRowType::Header,
             metadata: None,
@@ -298,6 +336,7 @@ impl DetailRow {
         Self {
             cells: vec!["Inherited From".to_owned(), layer_name.clone()],
             cell_types: vec![CellType::Text, CellType::Text],
+            cell_jump_targets: vec![None, None],
             indent: 0,
             row_type: DetailRowType::InheritedFrom,
             metadata: Some(RowMetadata::InheritedFrom { layer_name }),

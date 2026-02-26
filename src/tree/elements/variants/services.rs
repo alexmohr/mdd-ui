@@ -13,8 +13,8 @@ use super::{
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType, DetailSectionData,
-        DetailSectionType, NodeType,
+        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
+        DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -436,6 +436,19 @@ fn build_overview_section(
                 0,
             ));
         }
+
+        // Add functional class reference (blue, jump target)
+        let funct_class_name = dc
+            .funct_class()
+            .map(|fc_list| fc_list.get(0))
+            .and_then(|fc| fc.short_name())
+            .unwrap_or("-");
+        rows.push(DetailRow::with_jump_targets(
+            vec!["Functional Class".to_owned(), funct_class_name.to_owned()],
+            vec![CellType::Text, CellType::ParameterName],
+            vec![None, Some(CellJumpTarget::TreeNodeByName)],
+            0,
+        ));
     }
 
     DetailSectionData::new(
@@ -472,6 +485,7 @@ fn build_comparam_refs_section() -> DetailSectionData {
             CellType::Text,
             CellType::Text,
         ],
+        cell_jump_targets: vec![None; 5],
         indent: 0,
     };
     DetailSectionData {
@@ -485,6 +499,7 @@ fn build_comparam_refs_section() -> DetailSectionData {
                 metadata: None,
                 cells: vec!["(No ComParam refs at comm level)".to_owned()],
                 cell_types: vec![CellType::Text],
+                cell_jump_targets: vec![None; 1],
                 indent: 0,
             }],
             constraints: vec![
@@ -649,6 +664,7 @@ fn build_related_refs_section() -> DetailSectionData {
         metadata: None,
         cells: vec!["Short Name".to_owned()],
         cell_types: vec![CellType::Text],
+        cell_jump_targets: vec![None; 1],
         indent: 0,
     };
     DetailSectionData {
@@ -662,6 +678,7 @@ fn build_related_refs_section() -> DetailSectionData {
                 metadata: None,
                 cells: vec!["(Related comms not available)".to_owned()],
                 cell_types: vec![CellType::Text],
+                cell_jump_targets: vec![None; 1],
                 indent: 0,
             }],
             constraints: vec![ColumnConstraint::Percentage(100)],
@@ -734,6 +751,7 @@ fn build_diag_comms_table_section(
             CellType::Text,
             CellType::Text,
         ],
+        cell_jump_targets: vec![None; 5],
         indent: 0,
     };
 
@@ -768,11 +786,18 @@ fn build_diag_comms_table_section(
                 inherited.to_owned(),
             ],
             cell_types: vec![
+                CellType::ParameterName,
                 CellType::Text,
                 CellType::Text,
                 CellType::Text,
                 CellType::Text,
-                CellType::Text,
+            ],
+            cell_jump_targets: vec![
+                Some(crate::tree::CellJumpTarget::TreeNodeByName),
+                None,
+                None,
+                None,
+                None,
             ],
             indent: 0,
         })
@@ -805,11 +830,18 @@ fn build_diag_comms_table_section(
                 "false".to_owned(),
             ],
             cell_types: vec![
+                CellType::ParameterName,
                 CellType::Text,
                 CellType::Text,
                 CellType::Text,
                 CellType::Text,
-                CellType::Text,
+            ],
+            cell_jump_targets: vec![
+                Some(crate::tree::CellJumpTarget::TreeNodeByName),
+                None,
+                None,
+                None,
+                None,
             ],
             indent: 0,
         });

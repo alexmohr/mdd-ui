@@ -39,15 +39,15 @@ enum DopCategory {
 impl DopCategory {
     fn label(self) -> &'static str {
         match self {
-            Self::DtcDops => "DTC-DOPS",
-            Self::EnvDataDescs => "ENV-DATA-DESCS",
-            Self::EnvDatas => "ENV-DATAS",
-            Self::DataObjectProps => "DATA-OBJECT-PROPS",
-            Self::Structures => "STRUCTURES",
-            Self::StaticFields => "STATIC-FIELDS",
-            Self::DynamicLengthFields => "DYNAMIC-LENGTH-FIELDS",
-            Self::EndOfPduFields => "END-OF-PDU-FIELDS",
-            Self::MuxDops => "MUX-DOPS",
+            Self::DtcDops => "Dtc Dops",
+            Self::EnvDataDescs => "Env Data Descs",
+            Self::EnvDatas => "Env Datas",
+            Self::DataObjectProps => "Data Object Props",
+            Self::Structures => "Structures",
+            Self::StaticFields => "Static Fields",
+            Self::DynamicLengthFields => "Dynamic Length Fields",
+            Self::EndOfPduFields => "End Of Pdu Fields",
+            Self::MuxDops => "Mux Dops",
         }
     }
 
@@ -634,6 +634,7 @@ fn build_dops_overview_table(
         .map(|(cat, dops)| DetailRow {
             cells: vec![cat.label().to_owned(), dops.len().to_string()],
             cell_types: vec![CellType::Text, CellType::NumericValue],
+            cell_jump_targets: vec![None; 2],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -671,6 +672,7 @@ fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData
         .map(|dop_info| DetailRow {
             cells: vec![dop_info.name.clone()],
             cell_types: vec![CellType::Text],
+            cell_jump_targets: vec![None; 1],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -739,6 +741,7 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
                 CellType::Text,
                 CellType::Text,
             ],
+            cell_jump_targets: vec![None; 5],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -805,6 +808,7 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
     types_rows.push(DetailRow {
         cells: vec!["Short Name".to_owned(), dop_info.name.clone()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::Normal,
         metadata: None,
@@ -812,6 +816,7 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
     types_rows.push(DetailRow {
         cells: vec!["DOP Variant".to_owned(), dop_info.dop_type.clone()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::Normal,
         metadata: None,
@@ -821,6 +826,7 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
         types_rows.push(DetailRow {
             cells: vec!["Compu Category (from name)".to_owned(), compu.clone()],
             cell_types: vec![CellType::Text, CellType::Text],
+            cell_jump_targets: vec![None; 2],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -830,6 +836,7 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
         types_rows.push(DetailRow {
             cells: vec!["Unit (from name)".to_owned(), unit.clone()],
             cell_types: vec![CellType::Text, CellType::Text],
+            cell_jump_targets: vec![None; 2],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,

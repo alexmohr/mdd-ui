@@ -23,6 +23,7 @@ pub(super) fn build_mux_dop_tabs(
     general_rows.push(DetailRow {
         cells: vec!["Switch Key".to_owned(), String::new()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None, None],
         indent: 0,
         row_type: DetailRowType::Header,
         metadata: None,
@@ -52,6 +53,7 @@ pub(super) fn build_mux_dop_tabs(
     general_rows.push(DetailRow {
         cells: vec!["Default Case".to_owned(), String::new()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None, None],
         indent: 0,
         row_type: DetailRowType::Header,
         metadata: None,
@@ -84,77 +86,97 @@ pub(super) fn build_mux_dop_tabs(
         .with_type(DetailSectionType::Overview),
     );
 
-    if let Some(cases) = mux_dop.cases() {
-        let cases_header = DetailRow {
-            cells: vec![
-                "Short Name".to_owned(),
-                "Struct".to_owned(),
-                "Lower Limit".to_owned(),
-                "Upper Limit".to_owned(),
-            ],
-            cell_types: vec![
-                CellType::Text,
-                CellType::Text,
-                CellType::NumericValue,
-                CellType::NumericValue,
-            ],
-            indent: 0,
-            ..Default::default()
-        };
+    sections.push(build_cases_section(mux_dop));
+}
 
-        let rows: Vec<DetailRow> = cases
-            .iter()
-            .map(|case| {
-                let name = case.short_name().unwrap_or("?").to_owned();
-                let struct_name = case
-                    .structure()
-                    .and_then(|s| s.short_name())
-                    .unwrap_or("-")
-                    .to_owned();
-                let has_struct = struct_name != "-";
-                let lower = case
-                    .lower_limit()
-                    .map(|l| format!("{l:?}"))
-                    .unwrap_or_default();
-                let upper = case
-                    .upper_limit()
-                    .map(|l| format!("{l:?}"))
-                    .unwrap_or_default();
-
-                DetailRow {
-                    cells: vec![name, struct_name, lower, upper],
-                    cell_types: vec![
-                        CellType::Text,
-                        if has_struct {
-                            CellType::DopReference
-                        } else {
-                            CellType::Text
-                        },
-                        CellType::NumericValue,
-                        CellType::NumericValue,
-                    ],
-                    indent: 0,
-                    row_type: DetailRowType::Normal,
-                    metadata: None,
-                }
-            })
-            .collect();
-
-        sections.push(DetailSectionData {
+fn build_cases_section(mux_dop: &cda_database::datatypes::MuxDop<'_>) -> DetailSectionData {
+    let Some(cases) = mux_dop.cases() else {
+        return DetailSectionData {
             title: "Cases".to_owned(),
             render_as_header: false,
             section_type: DetailSectionType::Custom,
-            content: DetailContent::Table {
-                header: cases_header,
-                rows,
-                constraints: vec![
-                    ColumnConstraint::Percentage(30),
-                    ColumnConstraint::Percentage(30),
-                    ColumnConstraint::Percentage(20),
-                    ColumnConstraint::Percentage(20),
+            content: DetailContent::PlainText(vec!["No cases".to_owned()]),
+        };
+    };
+
+    let cases_header = DetailRow {
+        cells: vec![
+            "Short Name".to_owned(),
+            "Struct".to_owned(),
+            "Lower Limit".to_owned(),
+            "Upper Limit".to_owned(),
+        ],
+        cell_types: vec![
+            CellType::Text,
+            CellType::Text,
+            CellType::NumericValue,
+            CellType::NumericValue,
+        ],
+        indent: 0,
+        ..Default::default()
+    };
+
+    let rows: Vec<DetailRow> = cases
+        .iter()
+        .map(|case| {
+            let name = case.short_name().unwrap_or("?").to_owned();
+            let struct_name = case
+                .structure()
+                .and_then(|s| s.short_name())
+                .unwrap_or("-")
+                .to_owned();
+            let has_struct = struct_name != "-";
+            let lower = case
+                .lower_limit()
+                .map(|l| format!("{l:?}"))
+                .unwrap_or_default();
+            let upper = case
+                .upper_limit()
+                .map(|l| format!("{l:?}"))
+                .unwrap_or_default();
+
+            let dop_jump = if has_struct {
+                Some(crate::tree::CellJumpTarget::Dop {
+                    name: struct_name.clone(),
+                })
+            } else {
+                None
+            };
+
+            DetailRow {
+                cells: vec![name, struct_name, lower, upper],
+                cell_types: vec![
+                    CellType::Text,
+                    if has_struct {
+                        CellType::DopReference
+                    } else {
+                        CellType::Text
+                    },
+                    CellType::NumericValue,
+                    CellType::NumericValue,
                 ],
-                use_row_selection: true,
-            },
-        });
+                cell_jump_targets: vec![None, dop_jump, None, None],
+                indent: 0,
+                row_type: DetailRowType::Normal,
+                metadata: None,
+            }
+        })
+        .collect();
+
+    DetailSectionData {
+        title: "Cases".to_owned(),
+        render_as_header: false,
+        section_type: DetailSectionType::Custom,
+        content: DetailContent::Table {
+            header: cases_header,
+            rows,
+            constraints: vec![
+                ColumnConstraint::Percentage(30),
+                ColumnConstraint::Percentage(30),
+                ColumnConstraint::Percentage(20),
+                ColumnConstraint::Percentage(20),
+            ],
+            use_row_selection: true,
+        },
     }
 }

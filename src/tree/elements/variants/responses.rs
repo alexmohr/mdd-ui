@@ -489,6 +489,14 @@ where
         let has_dop = !dop_name.is_empty();
         let param_id = param.id();
 
+        let dop_jump = if has_dop {
+            Some(crate::tree::CellJumpTarget::Dop {
+                name: dop_name.clone(),
+            })
+        } else {
+            None
+        };
+
         rows.push(DetailRow {
             cells: vec![
                 name,
@@ -513,6 +521,16 @@ where
                     CellType::Text
                 },
                 CellType::Text,
+            ],
+            cell_jump_targets: vec![
+                Some(crate::tree::CellJumpTarget::Parameter { param_id }),
+                None,
+                None,
+                None,
+                None,
+                None,
+                dop_jump,
+                None,
             ],
             indent: 0,
             row_type: crate::tree::DetailRowType::Normal,

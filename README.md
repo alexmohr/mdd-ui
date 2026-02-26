@@ -8,9 +8,10 @@ SPDX-FileCopyrightText: 2026 Alexander Mohr
 A terminal-based user interface for browsing and exploring MDD (Marvelous Diagnostic Data) diagnostic databases. Built with Rust and [ratatui](https://ratatui.rs/), this tool provides an efficient way to navigate ECU diagnostic services, parameters, and metadata.
 
 **DISCLAIMER**
-This tool is 99% vibe coded, and this is pretty visible in the codebase, anyhow it works, which is good enough for now.
+This tool is 99% vibe coded, so manually editing stuff _might_ be hard.
 This project is in early development and may contain bugs or incomplete features.
-Use at your own risk. Contributions and feedback are welcome to help improve the tool.
+Use at your own risk. 
+Contributions _are_ welcome but things still moved around _a lot_ so I would recommend opening an issue before starting work on something.
 
 ## Features
 
@@ -140,6 +141,16 @@ For each parameter, the tool displays:
 - **Clickable Breadcrumbs**: Click breadcrumb segments to jump to parent nodes
 - **Service Reference Links**: Click service references in not-inherited sections to navigate directly to services
 
+### 🔗 Cross-Reference Navigation
+Blue-colored cells indicate navigable references. Press Enter or double-click to jump:
+- **Parameter Names**: Navigate to the parameter's tree node (by ID)
+- **DOP References**: Navigate to the Data Object Property in the tree
+- **Service Names**: Navigate to the service or job node in the tree
+- **Container References**: Navigate to variants, layers, or functional groups
+- **Parent References**: Navigate to the referenced parent container
+- **Functional Class References**: Navigate to the functional class node
+- **Navigation History**: Press Backspace to go back to previously visited nodes
+
 ### 🎯 Interactive Features
 - **Sortable Tables**:
   - Click column headers to sort (ascending/descending)
@@ -148,7 +159,7 @@ For each parameter, the tool displays:
   - DiagComm sorting: toggle between ID-based and name-based with `s`
 - **Double-Click Actions**:
   - Tree nodes: expand/collapse
-  - Detail rows: show DOP popup (if available)
+  - Blue cells: navigate to referenced element (DOP, parameter, service, etc.)
   - Service references: navigate to service
 - **Mouse Scroll**: Scroll wheel support for both tree and detail panes
 - **Toggle Mouse Support**: Press `m` to enable/disable mouse input
@@ -192,6 +203,7 @@ mdd-ui /path/to/diagnostic.mdd
 | `h` / `Left` | Collapse node or go to parent |
 | `l` / `Right` | Expand node |
 | `Space` | Toggle expand/collapse |
+| `Enter` | Navigate to parent ref target or expand node |
 | `e` | Expand all nodes |
 | `c` | Collapse all nodes |
 | `s` | Toggle DiagComm sorting (by ID or by name) |
@@ -207,7 +219,7 @@ mdd-ui /path/to/diagnostic.mdd
 | `h` / `Left` | Switch to previous tab |
 | `l` / `Right` | Switch to next tab |
 | `s` | Sort by focused column (toggle direction) |
-| `Enter` | Show DOP popup (when on DOP row) |
+| `Enter` | Navigate to referenced element (blue cells: DOP, parameter, service, etc.) |
 | `Home` | Jump to first row in section |
 | `End` | Jump to last row in section |
 | `PageUp` / `PageDown` | Page through rows |
@@ -229,6 +241,7 @@ mdd-ui /path/to/diagnostic.mdd
 | Key | Action |
 |-----|--------|
 | `Tab` | Toggle focus between tree and detail pane |
+| `Backspace` | Navigate back in history (or pop last search if in search mode) |
 | `+` / `=` | Increase tree pane width (max 80%) |
 | `-` / `_` | Decrease tree pane width (min 20%) |
 | `m` | Toggle mouse support on/off |
@@ -370,6 +383,7 @@ When a node is selected, the detail pane displays comprehensive information in a
 - **Hierarchical Search**: Stack-based search system for complex filtering with scope awareness
 - **Customizable**: Resizable columns (per-section), adjustable pane widths (20-80%), and sortable tables
 - **Navigation History**: Internal tracking of visited nodes for potential back/forward navigation
+- **Cross-Reference Metadata**: Per-cell jump targets encode navigation intent (parameter ID, DOP name, tree node name, container name)
 - **Multi-Tab State**: Independent scroll and cursor state per detail tab/section
 
 ## Development

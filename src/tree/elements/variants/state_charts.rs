@@ -34,12 +34,9 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
 
     for chart in sorted_charts {
         let chart_name = chart.short_name().unwrap_or("unnamed");
-
-        // Get semantic description if available
         let semantic = chart.semantic().unwrap_or("");
 
-        // Build State Transitions table
-        let mut transitions: Vec<_> = chart
+        let transition_rows: Vec<_> = chart
             .state_transitions()
             .into_iter()
             .flatten()
@@ -52,51 +49,13 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
                     metadata: None,
                     cells: vec![name.to_string(), src.to_string(), tgt.to_string()],
                     cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
+                    cell_jump_targets: vec![None; 3],
                     indent: 0,
                 }
             })
             .collect();
 
-        // Sort transitions alphabetically by name
-        transitions.sort_by(|a, b| {
-            a.cells
-                .first()
-                .map(|s| s.to_lowercase())
-                .cmp(&b.cells.first().map(|s| s.to_lowercase()))
-        });
-
-        let transitions_section = DetailSectionData {
-            title: "State Transitions".to_string(),
-            render_as_header: false,
-            section_type: DetailSectionType::States,
-            content: if transitions.is_empty() {
-                DetailContent::PlainText(vec!["No state transitions".to_string()])
-            } else {
-                DetailContent::Table {
-                    header: DetailRow {
-                        row_type: DetailRowType::Normal,
-                        metadata: None,
-                        cells: vec![
-                            "Name".to_string(),
-                            "Source".to_string(),
-                            "Target".to_string(),
-                        ],
-                        cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-                        indent: 0,
-                    },
-                    rows: transitions,
-                    constraints: vec![
-                        ColumnConstraint::Percentage(34),
-                        ColumnConstraint::Percentage(33),
-                        ColumnConstraint::Percentage(33),
-                    ],
-                    use_row_selection: false,
-                }
-            },
-        };
-
-        // Build States table
-        let mut states: Vec<_> = chart
+        let state_rows: Vec<_> = chart
             .states()
             .into_iter()
             .flatten()
@@ -107,64 +66,102 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
                     metadata: None,
                     cells: vec![sn.to_string()],
                     cell_types: vec![CellType::Text],
+                    cell_jump_targets: vec![None; 1],
                     indent: 0,
                 }
             })
             .collect();
 
-        // Sort states alphabetically by name
-        states.sort_by(|a, b| {
-            a.cells
-                .first()
-                .map(|s| s.to_lowercase())
-                .cmp(&b.cells.first().map(|s| s.to_lowercase()))
-        });
-
-        let states_section = DetailSectionData {
-            title: "States".to_string(),
-            render_as_header: false,
-            section_type: DetailSectionType::States,
-            content: if states.is_empty() {
-                DetailContent::PlainText(vec!["No states".to_string()])
-            } else {
-                DetailContent::Table {
-                    header: DetailRow {
-                        row_type: DetailRowType::Normal,
-                        metadata: None,
-                        cells: vec!["Name".to_string()],
-                        cell_types: vec![CellType::Text],
-                        indent: 0,
-                    },
-                    rows: states,
-                    constraints: vec![ColumnConstraint::Percentage(100)],
-                    use_row_selection: false,
-                }
+        let sections = vec![
+            DetailSectionData {
+                title: format!("State Chart - {chart_name}"),
+                render_as_header: true,
+                section_type: DetailSectionType::Header,
+                content: DetailContent::PlainText(vec![format!("Semantic: {semantic}")]),
             },
-        };
+            build_transitions_section(transition_rows),
+            build_states_section(state_rows),
+        ];
 
-        // Create sections list with semantic header (always, even if empty)
-        let mut sections = vec![];
-
-        // Add semantic information as first section (not a tab)
-        sections.push(DetailSectionData {
-            title: format!("State Chart - {chart_name}"),
-            render_as_header: true,
-            section_type: DetailSectionType::Header,
-            content: DetailContent::PlainText(vec![format!("Semantic: {semantic}")]),
-        });
-
-        // Add the two tab sections
-        sections.push(transitions_section);
-        sections.push(states_section);
-
-        // Push the state chart as a non-expandable node with detail sections
         b.push_details_structured(
             depth.saturating_add(1),
             chart_name.to_owned(),
             false,
-            false, // Not expandable - no tree children
+            false,
             sections,
             NodeType::Default,
         );
+    }
+}
+
+fn build_transitions_section(mut transitions: Vec<DetailRow>) -> DetailSectionData {
+    transitions.sort_by(|a, b| {
+        a.cells
+            .first()
+            .map(|s| s.to_lowercase())
+            .cmp(&b.cells.first().map(|s| s.to_lowercase()))
+    });
+
+    DetailSectionData {
+        title: "State Transitions".to_string(),
+        render_as_header: false,
+        section_type: DetailSectionType::States,
+        content: if transitions.is_empty() {
+            DetailContent::PlainText(vec!["No state transitions".to_string()])
+        } else {
+            DetailContent::Table {
+                header: DetailRow {
+                    row_type: DetailRowType::Normal,
+                    metadata: None,
+                    cells: vec![
+                        "Name".to_string(),
+                        "Source".to_string(),
+                        "Target".to_string(),
+                    ],
+                    cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
+                    cell_jump_targets: vec![None; 3],
+                    indent: 0,
+                },
+                rows: transitions,
+                constraints: vec![
+                    ColumnConstraint::Percentage(34),
+                    ColumnConstraint::Percentage(33),
+                    ColumnConstraint::Percentage(33),
+                ],
+                use_row_selection: false,
+            }
+        },
+    }
+}
+
+fn build_states_section(mut states: Vec<DetailRow>) -> DetailSectionData {
+    states.sort_by(|a, b| {
+        a.cells
+            .first()
+            .map(|s| s.to_lowercase())
+            .cmp(&b.cells.first().map(|s| s.to_lowercase()))
+    });
+
+    DetailSectionData {
+        title: "States".to_string(),
+        render_as_header: false,
+        section_type: DetailSectionType::States,
+        content: if states.is_empty() {
+            DetailContent::PlainText(vec!["No states".to_string()])
+        } else {
+            DetailContent::Table {
+                header: DetailRow {
+                    row_type: DetailRowType::Normal,
+                    metadata: None,
+                    cells: vec!["Name".to_string()],
+                    cell_types: vec![CellType::Text],
+                    cell_jump_targets: vec![None; 1],
+                    indent: 0,
+                },
+                rows: states,
+                constraints: vec![ColumnConstraint::Percentage(100)],
+                use_row_selection: false,
+            }
+        },
     }
 }

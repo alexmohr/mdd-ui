@@ -23,8 +23,8 @@ use super::layers::LayerExt;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellType, ChildElementType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
-        DetailSectionData, DetailSectionType, NodeType, RowMetadata, SectionType,
+        CellJumpTarget, CellType, ChildElementType, ColumnConstraint, DetailContent, DetailRow,
+        DetailRowType, DetailSectionData, DetailSectionType, NodeType, RowMetadata, SectionType,
     },
 };
 
@@ -143,11 +143,20 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
     if let Some(groups) = ecu.functional_groups()
         && !groups.is_empty()
     {
+        let names: Vec<String> = groups
+            .iter()
+            .filter_map(|fg| {
+                fg.diag_layer()
+                    .and_then(|dl| dl.short_name().map(str::to_owned))
+            })
+            .collect();
+        let overview = build_names_overview_table(&names, "Functional Groups Overview");
+
         b.push_section_header(
             "Functional Groups".to_string(),
             false,
             true,
-            Vec::new(),
+            overview,
             SectionType::FunctionalGroups,
         );
 
@@ -237,11 +246,20 @@ pub fn add_ecu_shared_data(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
         .collect();
 
     if !unique_esd.is_empty() {
+        let names: Vec<String> = unique_esd
+            .iter()
+            .filter_map(|esd| {
+                esd.diag_layer()
+                    .and_then(|dl| dl.short_name().map(str::to_owned))
+            })
+            .collect();
+        let overview = build_names_overview_table(&names, "ECU Shared Data Overview");
+
         b.push_section_header(
             "ECU Shared Data".to_string(),
             false,
             true,
-            Vec::new(),
+            overview,
             SectionType::EcuSharedData,
         );
 
@@ -327,11 +345,20 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
         .collect();
 
     if !unique_protocols.is_empty() {
+        let names: Vec<String> = unique_protocols
+            .iter()
+            .filter_map(|p| {
+                p.diag_layer()
+                    .and_then(|dl| dl.short_name().map(str::to_owned))
+            })
+            .collect();
+        let overview = build_names_overview_table(&names, "Protocols Overview");
+
         b.push_section_header(
             "Protocols".to_string(),
             false,
             true,
-            Vec::new(),
+            overview,
             SectionType::Protocols,
         );
 
@@ -342,7 +369,16 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
             let layer = DiagLayer(dl);
             let name = layer.short_name().unwrap_or("unnamed");
 
-            b.push(1, name.to_string(), false, true, NodeType::Container);
+            let detail_sections = build_layer_summary_section(&layer, name);
+
+            b.push_details_structured(
+                1,
+                name.to_string(),
+                false,
+                true,
+                detail_sections,
+                NodeType::Container,
+            );
 
             // For protocols, pass None for parent_refs since DOPs
             // come from the protocol's own ComParamSpec
@@ -448,8 +484,10 @@ fn append_layer_info_rows(layer: &DiagLayer<'_>, info_rows: &mut Vec<DetailRow>)
         ));
     }
     if let Some(ln) = layer.long_name() {
+        let value = ln.value().unwrap_or("-");
+        let ti = ln.ti().unwrap_or("-");
         info_rows.push(DetailRow::normal(
-            vec!["Long Name".to_owned(), format!("{:?}", ln)],
+            vec!["Long Name".to_owned(), format!("value: {value}, ti: {ti}")],
             vec![CellType::Text, CellType::Text],
             0,
         ));
@@ -499,6 +537,7 @@ fn build_com_param_refs_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
     Some(DetailRow {
         cells: vec!["ComParam Refs".to_owned(), cp_refs.len().to_string()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement {
@@ -521,6 +560,7 @@ fn build_diag_comms_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
             format!("{service_count} services, {job_count} jobs"),
         ],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement {
@@ -538,6 +578,7 @@ fn build_functional_classes_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
     Some(DetailRow {
         cells: vec!["Functional Classes".to_owned(), fcs.len().to_string()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement {
@@ -565,6 +606,7 @@ fn build_neg_responses_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
     Some(DetailRow {
         cells: vec!["Neg-Responses".to_owned(), neg_count.to_string()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement {
@@ -592,6 +634,7 @@ fn build_pos_responses_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
     Some(DetailRow {
         cells: vec!["Pos-Responses".to_owned(), pos_count.to_string()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement {
@@ -615,6 +658,7 @@ fn build_requests_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
     Some(DetailRow {
         cells: vec!["Requests".to_owned(), request_count.to_string()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement {
@@ -633,6 +677,7 @@ fn build_sdgs_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
     Some(DetailRow {
         cells: vec!["SDGs".to_owned(), count.to_string()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement {
@@ -650,6 +695,7 @@ fn build_state_charts_row(layer: &DiagLayer<'_>) -> Option<DetailRow> {
     Some(DetailRow {
         cells: vec!["State-Charts".to_owned(), charts.len().to_string()],
         cell_types: vec![CellType::Text, CellType::Text],
+        cell_jump_targets: vec![None; 2],
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement {
@@ -685,9 +731,10 @@ fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionD
             "No"
         };
 
-        rows.push(DetailRow::normal(
+        rows.push(DetailRow::with_jump_targets(
             vec![name, is_base.to_owned()],
-            vec![CellType::Text, CellType::Text],
+            vec![CellType::ParameterName, CellType::Text],
+            vec![Some(CellJumpTarget::ContainerByName), None],
             0,
         ));
     }
@@ -702,6 +749,35 @@ fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionD
                     ColumnConstraint::Percentage(70),
                     ColumnConstraint::Percentage(30),
                 ],
+                use_row_selection: true,
+            },
+            false,
+        )
+        .with_type(DetailSectionType::Overview),
+    ]
+}
+
+/// Build a simple overview table with a "Short Name" column for a list of names.
+/// Used by Functional Groups, ECU Shared Data, and Protocols section headers.
+fn build_names_overview_table(names: &[String], title: &str) -> Vec<DetailSectionData> {
+    if names.is_empty() {
+        return vec![];
+    }
+
+    let header = DetailRow::header(vec!["Short Name".to_owned()], vec![CellType::Text]);
+
+    let rows: Vec<DetailRow> = names
+        .iter()
+        .map(|name| DetailRow::normal(vec![name.clone()], vec![CellType::Text], 0))
+        .collect();
+
+    vec![
+        DetailSectionData::new(
+            title.to_owned(),
+            DetailContent::Table {
+                header,
+                rows,
+                constraints: vec![ColumnConstraint::Percentage(100)],
                 use_row_selection: true,
             },
             false,

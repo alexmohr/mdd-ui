@@ -106,9 +106,10 @@ fn build_parent_refs_overview(parent_refs_list: &[ParentRef<'_>]) -> DetailSecti
         .iter()
         .map(|pr| {
             let (ref_type, name) = extract_parent_ref_info(pr);
-            DetailRow::normal(
+            DetailRow::with_jump_targets(
                 vec![name, ref_type.to_owned()],
-                vec![CellType::Text, CellType::Text],
+                vec![CellType::ParameterName, CellType::Text],
+                vec![Some(crate::tree::CellJumpTarget::ContainerByName), None],
                 0,
             )
         })

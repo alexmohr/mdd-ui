@@ -27,6 +27,7 @@ pub(super) fn build_dtc_dops_category_sections(dops: &[DopInfo<'_>]) -> Vec<Deta
         .map(|dop_info| DetailRow {
             cells: vec![dop_info.name.clone()],
             cell_types: vec![CellType::Text],
+            cell_jump_targets: vec![None; 1],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -97,6 +98,7 @@ macro_rules! emit_sdg_header {
             $rows.push(DetailRow {
                 cells: vec![$caption.clone(), String::new()],
                 cell_types: vec![CellType::Text, CellType::Text],
+                cell_jump_targets: vec![None; 2],
                 indent: $base_indent,
                 row_type: DetailRowType::Header,
                 metadata: None,
@@ -238,7 +240,7 @@ pub(super) fn add_dtc_dop_children(b: &mut TreeBuilder, dop_info: &DopInfo<'_>, 
                     ColumnConstraint::Percentage(30),
                     ColumnConstraint::Percentage(70),
                 ],
-                use_row_selection: false,
+                use_row_selection: true,
             },
         }];
 
@@ -259,6 +261,7 @@ pub(super) fn build_dtc_dop_tabs(
                 format!("{:?}", coded_type.base_datatype()),
             ],
             cell_types: vec![CellType::Text, CellType::Text],
+            cell_jump_targets: vec![None; 2],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -269,6 +272,7 @@ pub(super) fn build_dtc_dop_tabs(
         types_rows.push(DetailRow {
             cells: vec!["DTC Count".to_owned(), dtcs.len().to_string()],
             cell_types: vec![CellType::Text, CellType::NumericValue],
+            cell_jump_targets: vec![None; 2],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -308,6 +312,7 @@ pub(super) fn build_dtc_dop_tabs(
                 DetailRow {
                     cells: vec![short_name, code_str, text],
                     cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
+                    cell_jump_targets: vec![None; 3],
                     indent: 0,
                     row_type: DetailRowType::Normal,
                     metadata: None,

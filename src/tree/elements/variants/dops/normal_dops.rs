@@ -335,6 +335,7 @@ pub(super) fn build_normal_dop_tabs(
                 format!("{:?}", coded_type.base_datatype()),
             ],
             cell_types: vec![CellType::Text, CellType::Text],
+            cell_jump_targets: vec![None; 2],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -344,6 +345,7 @@ pub(super) fn build_normal_dop_tabs(
             types_rows.push(DetailRow {
                 cells: vec!["Bit Length".to_owned(), bit_len.to_string()],
                 cell_types: vec![CellType::Text, CellType::NumericValue],
+                cell_jump_targets: vec![None; 2],
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
@@ -355,6 +357,7 @@ pub(super) fn build_normal_dop_tabs(
         types_rows.push(DetailRow {
             cells: vec!["Data Type (from name)".to_owned(), data_type.clone()],
             cell_types: vec![CellType::Text, CellType::Text],
+            cell_jump_targets: vec![None; 2],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
