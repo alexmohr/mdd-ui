@@ -205,8 +205,10 @@ pub struct App {
     jump_buffer: String, // Characters typed for type-to-jump in table views
     jump_buffer_time: Option<Instant>, // Timestamp of last type-to-jump character for auto-reset
     pub(crate) theme: ResolvedTheme, // Resolved colour theme
-    pub(crate) composite_scroll: Vec<usize>, // Vertical scroll offset per section for Composite content
-    pub(crate) composite_max_scroll: usize,  // Cached max scroll value from last composite render
+    // Vertical scroll offset per section for Composite content
+    pub(crate) composite_scroll: Vec<usize>,
+    // Cached max scroll value from last composite render
+    pub(crate) composite_max_scroll: usize,
 }
 
 #[derive(Clone)]
