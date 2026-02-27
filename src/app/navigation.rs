@@ -5,8 +5,8 @@
 
 use super::{App, FocusState};
 use crate::tree::{
-    CellJumpTarget, CellType, DetailRow, DetailRowType, DetailSectionType, NodeType, RowMetadata,
-    SectionType, TreeNode,
+    CellJumpTarget, CellType, ChildElementType, DetailRow, DetailRowType, DetailSectionType,
+    NodeType, RowMetadata, SectionType, TreeNode,
 };
 
 impl App {
@@ -28,7 +28,7 @@ impl App {
             return;
         }
 
-        if matches!(node.node_type, NodeType::Container) && node.depth == 1 {
+        if matches!(node.node_type, NodeType::Container) {
             self.try_navigate_from_variant_overview();
             return;
         }
@@ -197,10 +197,37 @@ impl App {
             return;
         };
 
+        // Check for ChildElement metadata first — these rows represent
+        // child sections (e.g. "Diag-Comms", "Functional Classes") and
+        // navigate to the corresponding tree node.
+        if let Some(RowMetadata::ChildElement { element_type }) = &selected_row.metadata {
+            self.navigate_to_child_element(node_idx, node.depth, element_type);
+            return;
+        }
+
         let focused_col = self.get_focused_column(use_row_selection, &selected_row.cell_types);
+
+        // In row selection mode, if the focused cell has no jump target,
+        // scan the row for the first cell that does.
+        let nav_col = if use_row_selection
+            && selected_row
+                .cell_jump_targets
+                .get(focused_col)
+                .and_then(|t| t.as_ref())
+                .is_none()
+        {
+            selected_row
+                .cell_jump_targets
+                .iter()
+                .position(Option::is_some)
+                .unwrap_or(focused_col)
+        } else {
+            focused_col
+        };
+
         let cell_value = selected_row
             .cells
-            .get(focused_col)
+            .get(nav_col)
             .map_or("", std::string::String::as_str);
 
         if cell_value.is_empty() || cell_value == "-" {
@@ -211,7 +238,7 @@ impl App {
         // Use per-cell jump target metadata
         let jump_target = selected_row
             .cell_jump_targets
-            .get(focused_col)
+            .get(nav_col)
             .cloned()
             .flatten();
         self.execute_cell_jump(jump_target, cell_value);
@@ -1350,51 +1377,46 @@ impl App {
 
         // Check if this row is a child element row with metadata
         if let Some(RowMetadata::ChildElement { element_type }) = &selected_row.metadata {
-            // Find the child section node under the current variant
-            // It should be a direct child (depth = current + 1) of the current node
-            let current_depth = node.depth;
-            let target_depth = current_depth.saturating_add(1);
-
-            // Start searching after the current node
-            let mut target_idx: Option<usize> = None;
-            for i in node_idx.saturating_add(1)..self.all_nodes.len() {
-                let Some(child_node) = self.all_nodes.get(i) else {
-                    continue;
-                };
-
-                // Stop if we've moved past this variant's children
-                if child_node.depth <= current_depth {
-                    break;
-                }
-
-                // Check if this is the target child at the correct depth
-                if child_node.depth == target_depth
-                    && element_type.matches_node_text(&child_node.text)
-                {
-                    target_idx = Some(i);
-                    break;
-                }
-            }
-
-            if let Some(target_node_idx) = target_idx {
-                // Ensure the target node is visible (expand if needed)
-                self.ensure_node_visible(target_node_idx);
-
-                // Find the target in the visible list and navigate to it
-                if let Some(new_cursor) =
-                    self.visible.iter().position(|&idx| idx == target_node_idx)
-                {
-                    self.push_to_history();
-                    self.focus_state = FocusState::Tree;
-                    self.cursor = new_cursor;
-                    self.reset_detail_state();
-                    self.scroll_offset = self.cursor.saturating_sub(5);
-                    self.status = format!("Navigated to: {}", element_type.display_name());
-                }
-            } else {
-                self.status = format!("Section '{}' not found", element_type.display_name());
-            }
+            self.navigate_to_child_element(node_idx, node.depth, element_type);
         }
+    }
+
+    /// Navigate to a child tree node whose text matches the given `ChildElementType`.
+    /// Searches direct children (depth + 1) of the node at `parent_node_idx`.
+    fn navigate_to_child_element(
+        &mut self,
+        parent_node_idx: usize,
+        parent_depth: usize,
+        element_type: &ChildElementType,
+    ) {
+        let target_depth = parent_depth.saturating_add(1);
+
+        let target_idx = self
+            .all_nodes
+            .iter()
+            .enumerate()
+            .skip(parent_node_idx.saturating_add(1))
+            .take_while(|(_, n)| n.depth > parent_depth)
+            .find(|(_, n)| n.depth == target_depth && element_type.matches_node_text(&n.text))
+            .map(|(i, _)| i);
+
+        let Some(target_node_idx) = target_idx else {
+            self.status = format!("Section '{}' not found", element_type.display_name());
+            return;
+        };
+
+        self.ensure_node_visible(target_node_idx);
+
+        let Some(new_cursor) = self.visible.iter().position(|&idx| idx == target_node_idx) else {
+            return;
+        };
+
+        self.push_to_history();
+        self.focus_state = FocusState::Tree;
+        self.cursor = new_cursor;
+        self.reset_detail_state();
+        self.scroll_offset = self.cursor.saturating_sub(5);
+        self.status = format!("Navigated to: {}", element_type.display_name());
     }
 
     /// Navigate from DIAG-DATA-DICTIONARY-SPEC or DOP category overview to a child node.

@@ -102,7 +102,6 @@ impl App {
             // Reset detail state when moving to a different node
             if old_cursor != self.cursor {
                 self.reset_detail_state();
-                self.push_to_history();
             }
         }
     }
@@ -123,7 +122,6 @@ impl App {
             // Reset detail state when moving to a different node
             if old_cursor != self.cursor {
                 self.reset_detail_state();
-                self.push_to_history();
             }
         }
     }
@@ -139,7 +137,6 @@ impl App {
             self.cursor = self.cursor.saturating_sub(n);
             if old_cursor != self.cursor {
                 self.reset_detail_state();
-                self.push_to_history();
             }
         }
     }
@@ -158,7 +155,6 @@ impl App {
                 .min(self.visible.len().saturating_sub(1));
             if old_cursor != self.cursor {
                 self.reset_detail_state();
-                self.push_to_history();
             }
         }
     }
@@ -174,7 +170,6 @@ impl App {
             self.cursor = 0;
             if old_cursor != self.cursor {
                 self.reset_detail_state();
-                self.push_to_history();
             }
         }
     }
@@ -190,7 +185,6 @@ impl App {
             self.cursor = self.visible.len().saturating_sub(1);
             if old_cursor != self.cursor {
                 self.reset_detail_state();
-                self.push_to_history();
             }
         }
     }

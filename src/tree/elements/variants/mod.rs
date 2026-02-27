@@ -116,7 +116,7 @@ pub fn add_variants(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
             b.push_details_structured(
                 1,
                 name.clone(),
-                is_base,
+                false,
                 true,
                 detail_sections,
                 NodeType::Container,

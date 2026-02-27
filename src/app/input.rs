@@ -288,6 +288,58 @@ impl App {
     /// Handle navigation keys when the detail pane is focused.
     fn handle_detail_navigation(&mut self, code: KeyCode) {
         let section_idx = self.get_section_index();
+
+        // For Composite sections, scroll by block index
+        if self.is_current_section_composite() {
+            while self.composite_scroll.len() <= section_idx {
+                self.composite_scroll.push(0);
+            }
+            match code {
+                KeyCode::Up | KeyCode::Char('K') => {
+                    if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                        *scroll = scroll.saturating_sub(1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('J') => {
+                    if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                        *scroll = scroll.saturating_add(1);
+                    }
+                }
+                KeyCode::PageUp => {
+                    if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                        *scroll = scroll.saturating_sub(5);
+                    }
+                }
+                KeyCode::PageDown => {
+                    if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                        *scroll = scroll.saturating_add(5);
+                    }
+                }
+                KeyCode::Home => {
+                    if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                        *scroll = 0;
+                    }
+                }
+                KeyCode::End => {
+                    if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                        *scroll = usize::MAX;
+                    }
+                }
+                KeyCode::Left | KeyCode::Char('H') => {
+                    let new_tab = self.selected_tab.saturating_sub(1);
+                    self.set_selected_tab(new_tab);
+                    self.focused_column = 0;
+                }
+                KeyCode::Right | KeyCode::Char('L') => {
+                    let new_tab = self.selected_tab.saturating_add(1);
+                    self.set_selected_tab(new_tab);
+                    self.focused_column = 0;
+                }
+                _ => {}
+            }
+            return;
+        }
+
         match code {
             KeyCode::Up | KeyCode::Char('K') => {
                 if let Some(cursor) = self.section_cursors.get_mut(section_idx) {

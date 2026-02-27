@@ -109,7 +109,20 @@ impl App {
                     self.move_down();
                 } else if self.is_in_detail_area(column, row) {
                     self.focus_state = FocusState::Detail;
-                    self.move_down();
+                    if self.is_current_section_composite() {
+                        let section_idx = self.get_section_index();
+                        while self.composite_scroll.len() <= section_idx {
+                            self.composite_scroll.push(0);
+                        }
+                        if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                            *scroll = scroll.saturating_add(1);
+                        }
+                    } else {
+                        let section_idx = self.get_section_index();
+                        if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                            *cursor = cursor.saturating_add(3);
+                        }
+                    }
                 }
             }
             MouseEventKind::ScrollUp => {
@@ -117,7 +130,20 @@ impl App {
                     self.move_up();
                 } else if self.is_in_detail_area(column, row) {
                     self.focus_state = FocusState::Detail;
-                    self.move_up();
+                    if self.is_current_section_composite() {
+                        let section_idx = self.get_section_index();
+                        while self.composite_scroll.len() <= section_idx {
+                            self.composite_scroll.push(0);
+                        }
+                        if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                            *scroll = scroll.saturating_sub(1);
+                        }
+                    } else {
+                        let section_idx = self.get_section_index();
+                        if let Some(cursor) = self.section_cursors.get_mut(section_idx) {
+                            *cursor = cursor.saturating_sub(3);
+                        }
+                    }
                 }
             }
             MouseEventKind::ScrollLeft => {
@@ -147,6 +173,8 @@ impl App {
             self.focus_state = FocusState::Tree;
             self.handle_tree_click(row);
         } else if self.is_in_detail_area(column, row) {
+            // Record current position so backspace returns here after a jump
+            self.push_to_history();
             self.focus_state = FocusState::Detail;
             // Check if click is on tab area
             if self.is_in_tab_area(column, row) {
@@ -562,6 +590,31 @@ impl App {
         } else {
             // Dragging detail scrollbar
             if let Some(area) = self.detail_scrollbar_area {
+                let section_idx = self.get_section_index();
+
+                // Handle composite sections — map drag to composite_scroll
+                if self.is_current_section_composite() {
+                    let relative_y = usize::from(row.saturating_sub(area.y));
+                    let max_scroll = self.composite_max_scroll;
+                    while self.composite_scroll.len() <= section_idx {
+                        self.composite_scroll.push(0);
+                    }
+                    let new_scroll = if area.height > 1 {
+                        let divisor = usize::from(area.height.saturating_sub(1));
+                        relative_y
+                            .saturating_mul(max_scroll)
+                            .checked_div(divisor)
+                            .unwrap_or(0)
+                            .min(max_scroll)
+                    } else {
+                        0
+                    };
+                    if let Some(scroll) = self.composite_scroll.get_mut(section_idx) {
+                        *scroll = new_scroll;
+                    }
+                    return;
+                }
+
                 if self.focused_section >= self.section_scrolls.len() {
                     return;
                 }

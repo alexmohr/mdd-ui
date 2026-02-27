@@ -139,48 +139,84 @@ fn build_dtc_overview(dtc: &Dtc<'_>, short_name: &str) -> DetailSectionData {
 
 /// Build the SDGs section for a single DTC.
 fn build_sdg_section(dtc: &Dtc<'_>) -> DetailSectionData {
-    let rows: Vec<DetailRow> = dtc
+    let sdg_list: Vec<_> = dtc
         .sdgs()
         .and_then(|sdgs| sdgs.sdgs())
         .into_iter()
         .flat_map(|list| list.iter())
-        .map(|sdg| {
-            let caption = sdg.caption_sn().unwrap_or("").to_owned();
-            let si = sdg.si().unwrap_or("-").to_owned();
-            DetailRow::normal(
-                vec![caption, si],
-                vec![CellType::Text, CellType::Text],
-                0,
-            )
+        .collect();
+
+    if sdg_list.is_empty() {
+        return DetailSectionData::new(
+            "SDGs".to_owned(),
+            DetailContent::PlainText(vec!["(No SDGs available)".to_owned()]),
+            false,
+        )
+        .with_type(DetailSectionType::Custom);
+    }
+
+    // Build one sub-table per SDG so sorting stays within each group
+    let subsections: Vec<DetailSectionData> = sdg_list
+        .iter()
+        .flat_map(|sdg| {
+            let caption = sdg.caption_sn().unwrap_or("");
+            let si = sdg.si().unwrap_or("-");
+
+            let sd_rows: Vec<DetailRow> = sdg
+                .sds()
+                .into_iter()
+                .flat_map(|sds| sds.iter())
+                .filter_map(|entry| entry.sd_or_sdg_as_sd())
+                .map(|sd| {
+                    DetailRow::normal(
+                        vec![
+                            sd.value().unwrap_or("-").to_owned(),
+                            sd.si().unwrap_or("-").to_owned(),
+                            sd.ti().unwrap_or("-").to_owned(),
+                        ],
+                        vec![CellType::Text, CellType::Text, CellType::Text],
+                        0,
+                    )
+                })
+                .collect();
+
+            let label = DetailSectionData {
+                title: String::new(),
+                render_as_header: false,
+                section_type: DetailSectionType::Custom,
+                content: DetailContent::PlainText(vec![format!("SDG: {caption}  (SI: {si})")]),
+            };
+
+            let table = DetailSectionData {
+                title: String::new(),
+                render_as_header: false,
+                section_type: DetailSectionType::Custom,
+                content: DetailContent::Table {
+                    header: DetailRow::header(
+                        vec![
+                            "Value".to_owned(),
+                            "SI".to_owned(),
+                            "TI".to_owned(),
+                        ],
+                        vec![CellType::Text, CellType::Text, CellType::Text],
+                    ),
+                    rows: sd_rows,
+                    constraints: vec![
+                        ColumnConstraint::Percentage(50),
+                        ColumnConstraint::Percentage(25),
+                        ColumnConstraint::Percentage(25),
+                    ],
+                    use_row_selection: true,
+                },
+            };
+
+            vec![label, table]
         })
         .collect();
 
-    let rows = if rows.is_empty() {
-        vec![DetailRow::normal(
-            vec!["(No SDGs available)".to_owned()],
-            vec![CellType::Text],
-            0,
-        )]
-    } else {
-        rows
-    };
-
-    let header = DetailRow::header(
-        vec!["Caption".to_owned(), "SI".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
-
     DetailSectionData::new(
         "SDGs".to_owned(),
-        DetailContent::Table {
-            header,
-            rows,
-            constraints: vec![
-                ColumnConstraint::Percentage(70),
-                ColumnConstraint::Percentage(30),
-            ],
-            use_row_selection: true,
-        },
+        DetailContent::Composite(subsections),
         false,
     )
     .with_type(DetailSectionType::Custom)

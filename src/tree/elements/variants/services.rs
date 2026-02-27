@@ -564,97 +564,83 @@ fn build_audience_section(ds: &DiagService<'_>) -> DetailSectionData {
 }
 
 fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
-    let mut sdg_rows: Vec<DetailRow> = ds
+    let sdg_list: Vec<_> = ds
         .diag_comm()
         .and_then(|dc| dc.sdgs())
         .and_then(|sdgs| sdgs.sdgs())
         .into_iter()
-        .flat_map(|sdg_list| sdg_list.iter())
+        .flat_map(|list| list.iter())
+        .collect();
+
+    if sdg_list.is_empty() {
+        return DetailSectionData {
+            title: "SDGs".to_owned(),
+            render_as_header: false,
+            section_type: DetailSectionType::Custom,
+            content: DetailContent::PlainText(vec!["(No SDGs available)".to_owned()]),
+        };
+    }
+
+    // Build one sub-table per SDG so sorting stays within each group
+    let subsections: Vec<DetailSectionData> = sdg_list
+        .iter()
         .flat_map(|sdg| {
             let caption = sdg.caption_sn().unwrap_or("");
             let si = sdg.si().unwrap_or("-");
 
-            let mut rows = vec![DetailRow::normal(
-                vec![
-                    format!("SDG: {caption}"),
-                    si.to_owned(),
-                    String::new(),
-                    String::new(),
-                ],
-                vec![
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
-                ],
-                0,
-            )];
+            let sd_rows: Vec<DetailRow> = sdg
+                .sds()
+                .into_iter()
+                .flat_map(|sds| sds.iter())
+                .filter_map(|entry| entry.sd_or_sdg_as_sd())
+                .map(|sd| {
+                    DetailRow::normal(
+                        vec![
+                            sd.value().unwrap_or("-").to_owned(),
+                            sd.si().unwrap_or("-").to_owned(),
+                            sd.ti().unwrap_or("-").to_owned(),
+                        ],
+                        vec![CellType::Text, CellType::Text, CellType::Text],
+                        0,
+                    )
+                })
+                .collect();
 
-            rows.extend(
-                sdg.sds()
-                    .into_iter()
-                    .flat_map(|sds| sds.iter())
-                    .filter_map(|entry| entry.sd_or_sdg_as_sd())
-                    .map(|sd| {
-                        DetailRow::normal(
-                            vec![
-                                format!("SD: {}", sd.value().unwrap_or("-")),
-                                sd.si().unwrap_or("-").to_owned(),
-                                sd.ti().unwrap_or("-").to_owned(),
-                                String::new(),
-                            ],
-                            vec![
-                                CellType::Text,
-                                CellType::Text,
-                                CellType::Text,
-                                CellType::Text,
-                            ],
-                            1,
-                        )
-                    }),
-            );
+            let label = DetailSectionData {
+                title: String::new(),
+                render_as_header: false,
+                section_type: DetailSectionType::Custom,
+                content: DetailContent::PlainText(vec![format!("SDG: {caption}  (SI: {si})")]),
+            };
 
-            rows
+            let table = DetailSectionData {
+                title: String::new(),
+                render_as_header: false,
+                section_type: DetailSectionType::Custom,
+                content: DetailContent::Table {
+                    header: DetailRow::header(
+                        vec!["Value".to_owned(), "SI".to_owned(), "TI".to_owned()],
+                        vec![CellType::Text, CellType::Text, CellType::Text],
+                    ),
+                    rows: sd_rows,
+                    constraints: vec![
+                        ColumnConstraint::Percentage(50),
+                        ColumnConstraint::Percentage(25),
+                        ColumnConstraint::Percentage(25),
+                    ],
+                    use_row_selection: true,
+                },
+            };
+
+            vec![label, table]
         })
         .collect();
 
-    if sdg_rows.is_empty() {
-        sdg_rows.push(DetailRow::normal(
-            vec!["(No SDGs available)".to_owned()],
-            vec![CellType::Text],
-            0,
-        ));
-    }
-
-    let sdg_header = DetailRow::header(
-        vec![
-            "Caption/Value".to_owned(),
-            "SI".to_owned(),
-            "TI".to_owned(),
-            String::new(),
-        ],
-        vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-    );
     DetailSectionData {
         title: "SDGs".to_owned(),
         render_as_header: false,
         section_type: DetailSectionType::Custom,
-        content: DetailContent::Table {
-            header: sdg_header,
-            rows: sdg_rows,
-            constraints: vec![
-                ColumnConstraint::Percentage(50),
-                ColumnConstraint::Percentage(20),
-                ColumnConstraint::Percentage(20),
-                ColumnConstraint::Percentage(10),
-            ],
-            use_row_selection: true,
-        },
+        content: DetailContent::Composite(subsections),
     }
 }
 

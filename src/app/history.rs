@@ -112,22 +112,18 @@ impl App {
 
     /// Navigate to the previous element in navigation history
     pub(crate) fn navigate_to_previous_in_history(&mut self) {
-        if self.navigation_history.len() < 2 {
+        if self.navigation_history.is_empty() {
             "No previous element in history".clone_into(&mut self.status);
             return;
         }
 
-        if self.history_position <= 1 {
+        if self.history_position == 0 {
             "Already at oldest element in history".clone_into(&mut self.status);
             return;
         }
 
         self.history_position = self.history_position.saturating_sub(1);
-        let Some(entry) = self
-            .navigation_history
-            .get(self.history_position.saturating_sub(1))
-            .cloned()
-        else {
+        let Some(entry) = self.navigation_history.get(self.history_position).cloned() else {
             "History access failed".clone_into(&mut self.status);
             return;
         };

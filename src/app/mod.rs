@@ -205,6 +205,8 @@ pub struct App {
     jump_buffer: String, // Characters typed for type-to-jump in table views
     jump_buffer_time: Option<Instant>, // Timestamp of last type-to-jump character for auto-reset
     pub(crate) theme: ResolvedTheme, // Resolved colour theme
+    pub(crate) composite_scroll: Vec<usize>, // Vertical scroll offset per section for Composite content
+    pub(crate) composite_max_scroll: usize,  // Cached max scroll value from last composite render
 }
 
 #[derive(Clone)]
@@ -276,6 +278,8 @@ impl App {
             jump_buffer: String::new(),
             jump_buffer_time: None,
             theme,
+            composite_scroll: Vec::new(),
+            composite_max_scroll: 0,
         };
         // Apply initial sort order (default is by ID)
         app.sort_diagcomm_nodes_in_place();
@@ -381,6 +385,20 @@ impl App {
     /// Get the actual table section index for storing/retrieving sort state
     fn get_table_section_idx(&self) -> usize {
         self.selected_tab.saturating_add(self.get_section_offset())
+    }
+
+    /// Returns true if the currently selected detail section is a Composite
+    fn is_current_section_composite(&self) -> bool {
+        let Some(&node_idx) = self.visible.get(self.cursor) else {
+            return false;
+        };
+        let Some(node) = self.all_nodes.get(node_idx) else {
+            return false;
+        };
+        let section_idx = self.get_section_index();
+        node.detail_sections
+            .get(section_idx)
+            .is_some_and(|s| matches!(s.content, crate::tree::DetailContent::Composite(_)))
     }
 
     /// Update the selected tab and persist it generically for the current section type
