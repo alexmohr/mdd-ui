@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2026 Alexander Mohr
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Alexander Mohr
+ */
 
 use super::push_types_section;
 use crate::tree::types::{CellType, DetailRow, DetailSectionData};
