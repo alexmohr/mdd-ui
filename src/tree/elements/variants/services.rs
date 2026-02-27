@@ -393,10 +393,15 @@ fn build_overview_section(
         ));
     }
     if let Some((sub_fn, bit_len)) = ds.request_sub_function_id() {
+        let sub_fn_str = if bit_len <= 8 {
+            format!("0x{sub_fn:02X}")
+        } else {
+            format!("0x{sub_fn:04X}")
+        };
         rows.push(DetailRow::normal(
             vec![
                 "Sub-Function".to_owned(),
-                format!("0x{sub_fn:04X} ({bit_len} bits)"),
+                format!("{sub_fn_str} ({bit_len} bits)"),
             ],
             vec![CellType::Text, CellType::Text],
             0,
@@ -698,9 +703,7 @@ pub fn build_diag_comm_details_with_parent(
 
     sections.push(build_overview_section(ds, parent_layer_name));
 
-    if let Some(request_section) = build_request_section(ds) {
-        sections.push(request_section);
-    }
+    sections.push(build_request_section(ds));
 
     sections.extend(build_pos_responses_sections(ds));
     sections.extend(build_neg_responses_sections(ds));

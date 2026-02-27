@@ -19,8 +19,10 @@ use crate::tree::{
 
 /// Build Pos-Response sections - this is the core rendering logic for Pos-Response data
 /// `DiagComm` module should import and use this function to render the Pos-Response tabs
+/// Always returns at least one section (empty table if no response data)
 pub fn build_pos_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionData> {
-    ds.pos_responses()
+    let sections: Vec<DetailSectionData> = ds
+        .pos_responses()
         .into_iter()
         .flat_map(|pos| pos.iter().enumerate())
         .map(|(i, resp)| {
@@ -31,13 +33,25 @@ pub fn build_pos_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionDa
                 DetailSectionType::PosResponses,
             )
         })
-        .collect()
+        .collect();
+
+    if sections.is_empty() {
+        vec![build_response_param_section(
+            "Pos-Response",
+            std::iter::empty(),
+            DetailSectionType::PosResponses,
+        )]
+    } else {
+        sections
+    }
 }
 
 /// Build Neg-Response sections - this is the core rendering logic for Neg-Response data
 /// `DiagComm` module should import and use this function to render the Neg-Response tabs
+/// Always returns at least one section (empty table if no response data)
 pub fn build_neg_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionData> {
-    ds.neg_responses()
+    let sections: Vec<DetailSectionData> = ds
+        .neg_responses()
         .into_iter()
         .flat_map(|neg| neg.iter().enumerate())
         .map(|(i, resp)| {
@@ -48,7 +62,17 @@ pub fn build_neg_responses_sections(ds: &DiagService<'_>) -> Vec<DetailSectionDa
                 DetailSectionType::NegResponses,
             )
         })
-        .collect()
+        .collect();
+
+    if sections.is_empty() {
+        vec![build_response_param_section(
+            "Neg-Response",
+            std::iter::empty(),
+            DetailSectionType::NegResponses,
+        )]
+    } else {
+        sections
+    }
 }
 
 /// Add a single service with positive responses to the tree
@@ -390,10 +414,15 @@ fn build_overview_section(
         });
     }
     if let Some((sub_fn, bit_len)) = ds.request_sub_function_id() {
+        let sub_fn_str = if bit_len <= 8 {
+            format!("0x{sub_fn:02X}")
+        } else {
+            format!("0x{sub_fn:04X}")
+        };
         rows.push(DetailRow {
             cells: vec![
                 "Sub-Function".to_owned(),
-                format!("0x{sub_fn:04X} ({bit_len} bits)"),
+                format!("{sub_fn_str} ({bit_len} bits)"),
             ],
             cell_types: vec![CellType::Text, CellType::Text],
             indent: 0,

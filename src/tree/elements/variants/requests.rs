@@ -153,11 +153,17 @@ pub fn add_requests_section<'a>(
 
 /// Build the Request tab section - this is the core rendering logic for Request data
 /// `DiagComm` module should import and use this function to render the Request tab
-pub fn build_request_section(ds: &DiagService<'_>) -> Option<DetailSectionData> {
-    let req = ds.request()?;
-    let params = req.params().into_iter().flatten().map(Parameter);
+/// Always returns a section (empty table if no request data)
+pub fn build_request_section(ds: &DiagService<'_>) -> DetailSectionData {
+    let params: Vec<Parameter<'_>> = ds
+        .request()
+        .and_then(|req| req.params())
+        .into_iter()
+        .flatten()
+        .map(Parameter)
+        .collect();
 
-    Some(build_request_param_section("Request", params))
+    build_request_param_section("Request", params)
 }
 
 /// Build complete service view with Request tab (used by Requests section)
@@ -216,10 +222,15 @@ fn build_request_view_sections(
         });
     }
     if let Some((sub_fn, bit_len)) = ds.request_sub_function_id() {
+        let sub_fn_str = if bit_len <= 8 {
+            format!("0x{sub_fn:02X}")
+        } else {
+            format!("0x{sub_fn:04X}")
+        };
         rows.push(DetailRow {
             cells: vec![
                 "Sub-Function".to_owned(),
-                format!("0x{sub_fn:04X} ({bit_len} bits)"),
+                format!("{sub_fn_str} ({bit_len} bits)"),
             ],
             cell_types: vec![CellType::Text, CellType::Text],
             indent: 0,
@@ -263,9 +274,7 @@ fn build_request_view_sections(
     });
 
     // Request params - use the rendering logic from this module
-    if let Some(request_section) = build_request_section(ds) {
-        sections.push(request_section);
-    }
+    sections.push(build_request_section(ds));
 
     sections
 }
