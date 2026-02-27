@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 A terminal-based (TUI) browser for MDD diagnostic databases, built with [Ratatui](https://ratatui.rs). It renders the full ECU diagnostic tree — variants, functional groups, shared data, protocols, services, parameters, and more — in an interactive, navigable interface directly in your terminal.
 
-![demo](img/demo.png)
+![demo](img/demo.gif)
 
 ## Features
 
