@@ -274,23 +274,7 @@ impl App {
                 });
             }
 
-            // Deduplicate by name - keep only first occurrence of each service name
-            let mut seen_names = std::collections::HashSet::new();
-            services.retain(|service| {
-                let name = extract_service_name(&service.text);
-                seen_names.insert(name.to_owned())
-            });
-
-            // Update the count in the section header
-            let new_count = services.len();
-            if let Some(header_node) = self.tree.all_nodes.get_mut(i) {
-                // Update "Diag-Comms (X)" to reflect filtered count
-                if header_node.text.contains('(') {
-                    header_node.text = format!("Diag-Comms ({new_count})");
-                }
-            }
-
-            // Re-insert sorted and deduplicated services
+            // Re-insert sorted services
             let inserted_count = services.len();
             self.tree
                 .all_nodes
