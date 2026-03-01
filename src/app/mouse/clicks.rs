@@ -43,7 +43,7 @@ impl App {
         let mut current_width: usize = 0;
 
         for (idx, tab_str) in tab_strings.iter().enumerate() {
-            let tab_width: usize = tab_str.len().saturating_add(1); // +1 for separator
+            let tab_width: usize = tab_str.chars().count().saturating_add(1); // +1 for separator
 
             if current_width.saturating_add(tab_width) > available_width && !current_line.is_empty()
             {
@@ -79,7 +79,7 @@ impl App {
                 && relative_col
                     < current_pos
                         .saturating_add(separator_width)
-                        .saturating_add(tab_str.len())
+                        .saturating_add(tab_str.chars().count())
             {
                 self.set_selected_tab(tab_idx);
                 return;
@@ -88,7 +88,7 @@ impl App {
             // Move past this tab and its separator
             current_pos = current_pos
                 .saturating_add(separator_width)
-                .saturating_add(tab_str.len());
+                .saturating_add(tab_str.chars().count());
         }
     }
 
