@@ -44,7 +44,7 @@ impl App {
 
     /// Set the tree cursor to `new_cursor`, resetting detail state only when
     /// the cursor actually changes.
-    fn set_tree_cursor(&mut self, new_cursor: usize) {
+    pub(super) fn set_tree_cursor(&mut self, new_cursor: usize) {
         if self.tree.cursor != new_cursor {
             self.tree.cursor = new_cursor;
             self.reset_detail_state();

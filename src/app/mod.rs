@@ -583,9 +583,8 @@ impl App {
         });
 
         if let Some(target) = found {
-            self.tree.cursor = target;
-            self.reset_detail_state();
-            self.tree.scroll_offset = self.tree.cursor.saturating_sub(SCROLL_CONTEXT_LINES);
+            self.set_tree_cursor(target);
+            self.tree.scroll_offset = target.saturating_sub(SCROLL_CONTEXT_LINES);
             self.status = format!("Jump: \"{}\"", self.table.jump_buffer);
         } else {
             self.status = format!("Jump: \"{}\" (no match)", self.table.jump_buffer);
