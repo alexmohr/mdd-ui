@@ -158,7 +158,7 @@ impl App {
             .copied()
             .unwrap_or(0);
 
-        // Render blocks starting from first_block, stacking downward
+        let last_block_idx = blocks.len().saturating_sub(1);
         let spacing = 1u16;
         let mut y = area.y;
         let viewport_bottom = area.y.saturating_add(area.height);
@@ -193,10 +193,15 @@ impl App {
 
             self.render_composite_block(frame, block_rect, block);
 
-            y = y
-                .saturating_add(render_h)
-                .saturating_add(spacing)
-                .min(viewport_bottom);
+            // Don't add spacing after the last block — it wastes one row.
+            if i < last_block_idx {
+                y = y
+                    .saturating_add(render_h)
+                    .saturating_add(spacing)
+                    .min(viewport_bottom);
+            } else {
+                y = y.saturating_add(render_h).min(viewport_bottom);
+            }
         }
 
         // Render scrollbar when there are blocks beyond the viewport
