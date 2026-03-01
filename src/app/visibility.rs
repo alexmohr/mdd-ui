@@ -137,7 +137,8 @@ impl App {
             }
         }
 
-        // Pass 2: Include parents using a depth-indexed stack — O(N × D) where D is max depth
+        // unwrap_or(0): empty tree → no nodes → parent_at_depth is empty → the
+        // subsequent depth walk is a no-op, so 0 is correct and safe.
         let max_depth = self
             .tree
             .all_nodes
