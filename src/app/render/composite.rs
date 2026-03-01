@@ -16,20 +16,23 @@ use crate::{
     tree::{DetailContent, DetailRow, DetailSectionData},
 };
 
+/// Shared table fields used by both `TitledTable` and `Table` composite blocks.
+/// Extracting them into a struct means adding a new field (e.g., `use_row_selection`)
+/// only requires one change instead of two.
+pub(super) struct TableBlock<'a> {
+    pub header: &'a DetailRow,
+    pub rows: &'a [DetailRow],
+    pub constraints: &'a [crate::tree::ColumnConstraint],
+}
+
 /// A visual block inside a Composite section — either a titled table
 /// (`PlainText` label merged with following `Table`) or a standalone element.
 pub(super) enum CompositeBlock<'a> {
     TitledTable {
         title: String,
-        header: &'a DetailRow,
-        rows: &'a [DetailRow],
-        constraints: &'a [crate::tree::ColumnConstraint],
+        table: TableBlock<'a>,
     },
-    Table {
-        header: &'a DetailRow,
-        rows: &'a [DetailRow],
-        constraints: &'a [crate::tree::ColumnConstraint],
-    },
+    Table(TableBlock<'a>),
     PlainText {
         lines: &'a [String],
     },
@@ -57,9 +60,11 @@ pub(super) fn build_composite_blocks(subsections: &[DetailSectionData]) -> Vec<C
                 {
                     blocks.push(CompositeBlock::TitledTable {
                         title: lines.join(" "),
-                        header,
-                        rows,
-                        constraints,
+                        table: TableBlock {
+                            header,
+                            rows,
+                            constraints,
+                        },
                     });
                     i = i.saturating_add(2);
                     continue;
@@ -73,11 +78,11 @@ pub(super) fn build_composite_blocks(subsections: &[DetailSectionData]) -> Vec<C
                 constraints,
                 ..
             } => {
-                blocks.push(CompositeBlock::Table {
+                blocks.push(CompositeBlock::Table(TableBlock {
                     header,
                     rows,
                     constraints,
-                });
+                }));
             }
             DetailContent::Composite(_) => {
                 // Nested Composite is not supported. This case should not occur
@@ -115,10 +120,9 @@ impl App {
             .iter()
             .map(|b| {
                 let content_h: u16 = match b {
-                    CompositeBlock::TitledTable { rows, .. }
-                    | CompositeBlock::Table { rows, .. } => {
+                    CompositeBlock::TitledTable { table, .. } | CompositeBlock::Table(table) => {
                         // table header (3) + data rows
-                        let row_h = u16::try_from(rows.len()).unwrap_or(u16::MAX);
+                        let row_h = u16::try_from(table.rows.len()).unwrap_or(u16::MAX);
                         3u16.saturating_add(row_h)
                     }
                     CompositeBlock::PlainText { lines } => {
@@ -171,7 +175,7 @@ impl App {
 
             // Minimum height to render a block usefully
             let min_h: u16 = match block {
-                CompositeBlock::TitledTable { .. } | CompositeBlock::Table { .. } => 5,
+                CompositeBlock::TitledTable { .. } | CompositeBlock::Table(_) => 5,
                 CompositeBlock::PlainText { .. } => 3,
             };
             if remaining < min_h {
@@ -216,13 +220,7 @@ impl App {
         block: &CompositeBlock<'_>,
     ) {
         match block {
-            CompositeBlock::TitledTable {
-                title,
-                header,
-                rows,
-                constraints,
-                ..
-            } => {
+            CompositeBlock::TitledTable { title, table } => {
                 let border = Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(self.theme.tab_inactive_fg))
@@ -230,22 +228,29 @@ impl App {
                 let inner = border.inner(area);
                 frame.render_widget(border, area);
                 if inner.height > 0 && inner.width > 0 {
-                    self.render_static_table(frame, inner, header, rows, constraints);
+                    self.render_static_table(
+                        frame,
+                        inner,
+                        table.header,
+                        table.rows,
+                        table.constraints,
+                    );
                 }
             }
-            CompositeBlock::Table {
-                header,
-                rows,
-                constraints,
-                ..
-            } => {
+            CompositeBlock::Table(table) => {
                 let border = Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(self.theme.tab_inactive_fg));
                 let inner = border.inner(area);
                 frame.render_widget(border, area);
                 if inner.height > 0 && inner.width > 0 {
-                    self.render_static_table(frame, inner, header, rows, constraints);
+                    self.render_static_table(
+                        frame,
+                        inner,
+                        table.header,
+                        table.rows,
+                        table.constraints,
+                    );
                 }
             }
             CompositeBlock::PlainText { lines } => {
