@@ -85,9 +85,9 @@ pub(super) fn build_composite_blocks(subsections: &[DetailSectionData]) -> Vec<C
                 }));
             }
             DetailContent::Composite(_) => {
-                // Nested Composite is not supported. This case should not occur
-                // in valid databases; the assert surfaces it during development.
-                debug_assert!(false, "nested Composite not supported");
+                // Nested Composite is not produced by the builder; this arm is
+                // unreachable in correct usage.
+                unreachable!("nested Composite not supported");
             }
         }
         i = i.saturating_add(1);
