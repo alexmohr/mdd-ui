@@ -35,10 +35,10 @@ impl App {
         path
     }
 
-    /// Resolve a stored path back to a `node_idx` by walking the tree and
-    /// expanding ancestors as needed so the target becomes visible.
-    fn resolve_path(&mut self, path: &[(usize, String)]) -> Option<usize> {
-        // Walk through the path entries, ensuring each ancestor is expanded
+    /// Resolve a stored path back to a `node_idx` by walking the tree.
+    /// Does not expand ancestors or rebuild visible — callers must call
+    /// `ensure_node_visible` afterwards.
+    fn resolve_path(&self, path: &[(usize, String)]) -> Option<usize> {
         let mut last_found_idx: Option<usize> = None;
 
         for (target_depth, target_text) in path {
@@ -54,22 +54,12 @@ impl App {
                 .map(|(i, _)| i);
 
             let Some(idx) = found else {
-                // Path entry not found; return last match as best effort
                 return last_found_idx;
             };
-
-            // Expand this node so subsequent children are visible
-            if let Some(node) = self.tree.all_nodes.get_mut(idx)
-                && node.has_children
-            {
-                node.expanded = true;
-            }
 
             last_found_idx = Some(idx);
         }
 
-        // Rebuild visible list with the expanded ancestors
-        self.rebuild_visible();
         last_found_idx
     }
 
@@ -146,6 +136,7 @@ impl App {
                 self.status = "Previous element no longer reachable".into();
                 return;
             };
+            self.ensure_node_visible(idx);
             idx
         };
 
