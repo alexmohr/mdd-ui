@@ -132,6 +132,11 @@ impl App {
                 } else {
                     FocusState::Detail
                 };
+                // Clear the jump buffer on focus switch so a buffer accumulated
+                // in one mode doesn't carry over and trigger an unintended jump
+                // in the other mode.
+                self.table.jump_buffer.clear();
+                self.table.jump_buffer_time = None;
             }
 
             // Pane resizing
