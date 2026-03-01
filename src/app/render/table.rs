@@ -334,16 +334,15 @@ impl App {
             section_idx,
         }: HScrollTableParams<'_>,
     ) {
-        let (vis_constraints, vis_header, vis_rows, _first_vis_col) =
-            self.apply_horizontal_scroll(HScrollParams {
-                column_widths,
-                column_spacing,
-                h_scroll,
-                viewport_width: table_area.width,
-                header,
-                visible_rows,
-                sort_state: self.table.sort_state.get(section_idx).and_then(|s| *s),
-            });
+        let (vis_constraints, vis_header, vis_rows) = self.apply_horizontal_scroll(HScrollParams {
+            column_widths,
+            column_spacing,
+            h_scroll,
+            viewport_width: table_area.width,
+            header,
+            visible_rows,
+            sort_state: self.table.sort_state.get(section_idx).and_then(|s| *s),
+        });
 
         self.table
             .cached_ratatui_constraints
@@ -382,7 +381,7 @@ impl App {
             visible_rows,
             sort_state,
         }: HScrollParams<'_>,
-    ) -> (Vec<Constraint>, Row<'static>, Vec<Row<'static>>, usize) {
+    ) -> (Vec<Constraint>, Row<'static>, Vec<Row<'static>>) {
         // Calculate cumulative positions: (start_px, end_px) for each column
         let mut col_positions: Vec<(u16, u16)> = Vec::with_capacity(column_widths.len());
         let mut x = 0u16;
@@ -412,8 +411,6 @@ impl App {
             })
             .unzip();
 
-        let first_vis_col = vis_col_indices.first().copied().unwrap_or(0);
-
         // Build constraints
         let constraints: Vec<Constraint> =
             vis_widths.iter().map(|&w| Constraint::Length(w)).collect();
@@ -429,7 +426,7 @@ impl App {
         // we return the original rows and let the Constraint::Length handle clipping.
         // Columns outside the viewport simply won't have space allocated.
 
-        (constraints, header_row, data_rows, first_vis_col)
+        (constraints, header_row, data_rows)
     }
 
     /// Build a header row for horizontally scrolled view showing only visible columns
