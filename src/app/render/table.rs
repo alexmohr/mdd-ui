@@ -416,7 +416,7 @@ impl App {
             vis_widths.iter().map(|&w| Constraint::Length(w)).collect();
 
         // Build header
-        let header_row = self.build_scrolled_header_row(header, &vis_col_indices, sort_state);
+        let header_row = self.build_header_row_impl(header, &vis_col_indices, sort_state);
 
         // Build data rows by extracting visible columns
         let data_rows: Vec<Row<'static>> = visible_rows.to_vec();
@@ -429,14 +429,15 @@ impl App {
         (constraints, header_row, data_rows)
     }
 
-    /// Build a header row for horizontally scrolled view showing only visible columns
-    pub(super) fn build_scrolled_header_row(
+    /// Build a header row showing only the columns in `col_indices`.
+    /// Shared implementation used by both the scrolled and non-scrolled paths.
+    fn build_header_row_impl(
         &self,
         header: &DetailRow,
-        vis_col_indices: &[usize],
+        col_indices: &[usize],
         sort_state: Option<TableSortState>,
     ) -> Row<'static> {
-        let header_cells: Vec<Cell> = vis_col_indices
+        let header_cells: Vec<Cell> = col_indices
             .iter()
             .map(|&idx| {
                 let c = header.cells.get(idx).cloned().unwrap_or_default();
@@ -463,6 +464,16 @@ impl App {
             .collect();
 
         Row::new(header_cells).height(3)
+    }
+
+    /// Build the scrolled header row (only visible columns, in scroll order).
+    pub(super) fn build_scrolled_header_row(
+        &self,
+        header: &DetailRow,
+        vis_col_indices: &[usize],
+        sort_state: Option<TableSortState>,
+    ) -> Row<'static> {
+        self.build_header_row_impl(header, vis_col_indices, sort_state)
     }
 
     pub(super) fn build_visible_rows(
@@ -586,39 +597,10 @@ impl App {
     ) -> Row<'static> {
         let sort_state = self.table.sort_state.get(section_idx).and_then(|s| *s);
 
-        let header_cells: Vec<Cell> = header
-            .cells
-            .iter()
-            .enumerate()
-            .map(|(idx, c)| {
-                let sort_indicator =
-                    sort_state
-                        .filter(|state| state.column == idx)
-                        .map_or("", |state| match state.direction {
-                            SortDirection::Ascending => "▲",
-                            SortDirection::Descending => "▼",
-                        });
-
-                let text = if sort_indicator.is_empty() {
-                    c.clone()
-                } else {
-                    format!("{sort_indicator}\n{c}")
-                };
-
-                let style = Style::default()
-                    .fg(self.theme.table_header)
-                    .add_modifier(Modifier::BOLD);
-                Cell::from(Text::from(text)).style(style)
-            })
-            .collect();
-
-        // Pad header to match column count
-        let mut all_cells = header_cells;
-        while all_cells.len() < max_columns {
-            all_cells.push(Cell::from(""));
-        }
-
-        Row::new(all_cells).height(3)
+        // Build cells for all columns (pad to max_columns)
+        let col_count = header.cells.len().max(max_columns);
+        let all_col_indices: Vec<usize> = (0..col_count).collect();
+        self.build_header_row_impl(header, &all_col_indices, sort_state)
     }
 
     pub(super) fn get_column_widths(
