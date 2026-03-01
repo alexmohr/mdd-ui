@@ -466,16 +466,6 @@ impl App {
         Row::new(header_cells).height(3)
     }
 
-    /// Build the scrolled header row (only visible columns, in scroll order).
-    pub(super) fn build_scrolled_header_row(
-        &self,
-        header: &DetailRow,
-        vis_col_indices: &[usize],
-        sort_state: Option<TableSortState>,
-    ) -> Row<'static> {
-        self.build_header_row_impl(header, vis_col_indices, sort_state)
-    }
-
     pub(super) fn build_visible_rows(
         &self,
         rows_refs: &[&DetailRow],

@@ -220,46 +220,42 @@ impl App {
     }
 
     pub(crate) fn sort_diagcomm_nodes_in_place(&mut self) {
-        // Find all "Diag-Comms" section headers and sort their children
-        let mut i = 0;
-        while i < self.tree.all_nodes.len() {
-            let Some(node) = self.tree.all_nodes.get(i) else {
-                break;
-            };
+        // Collect (header_idx, children_start, children_end) for every Diag-Comms
+        // section, then process them in *reverse* order so that splice/drain at
+        // an earlier index does not shift the positions of later sections.
+        let sections: Vec<(usize, usize, usize)> = self
+            .tree
+            .all_nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| Self::is_service_list_type(n, crate::tree::ServiceListType::DiagComms))
+            .map(|(i, n)| {
+                let section_depth = n.depth;
+                let section_start = i.saturating_add(1);
+                let section_end = self
+                    .tree
+                    .all_nodes
+                    .iter()
+                    .skip(section_start)
+                    .position(|m| m.depth <= section_depth)
+                    .map_or(self.tree.all_nodes.len(), |pos| {
+                        section_start.saturating_add(pos)
+                    });
+                (i, section_start, section_end)
+            })
+            .collect();
 
-            // Skip non-Diag-Comms nodes early
-            if !Self::is_service_list_type(node, crate::tree::ServiceListType::DiagComms) {
-                i = i.saturating_add(1);
-                continue;
-            }
-
-            let section_depth = node.depth;
-            let section_start = i.saturating_add(1);
-
-            let section_end = self
-                .tree
-                .all_nodes
-                .iter()
-                .skip(section_start)
-                .position(|n| n.depth <= section_depth)
-                .map_or(self.tree.all_nodes.len(), |pos| {
-                    section_start.saturating_add(pos)
-                });
-
-            // Skip if no children to sort
+        for (_, section_start, section_end) in sections.into_iter().rev() {
             if section_end <= section_start {
-                i = i.saturating_add(1);
                 continue;
             }
 
-            // Extract and sort the service nodes
             let mut services: Vec<TreeNode> = self
                 .tree
                 .all_nodes
                 .drain(section_start..section_end)
                 .collect();
 
-            // Sort services based on current sort order
             if self.tree.diagcomm_sort_by_id {
                 services.sort_by(|a, b| {
                     let a_id = extract_service_id(&a.text);
@@ -274,14 +270,9 @@ impl App {
                 });
             }
 
-            // Re-insert sorted services
-            let inserted_count = services.len();
             self.tree
                 .all_nodes
                 .splice(section_start..section_start, services);
-
-            // Skip past the re-inserted section
-            i = section_start.saturating_add(inserted_count);
         }
     }
 
