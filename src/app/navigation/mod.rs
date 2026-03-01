@@ -200,6 +200,9 @@ impl App {
             CellJumpTarget::ContainerByName => {
                 self.navigate_to_container_by_name(cell_value);
             }
+            CellJumpTarget::ServiceOrJobByName => {
+                self.navigate_to_service_or_job(cell_value);
+            }
         }
     }
 }

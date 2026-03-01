@@ -267,7 +267,7 @@ fn build_service_row(service: &DiagService<'_>, layer_name: &str) -> Option<Deta
             CellType::ParameterName,
         ],
         vec![
-            Some(CellJumpTarget::TreeNodeByName),
+            Some(CellJumpTarget::ServiceOrJobByName),
             None,
             None,
             None,
@@ -297,7 +297,7 @@ fn build_job_row(job_name: &str, layer_name: &str) -> DetailRow {
             CellType::ParameterName,
         ],
         vec![
-            Some(CellJumpTarget::TreeNodeByName),
+            Some(CellJumpTarget::ServiceOrJobByName),
             None,
             None,
             None,

@@ -240,6 +240,11 @@ pub enum CellJumpTarget {
     TreeNodeByName,
     /// Navigate to a container (variant / layer) by name
     ContainerByName,
+    /// Navigate to a Service or Job tree node whose short name matches the cell
+    /// value. Service node texts have the format "ID - ShortName" so an exact
+    /// `text == value` comparison does not work; this variant uses the
+    /// dedicated service-name extraction logic instead.
+    ServiceOrJobByName,
 }
 
 /// A row in a detail table.
