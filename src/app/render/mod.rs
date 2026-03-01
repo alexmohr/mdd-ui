@@ -230,12 +230,12 @@ impl App {
                 Style::default().fg(self.theme.status_fg),
             )
         };
-        // Truncate to terminal width to avoid overlong strings confusing terminal emulators
+        // Truncate to terminal width. char_indices().nth(n) short-circuits at the
+        // n-th scalar boundary, avoiding a full O(len) scan on the common (fits) path.
         let display_width = usize::from(area.width);
-        let text = if text.chars().count() > display_width {
-            text.chars().take(display_width).collect::<String>()
-        } else {
-            text
+        let text = match text.char_indices().nth(display_width) {
+            Some((byte_idx, _)) => text[..byte_idx].to_string(),
+            None => text,
         };
         frame.render_widget(Paragraph::new(text).style(st), area);
     }
