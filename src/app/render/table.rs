@@ -661,37 +661,7 @@ impl App {
                     .collect();
 
                 // Normalize to ensure total is exactly 100%
-                let total: u16 = widths.iter().sum();
-                if total > 0 && total != 100 {
-                    let scaled_widths = widths
-                        .iter()
-                        .map(|&w| {
-                            let total_32 = u32::from(total);
-                            u16::try_from(
-                                u32::from(w)
-                                    .saturating_mul(100)
-                                    .saturating_add(total_32.saturating_div(2))
-                                    .checked_div(total_32)
-                                    .unwrap_or(0)
-                                    .min(100),
-                            )
-                            .unwrap_or(100)
-                        })
-                        .collect();
-                    widths = scaled_widths;
-
-                    let new_total: u16 = widths.iter().sum();
-                    if new_total != 100 && !widths.is_empty() {
-                        let max_idx = widths
-                            .iter()
-                            .enumerate()
-                            .max_by_key(|(_, w)| *w)
-                            .map_or(0, |(idx, _)| idx);
-                        if let Some(width) = widths.get_mut(max_idx) {
-                            *width = width.saturating_add(u16::saturating_sub(100, new_total));
-                        }
-                    }
-                }
+                App::normalize_column_widths(&mut widths);
 
                 if let Some(col_widths) = self.table.column_widths.get_mut(section_idx) {
                     *col_widths = widths;

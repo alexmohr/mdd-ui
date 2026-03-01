@@ -176,7 +176,7 @@ impl App {
         *section_widths = widths;
     }
 
-    fn normalize_column_widths(widths: &mut [u16]) {
+    pub(crate) fn normalize_column_widths(widths: &mut [u16]) {
         let total: u16 = widths.iter().sum();
         if total == 0 || total == 100 {
             return;
