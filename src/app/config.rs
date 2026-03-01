@@ -256,8 +256,11 @@ fn parse_color(s: &str) -> Color {
         "lightblue" | "light_blue" => Color::LightBlue,
         "lightmagenta" | "light_magenta" => Color::LightMagenta,
         "lightcyan" | "light_cyan" => Color::LightCyan,
-        // "white" and any unrecognised string fall back to White
-        _ => Color::White,
+        "white" => Color::White,
+        _ => {
+            eprintln!("mdd-ui: unrecognised color '{s}', using White");
+            Color::White
+        }
     }
 }
 
