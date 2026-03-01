@@ -191,6 +191,9 @@ pub(crate) struct TreeState {
     pub cursor: usize,
     pub scroll_offset: usize,
     pub diagcomm_sort_by_id: bool, // true = sort by ID (default), false = sort by name
+    /// Explicit sort direction per parent-node index for `sort_children_by_name`.
+    /// Absent means the next sort will be ascending (first press).
+    pub children_sort_dirs: HashMap<usize, SortDirection>,
 }
 
 /// A single entry in the incremental search stack.

@@ -183,20 +183,15 @@ impl App {
             child_groups.push(current_group);
         }
 
-        // Check if already sorted ascending to decide direction
-        let already_ascending = child_groups.windows(2).all(|w| {
-            let a = w
-                .first()
-                .and_then(|g| g.first())
-                .map(|n| n.text.to_lowercase());
-            let b = w
-                .get(1)
-                .and_then(|g| g.first())
-                .map(|n| n.text.to_lowercase());
-            a <= b
-        });
+        // Determine next sort direction from the persisted map;
+        // absent means first press → ascending.
+        let next_dir = match self.tree.children_sort_dirs.get(&parent_idx) {
+            Some(SortDirection::Ascending) => SortDirection::Descending,
+            Some(SortDirection::Descending) | None => SortDirection::Ascending,
+        };
+        self.tree.children_sort_dirs.insert(parent_idx, next_dir);
 
-        if already_ascending {
+        if next_dir == SortDirection::Descending {
             child_groups.sort_by(|a, b| {
                 let a_text = a.first().map(|n| n.text.to_lowercase());
                 let b_text = b.first().map(|n| n.text.to_lowercase());
