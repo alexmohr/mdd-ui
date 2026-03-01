@@ -312,7 +312,15 @@ pub(crate) struct BreadcrumbSegment {
 
 /// Cached layout areas for mouse handling
 #[derive(Default)]
+/// Cached layout data used across render frames and mouse hit-testing.
+///
+/// Fields fall into two categories:
+/// * **Persistent settings** — controlled by the user and survive across frames:
+///   - `tree_width_percentage`
+/// * **Derived cache** — recomputed each frame or on change; safe to reset:
+///   - everything else
 pub(crate) struct LayoutCache {
+    // --- derived per-frame cache ---
     pub tree_area: Rect,
     pub detail_area: Rect,
     pub tab_area: Option<Rect>,
@@ -327,6 +335,7 @@ pub(crate) struct LayoutCache {
     pub tree_scrollbar_area: Option<Rect>,
     pub detail_scrollbar_area: Option<Rect>,
     pub detail_hscrollbar_area: Option<Rect>,
+    // --- persistent user setting ---
     pub tree_width_percentage: u16,
 }
 
