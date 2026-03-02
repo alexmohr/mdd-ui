@@ -19,13 +19,14 @@ pub mod tables;
 pub mod unit_spec;
 
 use cda_database::datatypes::{DiagLayer, DiagService, EcuDb, Variant as VariantWrap};
+use parent_refs::extract_parent_ref_short_names;
 
 use super::layers::LayerExt;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
         CellJumpTarget, CellType, ChildElementType, ColumnConstraint, DetailContent, DetailRow,
-        DetailRowType, DetailSectionData, DetailSectionType, NodeType, RowMetadata, SectionType,
+        DetailRowType, DetailSectionData, DetailSectionType, RowMetadata, SectionType,
     },
 };
 
@@ -112,16 +113,15 @@ pub fn add_variants(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
 
             detail_sections.extend(build_variant_summary_section(&vw, &name));
 
+            // Extract parent ref container names from the DB for hierarchy navigation
+            let parent_ref_names = extract_parent_ref_short_names(
+                vw.parent_refs()
+                    .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
+            );
+
             // Note: Parent refs are not shown in variant detail view per user request
 
-            b.push_details_structured(
-                1,
-                name.clone(),
-                false,
-                true,
-                detail_sections,
-                NodeType::Container,
-            );
+            b.push_container(1, name.clone(), detail_sections, parent_ref_names);
 
             // Add diag layer content directly under variant (no section header)
             if let Some(dl) = vw.diag_layer() {
@@ -168,14 +168,13 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
 
                 let detail_sections = build_layer_summary_section(&layer, name);
 
-                b.push_details_structured(
-                    1,
-                    name.to_string(),
-                    false,
-                    true,
-                    detail_sections,
-                    NodeType::Container,
+                // Extract parent ref container names from the DB for hierarchy navigation
+                let parent_ref_names = extract_parent_ref_short_names(
+                    fg.parent_refs()
+                        .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
                 );
+
+                b.push_container(1, name.to_string(), detail_sections, parent_ref_names);
 
                 // Pass parent refs from functional group for inherited elements
                 let parent_refs_iter = fg
@@ -255,14 +254,8 @@ fn add_layer_section(
         let name = layer.short_name().unwrap_or("unnamed");
         let detail_sections = build_layer_summary_section(layer, name);
 
-        b.push_details_structured(
-            1,
-            name.to_string(),
-            false,
-            true,
-            detail_sections,
-            NodeType::Container,
-        );
+        // ECU Shared Data / Protocols are at the top of the hierarchy — no parent refs
+        b.push_container(1, name.to_string(), detail_sections, Vec::new());
 
         b.add_diag_layer_structured(
             layer,

@@ -111,6 +111,10 @@ pub struct TreeNode {
     pub service_list_type: Option<ServiceListType>,
     /// If this is a parameter node, stores the parameter ID for lookup
     pub param_id: Option<u32>,
+    /// For `Container` nodes: short names of parent-ref containers from the
+    /// database hierarchy. Used by the navigation system to walk the DB
+    /// inheritance chain instead of scanning the tree.
+    pub parent_ref_names: Vec<String>,
 }
 
 /// Type of detail section for logic and navigation.
@@ -241,7 +245,7 @@ pub enum CellJumpTarget {
     /// Navigate to a container (variant / layer) by name
     ContainerByName,
     /// Navigate to a Service or Job tree node whose short name matches the cell
-    /// value. Service node texts have the format "ID - ShortName" so an exact
+    /// value. Service node texts have the format "ID - `ShortName`" so an exact
     /// `text == value` comparison does not work; this variant uses the
     /// dedicated service-name extraction logic instead.
     ServiceOrJobByName,

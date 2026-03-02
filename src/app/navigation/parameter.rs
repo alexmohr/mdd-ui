@@ -5,19 +5,19 @@
 
 use crate::{
     app::{App, FocusState, SCROLL_CONTEXT_LINES},
-    tree::{CellType, DetailSectionType, NodeTextPrefix, NodeType},
+    tree::{CellJumpTarget, CellType, NodeTextPrefix, ServiceListType},
 };
 
 impl App {
-    /// Navigate from a parameter table (Request/Response) based on the focused cell.
-    /// For `DiagComm` Service nodes: `ParameterName` navigates to the counterpart service.
-    /// For Request/Response nodes: uses per-cell jump target metadata.
+    /// Navigate from a parameter table based on the focused cell.
+    /// Uses the active tab's section type to determine the target section
+    /// in the tree, then navigates via path: container → section → service.
+    /// Works uniformly for all service-related node types.
     pub(crate) fn try_navigate_from_param_table(&mut self) {
-        let (node_idx, section_idx, node_type, cell_type, cell_value, jump_target) = {
+        let (node_idx, section_type, cell_type, cell_value, jump_target, service_name) = {
             let Some(ctx) = self.resolve_selected_row() else {
                 return;
             };
-            let node_type = ctx.node.node_type;
             let Some(selected_row) = ctx.selected_row() else {
                 return;
             };
@@ -35,13 +35,21 @@ impl App {
                 .get(focused_col)
                 .cloned()
                 .flatten();
+            let section_type = ctx.section.section_type;
+            let service_name = ctx
+                .node
+                .text
+                .strip_prefix(NodeTextPrefix::Service.as_str())
+                .or_else(|| ctx.node.text.strip_prefix(NodeTextPrefix::Job.as_str()))
+                .unwrap_or(&ctx.node.text)
+                .to_owned();
             (
                 ctx.node_idx,
-                ctx.section_idx,
-                node_type,
+                section_type,
                 cell_type,
                 cell_value,
                 jump_target,
+                service_name,
             )
         };
 
@@ -50,67 +58,91 @@ impl App {
             return;
         }
 
-        if matches!(cell_type, CellType::ParameterName)
-            && matches!(node_type, NodeType::Service | NodeType::ParentRefService)
+        let target_list_type = Self::section_type_to_list_type(section_type);
+
+        // Parameter jump: navigate via section path
+        // (container → section → service → param)
+        if let Some(CellJumpTarget::Parameter { .. }) = &jump_target
+            && let Some(list_type) = target_list_type
         {
-            self.navigate_to_request_response_counterpart(node_idx, section_idx);
+            self.navigate_to_param_in_section(node_idx, list_type, &service_name, &cell_value);
             return;
         }
 
+        // ParameterName without jump target: navigate to the service
+        // counterpart in the target section
+        if matches!(cell_type, CellType::ParameterName)
+            && jump_target.is_none()
+            && let Some(list_type) = target_list_type
+        {
+            self.navigate_to_counterpart_in_section(node_idx, list_type, &service_name);
+            return;
+        }
+
+        // All other cases: use the per-cell jump target
         self.execute_cell_jump(jump_target, &cell_value);
     }
 
-    /// Navigate from a `DiagComm` service to the corresponding Request/Response node.
-    /// The `DiagComm` node text has a `[Service] ` prefix that the counterpart lacks.
-    pub(super) fn navigate_to_request_response_counterpart(
+    /// Navigate to the counterpart service node in a target section.
+    /// Uses path-based lookup: container → section header (by list type) →
+    /// service (by name), so duplicate names in different sections are never
+    /// confused.
+    fn navigate_to_counterpart_in_section(
         &mut self,
         node_idx: usize,
-        section_idx: usize,
+        target_list_type: ServiceListType,
+        service_name: &str,
     ) {
-        let Some(node) = self.tree.all_nodes.get(node_idx) else {
-            self.status = "Invalid node index".into();
+        let Some(container_idx) = self.find_current_container(node_idx) else {
+            self.status = "Container not found".into();
             return;
         };
 
-        let service_name = node
-            .text
-            .strip_prefix(NodeTextPrefix::Service.as_str())
-            .unwrap_or(&node.text)
-            .to_owned();
-
-        let section_type = node
-            .detail_sections
-            .get(section_idx)
-            .map(|s| s.section_type);
-
-        let Some(target_node_type) = section_type.and_then(|st| match st {
-            DetailSectionType::Requests => Some(NodeType::Request),
-            DetailSectionType::PosResponses => Some(NodeType::PosResponse),
-            DetailSectionType::NegResponses => Some(NodeType::NegResponse),
-            DetailSectionType::Header
-            | DetailSectionType::Overview
-            | DetailSectionType::Services
-            | DetailSectionType::ComParams
-            | DetailSectionType::States
-            | DetailSectionType::RelatedRefs
-            | DetailSectionType::FunctionalClass
-            | DetailSectionType::NotInheritedDiagComms
-            | DetailSectionType::NotInheritedDops
-            | DetailSectionType::NotInheritedTables
-            | DetailSectionType::NotInheritedVariables
-            | DetailSectionType::Custom => None,
-        }) else {
-            self.status = "Cannot navigate from this section type".into();
-            return;
-        };
-
-        if let Some(idx) =
-            self.find_in_hierarchy(|n| n.node_type == target_node_type && n.text == service_name)
+        if let Some(idx) = self.find_by_section_path(container_idx, target_list_type, service_name)
         {
             self.navigate_to_node(idx);
         } else {
             self.status = format!("No matching node found for {service_name}");
         }
+    }
+
+    /// Navigate to a parameter via section path.
+    /// Builds: container → section header (by `ServiceListType`) →
+    /// service (by name) → param (by name).
+    fn navigate_to_param_in_section(
+        &mut self,
+        node_idx: usize,
+        target_list_type: ServiceListType,
+        service_name: &str,
+        param_name: &str,
+    ) {
+        let Some(container_idx) = self.find_current_container(node_idx) else {
+            self.status = "Container not found".into();
+            return;
+        };
+
+        let param_idx = self
+            .find_by_section_path(container_idx, target_list_type, service_name)
+            .and_then(|svc_idx| self.find_param_in_subtree_by_name(svc_idx, param_name));
+
+        let Some(param_idx) = param_idx else {
+            self.status = format!("Parameter '{param_name}' not found");
+            return;
+        };
+
+        self.ensure_node_visible(param_idx);
+
+        let Some(new_cursor) = self.tree.visible.iter().position(|&idx| idx == param_idx) else {
+            self.status = format!("Parameter '{param_name}' found but not visible");
+            return;
+        };
+
+        self.push_to_history();
+        self.focus_state = FocusState::Tree;
+        self.tree.cursor = new_cursor;
+        self.reset_detail_state();
+        self.tree.scroll_offset = self.tree.cursor.saturating_sub(SCROLL_CONTEXT_LINES);
+        self.status = format!("Navigated to parameter: {param_name}");
     }
 
     /// Determine which column is focused, clamped to the available cell count
@@ -121,9 +153,8 @@ impl App {
     }
 
     /// Navigate to a DOP node by name.
-    /// Scopes the search to the current container's subtree first, then
-    /// walks up through parent ref containers before falling back to a
-    /// global search.
+    /// Uses the database hierarchy via `find_in_hierarchy` — current
+    /// container subtree first, then parent-ref chain.
     pub(super) fn navigate_to_dop(&mut self, dop_name: &str) {
         if let Some(dop_idx) = self.find_in_hierarchy(|node| node.text == dop_name) {
             self.navigate_to_node(dop_idx);
@@ -133,41 +164,41 @@ impl App {
         }
     }
 
-    /// Navigate to a parameter node by its ID.
-    /// Scopes the search to the current node's subtree first to avoid
-    /// jumping to a same-named parameter in a different section.
-    pub(super) fn navigate_to_parameter_by_id(&mut self, param_id: u32) {
-        // Get current node index to scope the search
-        let current_node_idx = self.tree.visible.get(self.tree.cursor).copied();
-
-        // Find parameter node by ID, preferring children of the current node
-        let param_idx = current_node_idx
-            .and_then(|node_idx| self.find_param_in_subtree(node_idx, param_id))
-            .or_else(|| self.find_param_by_id(param_id));
+    /// Navigate to a parameter node by name.
+    /// Prefers name-based matching within the current subtree, then falls
+    /// back to `find_in_hierarchy` which searches the enclosing section,
+    /// container, and parent-ref chain.
+    pub(super) fn navigate_to_parameter(&mut self, param_name: &str) {
+        let param_idx = self
+            .tree
+            .visible
+            .get(self.tree.cursor)
+            .copied()
+            .and_then(|node_idx| self.find_param_in_subtree_by_name(node_idx, param_name))
+            .or_else(|| self.find_in_hierarchy(|n| n.param_id.is_some() && n.text == param_name));
 
         let Some(param_idx) = param_idx else {
-            self.status = format!("Parameter with ID {param_id} not found");
+            self.status = format!("Parameter '{param_name}' not found");
             return;
         };
 
-        // Expand ancestors to make parameter visible
         self.ensure_node_visible(param_idx);
 
-        // Navigate to parameter
-        if let Some(new_cursor) = self.tree.visible.iter().position(|&idx| idx == param_idx) {
-            self.push_to_history();
-            self.focus_state = FocusState::Tree;
-            self.tree.cursor = new_cursor;
-            self.reset_detail_state();
-            self.tree.scroll_offset = self.tree.cursor.saturating_sub(SCROLL_CONTEXT_LINES);
-            self.status = format!("Navigated to parameter (ID: {param_id})");
-        } else {
-            self.status = format!("Parameter found but not visible (ID: {param_id})");
-        }
+        let Some(new_cursor) = self.tree.visible.iter().position(|&idx| idx == param_idx) else {
+            self.status = format!("Parameter '{param_name}' found but not visible");
+            return;
+        };
+
+        self.push_to_history();
+        self.focus_state = FocusState::Tree;
+        self.tree.cursor = new_cursor;
+        self.reset_detail_state();
+        self.tree.scroll_offset = self.tree.cursor.saturating_sub(SCROLL_CONTEXT_LINES);
+        self.status = format!("Navigated to parameter: {param_name}");
     }
 
-    /// Find parameter node by `param_id` within a node's subtree
-    pub(super) fn find_param_in_subtree(&self, parent_idx: usize, param_id: u32) -> Option<usize> {
+    /// Find parameter node by name within a node's subtree.
+    fn find_param_in_subtree_by_name(&self, parent_idx: usize, param_name: &str) -> Option<usize> {
         let parent = self.tree.all_nodes.get(parent_idx)?;
         let parent_depth = parent.depth;
 
@@ -177,16 +208,8 @@ impl App {
             .enumerate()
             .skip(parent_idx.saturating_add(1))
             .take_while(|(_, node)| node.depth > parent_depth)
-            .find(|(_, node)| node.param_id == Some(param_id))
+            .find(|(_, node)| node.param_id.is_some() && node.text == param_name)
             .map(|(idx, _)| idx)
-    }
-
-    /// Find parameter node by `param_id`
-    pub(super) fn find_param_by_id(&self, param_id: u32) -> Option<usize> {
-        self.tree
-            .all_nodes
-            .iter()
-            .position(|node| node.param_id == Some(param_id))
     }
 
     /// Navigate from DIAG-DATA-DICTIONARY-SPEC or DOP category overview to a child node.

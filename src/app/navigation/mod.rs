@@ -184,8 +184,8 @@ impl App {
         };
 
         match target {
-            CellJumpTarget::Parameter { param_id } => {
-                self.navigate_to_parameter_by_id(param_id);
+            CellJumpTarget::Parameter { .. } => {
+                self.navigate_to_parameter(cell_value);
             }
             CellJumpTarget::Dop { ref name } => {
                 self.navigate_to_dop(name);

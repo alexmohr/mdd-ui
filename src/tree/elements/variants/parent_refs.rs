@@ -13,6 +13,21 @@ use crate::tree::{
     },
 };
 
+/// Extract the short names of all containers referenced by the given parent refs.
+/// Used at build time to store the DB hierarchy on `TreeNode` for navigation.
+pub fn extract_parent_ref_short_names<'a>(
+    parent_refs: Option<impl Iterator<Item = ParentRef<'a>>>,
+) -> Vec<String> {
+    let Some(refs) = parent_refs else {
+        return Vec::new();
+    };
+    refs.filter_map(|pr| {
+        let (_, name) = extract_parent_ref_info(&pr);
+        (name != "?").then_some(name)
+    })
+    .collect()
+}
+
 /// Add a Parent Refs section with an overview table at the section level,
 /// and individual parent refs as children in the tree with their own detail views.
 pub fn add_parent_refs_with_details<'a>(

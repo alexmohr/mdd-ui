@@ -20,6 +20,7 @@ struct NodeConfig {
     section_type: Option<SectionType>,
     service_list_type: Option<ServiceListType>,
     param_id: Option<u32>,
+    parent_ref_names: Vec<String>,
 }
 
 /// Accumulates `TreeNode`s while walking the database model.
@@ -46,6 +47,7 @@ impl TreeBuilder {
             section_type: cfg.section_type,
             service_list_type: cfg.service_list_type,
             param_id: cfg.param_id,
+            parent_ref_names: cfg.parent_ref_names,
         });
     }
 
@@ -85,6 +87,27 @@ impl TreeBuilder {
             sections,
             node_type,
             param_id: Some(param_id),
+            ..NodeConfig::default()
+        });
+    }
+
+    /// Push a container node with parent ref container names from the database.
+    /// `parent_ref_names` stores the short names of all parent-ref containers
+    /// so the navigation system can walk the DB inheritance chain.
+    pub(crate) fn push_container(
+        &mut self,
+        depth: usize,
+        text: String,
+        sections: Vec<DetailSectionData>,
+        parent_ref_names: Vec<String>,
+    ) {
+        self.push_node(NodeConfig {
+            depth,
+            text,
+            has_children: true,
+            sections,
+            node_type: NodeType::Container,
+            parent_ref_names,
             ..NodeConfig::default()
         });
     }

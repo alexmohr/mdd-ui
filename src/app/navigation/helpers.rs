@@ -7,7 +7,10 @@ use std::borrow::Cow;
 
 use crate::{
     app::{App, FocusState, SCROLL_CONTEXT_LINES},
-    tree::{ChildElementType, DetailRow, DetailSectionData, NodeType, TreeNode},
+    tree::{
+        ChildElementType, DetailRow, DetailSectionData, DetailSectionType, NodeType,
+        ServiceListType, TreeNode,
+    },
 };
 
 /// Resolved state of the currently selected detail-table row.
@@ -16,7 +19,6 @@ use crate::{
 pub(super) struct SelectedRowContext<'a> {
     pub node_idx: usize,
     pub node: &'a TreeNode,
-    pub section_idx: usize,
     pub section: &'a DetailSectionData,
     pub row_cursor: usize,
     pub sorted_rows: Cow<'a, [DetailRow]>,
@@ -52,7 +54,6 @@ impl App {
         Some(SelectedRowContext {
             node_idx,
             node,
-            section_idx,
             section,
             row_cursor,
             sorted_rows,
@@ -202,58 +203,64 @@ impl App {
             .map(|(i, _)| i)
     }
 
-    /// Search parent-ref container subtrees for a matching node.
-    /// `start`/`end` delimit the subtree whose parent-ref children to inspect.
-    fn find_in_parent_ref_containers(
+    /// Walk the database inheritance chain starting from a container node.
+    /// Uses the `parent_ref_names` stored on each Container node (populated
+    /// at build time from the database) to look up matching containers by
+    /// exact short name, then searches each container's subtree.
+    ///
+    /// `visited` prevents infinite loops when the parent ref graph has cycles.
+    fn walk_parent_refs(
         &self,
-        start: usize,
-        end: usize,
+        container_idx: usize,
         predicate: &impl Fn(&TreeNode) -> bool,
+        visited: &mut Vec<usize>,
     ) -> Option<usize> {
-        self.tree
-            .all_nodes
-            .iter()
-            .enumerate()
-            .skip(start.saturating_add(1))
-            .take(end.saturating_sub(start).saturating_sub(1))
-            .filter(|(_, n)| n.node_type == NodeType::ParentRefs)
-            .flat_map(|(pr_idx, pr_node)| {
-                let pr_depth = pr_node.depth;
-                self.tree
-                    .all_nodes
-                    .iter()
-                    .skip(pr_idx.saturating_add(1))
-                    .take_while(move |n| n.depth > pr_depth)
-                    .filter(move |n| n.depth == pr_depth.saturating_add(1))
-                    .map(|n| {
-                        n.text
-                            .find(" [")
-                            .map_or(n.text.clone(), |idx| n.text[..idx].to_string())
-                    })
-            })
-            .find_map(|parent_name| {
-                let (pc_idx, _) = self.tree.all_nodes.iter().enumerate().find(|(_, n)| {
-                    matches!(n.node_type, NodeType::Container) && {
-                        let name = n
-                            .text
-                            .find(" [")
-                            .map_or(n.text.as_str(), |idx| &n.text[..idx]);
-                        name == parent_name
-                    }
-                })?;
-                let (pc_start, pc_end) = self.subtree_range(pc_idx);
-                self.find_in_subtree(pc_start, pc_end, predicate)
-            })
+        let container = self.tree.all_nodes.get(container_idx)?;
+        let parent_names = &container.parent_ref_names;
+
+        parent_names.iter().find_map(|parent_name| {
+            let pc_idx = self.find_container_by_name(parent_name)?;
+            if visited.contains(&pc_idx) {
+                return None;
+            }
+            visited.push(pc_idx);
+
+            let (pc_start, pc_end) = self.subtree_range(pc_idx);
+            self.find_in_subtree(pc_start, pc_end, predicate)
+                .or_else(|| self.walk_parent_refs(pc_idx, predicate, visited))
+        })
     }
 
-    /// Search for a node following the database hierarchy — never flat-scan
-    /// the tree. The search order mirrors the database structure:
+    /// Find the enclosing service-list section header for a given node.
+    /// Walks backwards to find the nearest ancestor with a
+    /// `service_list_type` (e.g. Diag-Comms, Pos-Responses).
+    pub(super) fn find_enclosing_list_section(&self, from_node_idx: usize) -> Option<usize> {
+        let from_node = self.tree.all_nodes.get(from_node_idx)?;
+        if from_node.service_list_type.is_some() {
+            return Some(from_node_idx);
+        }
+        let from_depth = from_node.depth;
+        (0..from_node_idx).rev().find(|&i| {
+            self.tree
+                .all_nodes
+                .get(i)
+                .is_some_and(|n| n.depth < from_depth && n.service_list_type.is_some())
+        })
+    }
+
+    /// Search for a node following the database hierarchy. The search order
+    /// mirrors the database inheritance structure:
+    ///
     /// 1. Direct children of the current node (depth + 1).
     /// 2. Full subtree of the current node (deeper descendants).
-    /// 3. Enclosing container's subtree (when deeper inside a container).
-    /// 4. Parent-ref containers referenced by that container.
+    /// 3. Enclosing service-list section's subtree (e.g. Pos-Responses).
+    /// 4. Enclosing container's subtree (broader cross-section search).
+    /// 5. Walk parent-ref containers using the DB-derived `parent_ref_names`
+    ///    chain stored on the container node, recursively following each
+    ///    parent's own parent refs.
     ///
-    /// No section-wide or global fallback.
+    /// No global fallback — resolution is strictly scoped to the database
+    /// hierarchy.
     pub(super) fn find_in_hierarchy(&self, predicate: impl Fn(&TreeNode) -> bool) -> Option<usize> {
         let current_node_idx = self.tree.visible.get(self.tree.cursor).copied()?;
         let current_node = self.tree.all_nodes.get(current_node_idx)?;
@@ -277,7 +284,19 @@ impl App {
             return Some(found);
         }
 
-        // 3. Enclosing container's subtree (when current node is deeper
+        // 3. Enclosing service-list section's subtree (e.g. search within
+        //    Pos-Responses before searching the entire container). This
+        //    prevents matching a same-named node in a sibling section.
+        if let Some(list_section_idx) = self.find_enclosing_list_section(current_node_idx)
+            && list_section_idx != current_node_idx
+        {
+            let (ls_start, ls_end) = self.subtree_range(list_section_idx);
+            if let Some(found) = self.find_in_subtree(ls_start, ls_end, &predicate) {
+                return Some(found);
+            }
+        }
+
+        // 4. Enclosing container's subtree (when current node is deeper
         //    than the container). Validate the container belongs to the
         //    same section — find_current_container walks backwards
         //    unconditionally and may return one from a preceding section.
@@ -294,8 +313,124 @@ impl App {
             return Some(found);
         }
 
-        // 4. Parent-ref containers
-        self.find_in_parent_ref_containers(c_start, c_end, &predicate)
+        // 5. Walk parent-ref containers using the DB-derived hierarchy
+        let mut visited = vec![c_idx];
+        self.walk_parent_refs(c_idx, &predicate, &mut visited)
+    }
+
+    // ------------------------------------------------------------------
+    // Path-based lookups: Container → Section (by ServiceListType) → Node
+    // ------------------------------------------------------------------
+
+    /// Map a `DetailSectionType` (tab) to the corresponding
+    /// `ServiceListType` (tree section header).
+    pub(super) fn section_type_to_list_type(
+        section_type: DetailSectionType,
+    ) -> Option<ServiceListType> {
+        match section_type {
+            DetailSectionType::Requests => Some(ServiceListType::Requests),
+            DetailSectionType::PosResponses => Some(ServiceListType::PosResponses),
+            DetailSectionType::NegResponses => Some(ServiceListType::NegResponses),
+            DetailSectionType::Services => Some(ServiceListType::DiagComms),
+            DetailSectionType::Header
+            | DetailSectionType::Overview
+            | DetailSectionType::ComParams
+            | DetailSectionType::States
+            | DetailSectionType::RelatedRefs
+            | DetailSectionType::FunctionalClass
+            | DetailSectionType::NotInheritedDiagComms
+            | DetailSectionType::NotInheritedDops
+            | DetailSectionType::NotInheritedTables
+            | DetailSectionType::NotInheritedVariables
+            | DetailSectionType::Custom => None,
+        }
+    }
+
+    /// Find a section header by its `ServiceListType` within a container's
+    /// direct children (depth = `container_depth + 1`).
+    fn find_section_in_container(
+        &self,
+        container_idx: usize,
+        target_list_type: ServiceListType,
+    ) -> Option<usize> {
+        let container = self.tree.all_nodes.get(container_idx)?;
+        let target_depth = container.depth.saturating_add(1);
+        let (c_start, c_end) = self.subtree_range(container_idx);
+        self.find_at_depth(c_start, c_end, target_depth, &|n| {
+            n.service_list_type == Some(target_list_type)
+        })
+    }
+
+    /// Find a service/response/request node by name within a section
+    /// header's direct children (depth = `section_depth + 1`).
+    fn find_service_in_section_by_name(
+        &self,
+        section_idx: usize,
+        service_name: &str,
+    ) -> Option<usize> {
+        let section = self.tree.all_nodes.get(section_idx)?;
+        let target_depth = section.depth.saturating_add(1);
+        let (s_start, s_end) = self.subtree_range(section_idx);
+        self.find_at_depth(s_start, s_end, target_depth, &|n| n.text == service_name)
+    }
+
+    /// Walk a path: container → section header (by `ServiceListType`) →
+    /// service (by name). Returns the service node index.
+    /// Falls back to parent-ref containers when the target is not in the
+    /// current container.
+    pub(super) fn find_by_section_path(
+        &self,
+        container_idx: usize,
+        target_list_type: ServiceListType,
+        service_name: &str,
+    ) -> Option<usize> {
+        // Current container
+        if let Some(idx) =
+            self.find_service_in_container_path(container_idx, target_list_type, service_name)
+        {
+            return Some(idx);
+        }
+
+        // Walk parent-ref containers
+        let mut visited = vec![container_idx];
+        self.walk_parent_refs_by_path(container_idx, target_list_type, service_name, &mut visited)
+    }
+
+    /// Container → section → service (no fallback).
+    fn find_service_in_container_path(
+        &self,
+        container_idx: usize,
+        target_list_type: ServiceListType,
+        service_name: &str,
+    ) -> Option<usize> {
+        let section_idx = self.find_section_in_container(container_idx, target_list_type)?;
+        self.find_service_in_section_by_name(section_idx, service_name)
+    }
+
+    /// Recursively walk parent-ref containers looking for the path
+    /// container → section → service.
+    fn walk_parent_refs_by_path(
+        &self,
+        container_idx: usize,
+        target_list_type: ServiceListType,
+        service_name: &str,
+        visited: &mut Vec<usize>,
+    ) -> Option<usize> {
+        let container = self.tree.all_nodes.get(container_idx)?;
+        let parent_names = &container.parent_ref_names;
+
+        parent_names.iter().find_map(|parent_name| {
+            let pc_idx = self.find_container_by_name(parent_name)?;
+            if visited.contains(&pc_idx) {
+                return None;
+            }
+            visited.push(pc_idx);
+
+            self.find_service_in_container_path(pc_idx, target_list_type, service_name)
+                .or_else(|| {
+                    self.walk_parent_refs_by_path(pc_idx, target_list_type, service_name, visited)
+                })
+        })
     }
 
     /// Navigate to a child tree node whose text matches the given `ChildElementType`.
@@ -343,8 +478,12 @@ impl App {
     }
 
     /// Navigate to a Container node matching the given short name.
-    /// Uses the database hierarchy: direct children first, then section,
-    /// then global (needed for cross-section parent-ref navigation).
+    ///
+    /// Uses the database hierarchy via `parent_ref_names`:
+    /// 1. Current container's subtree (children first).
+    /// 2. Walk the DB parent-ref chain from the current container.
+    /// 3. Global fallback by exact name (needed for cross-section parent-ref
+    ///    navigation, e.g. variant → ECU Shared Data).
     pub(super) fn navigate_to_container_by_name(&mut self, target_short_name: &str) {
         let is_target = |n: &TreeNode| -> bool {
             matches!(n.node_type, NodeType::Container) && {
@@ -356,50 +495,22 @@ impl App {
             }
         };
 
-        let current_node_idx = self.tree.visible.get(self.tree.cursor).copied();
-
-        // 1. Direct children of the current node
-        let direct_child = current_node_idx.and_then(|idx| {
-            let node = self.tree.all_nodes.get(idx)?;
-            let (start, end) = self.subtree_range(idx);
-            self.find_at_depth(start, end, node.depth.saturating_add(1), &is_target)
-        });
-
-        // 2. Section-scoped search
-        let section_scoped = || {
-            current_node_idx
-                .and_then(|idx| self.find_enclosing_section(idx))
-                .and_then(|sec_idx| {
-                    let (start, end) = self.subtree_range(sec_idx);
-                    self.find_in_subtree(start, end, is_target)
-                })
-        };
-
-        // 3. Global fallback (cross-section parent-ref navigation)
-        let global = || self.tree.all_nodes.iter().position(is_target);
-
-        let found = if let Some(idx) = direct_child {
-            Some((idx, false))
-        } else if let Some(idx) = section_scoped() {
-            Some((idx, false))
-        } else {
-            global().map(|idx| (idx, true))
-        };
-
-        let Some((container_node_idx, is_cross_section)) = found else {
-            self.status = format!("Element '{target_short_name}' not found in tree");
+        // 1. Search the DB hierarchy (current container + parent refs)
+        if let Some(idx) = self.find_in_hierarchy(is_target) {
+            self.navigate_to_node(idx);
+            self.status = format!("Navigated to: {target_short_name}");
             return;
-        };
+        }
 
-        self.navigate_to_node(container_node_idx);
-        self.status = format!(
-            "Navigated to: {target_short_name}{}",
-            if is_cross_section {
-                " (cross-section)"
-            } else {
-                ""
-            },
-        );
+        // 2. Global fallback by exact name (for cross-section parent ref
+        //    targets that live outside the current hierarchy)
+        if let Some(idx) = self.find_container_by_name(target_short_name) {
+            self.navigate_to_node(idx);
+            self.status = format!("Navigated to: {target_short_name} (cross-section)");
+            return;
+        }
+
+        self.status = format!("Element '{target_short_name}' not found in tree");
     }
 
     /// Navigate to a tree node whose text matches the given name.
