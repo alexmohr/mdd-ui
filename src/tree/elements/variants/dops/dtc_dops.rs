@@ -26,13 +26,22 @@ pub(super) fn build_dtc_dops_category_sections(dops: &[DopInfo<'_>]) -> Vec<Deta
 
     let rows: Vec<DetailRow> = dops
         .iter()
-        .map(|dop_info| DetailRow {
-            cells: vec![dop_info.name.clone()],
-            cell_types: vec![CellType::Text],
-            cell_jump_targets: vec![None; 1],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
+        .map(|dop_info| {
+            let parsed = super::parse_dop_name(&dop_info.name);
+            let display = parsed.display_name();
+            let name = if display.is_empty() {
+                dop_info.name.clone()
+            } else {
+                display
+            };
+            DetailRow {
+                cells: vec![name],
+                cell_types: vec![CellType::Text],
+                cell_jump_targets: vec![None; 1],
+                indent: 0,
+                row_type: DetailRowType::Normal,
+                metadata: None,
+            }
         })
         .collect();
 

@@ -5,6 +5,7 @@
 
 use cda_database::datatypes::DiagLayer;
 
+use super::dops::parse_dop_name;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
@@ -114,21 +115,54 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
     ]
 }
 
+/// Helper to create a simple key-value row without jump target.
+fn kv_row(key: &str, value: String) -> DetailRow {
+    DetailRow::normal(
+        vec![key.to_owned(), value],
+        vec![CellType::Text, CellType::Text],
+        0,
+    )
+}
+
+/// Helper to create a key-value row with a DOP reference (jump cell).
+/// Uses parsed name parts to show a more readable display name.
+fn dop_row(key: &str, dop_name: &str) -> DetailRow {
+    let parsed = parse_dop_name(dop_name);
+    let display = parsed.display_name();
+    let value = if display.is_empty() {
+        dop_name.to_owned()
+    } else {
+        display.clone()
+    };
+    // Use the display name for navigation target since tree nodes also use display names
+    let nav_name = if display.is_empty() {
+        dop_name.to_owned()
+    } else {
+        display
+    };
+    DetailRow::with_jump_targets(
+        vec![key.to_owned(), value],
+        vec![CellType::Text, CellType::DopReference],
+        vec![None, Some(CellJumpTarget::Dop { name: nav_name })],
+        0,
+    )
+}
+
 fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSectionData> {
     let cp_refs = layer.com_param_refs()?;
     if idx >= cp_refs.len() {
         return None;
     }
     let cpr = cp_refs.get(idx);
-    let mut general_rows: Vec<(String, String)> = Vec::new();
+    let mut rows: Vec<DetailRow> = Vec::new();
 
     if let Some(cp) = cpr.com_param() {
-        general_rows.push((
-            "Short Name".to_owned(),
+        rows.push(kv_row(
+            "Short Name",
             cp.short_name().unwrap_or("?").to_owned(),
         ));
         let com_param_type_str = format!("{:?}", cp.com_param_type());
-        general_rows.push(("Type".to_owned(), com_param_type_str.clone()));
+        rows.push(kv_row("Type", com_param_type_str.clone()));
 
         // Show the actual specific data type from the union
         let specific_data_type_raw = format!("{:?}", cp.specific_data_type());
@@ -149,52 +183,57 @@ fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSect
         } else {
             specific_data_type.to_owned()
         };
-        general_rows.push(("Specific Data Type".to_owned(), specific_data_display));
+        rows.push(kv_row("Specific Data Type", specific_data_display));
 
-        general_rows.push((
-            "Param Class".to_owned(),
+        rows.push(kv_row(
+            "Param Class",
             cp.param_class().unwrap_or("-").to_owned(),
         ));
-        general_rows.push((
-            "Standardisation Level".to_owned(),
+        rows.push(kv_row(
+            "Standardisation Level",
             format!("{:?}", cp.cp_type()),
         ));
-        general_rows.push(("Usage".to_owned(), format!("{:?}", cp.cp_usage())));
+        rows.push(kv_row("Usage", format!("{:?}", cp.cp_usage())));
 
         if let Some(dl) = cp.display_level() {
-            general_rows.push(("Display Level".to_owned(), dl.to_string()));
+            rows.push(kv_row("Display Level", dl.to_string()));
         }
 
-        if let Some(rcp) = cp.specific_data_as_regular_com_param()
-            && let Some(val) = rcp.physical_default_value()
-        {
-            general_rows.push((
-                "Physical Default Value".to_owned(),
-                format_value_hex_decimal(val),
-            ));
+        if let Some(rcp) = cp.specific_data_as_regular_com_param() {
+            if let Some(val) = rcp.physical_default_value() {
+                rows.push(kv_row(
+                    "Physical Default Value",
+                    format_value_hex_decimal(val),
+                ));
+            }
+            // Add the associated DOP with jump target
+            if let Some(dop) = rcp.dop() {
+                let dop_name = dop.short_name().unwrap_or("?");
+                rows.push(dop_row("DOP", dop_name));
+            }
         }
     }
 
     if let Some(sv) = cpr.simple_value()
         && let Some(val) = sv.value()
     {
-        general_rows.push(("Simple Value".to_owned(), format_value_hex_decimal(val)));
+        rows.push(kv_row("Simple Value", format_value_hex_decimal(val)));
     }
 
     if let Some(proto) = cpr.protocol()
         && let Some(dl) = proto.diag_layer()
         && let Some(name) = dl.short_name()
     {
-        general_rows.push(("Protocol".to_owned(), name.to_owned()));
+        rows.push(kv_row("Protocol", name.to_owned()));
     }
 
     if let Some(ps) = cpr.prot_stack()
         && let Some(name) = ps.short_name()
     {
-        general_rows.push(("Prot Stack".to_owned(), name.to_owned()));
+        rows.push(kv_row("Prot Stack", name.to_owned()));
     }
 
-    if general_rows.is_empty() {
+    if rows.is_empty() {
         return None;
     }
 
@@ -202,10 +241,6 @@ fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSect
         vec!["Property".to_owned(), "Value".to_owned()],
         vec![CellType::Text, CellType::Text],
     );
-    let rows: Vec<DetailRow> = general_rows
-        .into_iter()
-        .map(|(k, v)| DetailRow::normal(vec![k, v], vec![CellType::Text, CellType::Text], 0))
-        .collect();
 
     Some(
         DetailSectionData::new(

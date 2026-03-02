@@ -98,16 +98,40 @@ struct DopInfo<'a> {
 
 /// Parsed information from DOP name (e.g., `IDENTICAL_A_UINT32_0x00_0xFFFFFFFF_MicroSecond`)
 #[derive(Default)]
-struct ParsedDopName {
-    compu_category: Option<String>,
-    data_type: Option<String>,
-    range_min: Option<String>,
-    range_max: Option<String>,
-    unit: Option<String>,
+pub(crate) struct ParsedDopName {
+    pub compu_category: Option<String>,
+    pub data_type: Option<String>,
+    pub range_min: Option<String>,
+    pub range_max: Option<String>,
+    pub unit: Option<String>,
+}
+
+impl ParsedDopName {
+    /// Build a simplified display name from the parsed parts.
+    ///
+    /// Example: `IDENTICAL_A_UINT32_CONSTR_0_65535` becomes `IDENTICAL_UINT32`
+    pub fn display_name(&self) -> String {
+        let mut parts = Vec::new();
+        if let Some(ref cat) = self.compu_category {
+            parts.push(cat.clone());
+        }
+        if let Some(ref dt) = self.data_type {
+            // Strip A_ prefix for readability: A_UINT32 -> UINT32
+            // Also strip any suffix like _CONSTR, _0, etc. by taking first part after A_
+            let stripped = dt.strip_prefix("A_").unwrap_or(dt);
+            let base_type = stripped.split('_').next().unwrap_or(stripped);
+            parts.push(base_type.to_owned());
+        }
+        if parts.is_empty() {
+            String::new()
+        } else {
+            parts.join("_")
+        }
+    }
 }
 
 /// Parse encoded information from DOP short name
-fn parse_dop_name(name: &str) -> ParsedDopName {
+pub(crate) fn parse_dop_name(name: &str) -> ParsedDopName {
     let parts: Vec<&str> = name.split('_').collect();
     let mut parsed = ParsedDopName::default();
 
@@ -134,12 +158,18 @@ fn parse_dop_name(name: &str) -> ParsedDopName {
     }
 
     // A_UINT32, A_INT32, A_FLOAT32, A_ASCIISTRING, etc.
+    // When split by '_', "A" appears as separate part followed by the type
     for (i, part) in parts.iter().enumerate() {
-        if part.starts_with("A_") {
-            parsed.data_type = parts
-                .get(i.saturating_add(1))
-                .map(|next| format!("{part}_{next}"))
-                .or_else(|| Some(part.to_string()));
+        if *part == "A" {
+            // Next part is the actual data type (UINT32, INT32, etc.)
+            if let Some(next) = parts.get(i.saturating_add(1)) {
+                parsed.data_type = Some(format!("A_{next}"));
+                break;
+            }
+        } else if part.starts_with("A_") {
+            // Fallback: if somehow joined (shouldn't happen with _ split)
+            parsed.data_type = Some(part.to_string());
+            break;
         }
     }
 
@@ -265,9 +295,16 @@ pub fn add_dops_section<'a>(b: &mut TreeBuilder, layer: &DiagLayer<'a>, depth: u
         let expandable = cat.has_dop_children();
         for dop_info in *dops {
             let detail_sections = build_dop_detail_sections(dop_info);
+            let parsed = parse_dop_name(&dop_info.name);
+            let display_name = parsed.display_name();
+            let tree_name = if display_name.is_empty() {
+                dop_info.name.clone()
+            } else {
+                display_name
+            };
             b.push_details_structured(
                 depth.saturating_add(2),
-                dop_info.name.clone(),
+                tree_name,
                 false,
                 expandable,
                 detail_sections,
@@ -561,6 +598,7 @@ fn collect_dops_from_layer<'a>(
             });
         });
 
+    // Collect DOPs from ComParamRef -> prot_stack -> comparam_subset_refs -> data_object_props
     layer
         .com_param_refs()
         .into_iter()
@@ -579,6 +617,18 @@ fn collect_dops_from_layer<'a>(
                 .for_each(|dop| {
                     collect_single_dop(cda_database::datatypes::DataOperation(dop), all_dops, seen);
                 });
+        });
+
+    // Collect DOPs directly from ComParam -> RegularComParam.dop
+    layer
+        .com_param_refs()
+        .into_iter()
+        .flat_map(|refs| refs.iter())
+        .filter_map(|cpr| cpr.com_param())
+        .filter_map(|cp| cp.specific_data_as_regular_com_param())
+        .filter_map(|rcp| rcp.dop())
+        .for_each(|dop| {
+            collect_single_dop(cda_database::datatypes::DataOperation(dop), all_dops, seen);
         });
 }
 
@@ -665,13 +715,22 @@ fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData
 
     let rows: Vec<DetailRow> = dops
         .iter()
-        .map(|dop_info| DetailRow {
-            cells: vec![dop_info.name.clone()],
-            cell_types: vec![CellType::ParameterName],
-            cell_jump_targets: vec![Some(CellJumpTarget::TreeNodeByName)],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
+        .map(|dop_info| {
+            let parsed = parse_dop_name(&dop_info.name);
+            let display = parsed.display_name();
+            let name = if display.is_empty() {
+                dop_info.name.clone()
+            } else {
+                display
+            };
+            DetailRow {
+                cells: vec![name],
+                cell_types: vec![CellType::ParameterName],
+                cell_jump_targets: vec![Some(CellJumpTarget::TreeNodeByName)],
+                indent: 0,
+                row_type: DetailRowType::Normal,
+                metadata: None,
+            }
         })
         .collect();
 
@@ -722,25 +781,40 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
 
     let rows: Vec<DetailRow> = dops
         .iter()
-        .map(|dop_info| DetailRow {
-            cells: vec![
-                dop_info.name.clone(),
-                dop_info.category.as_deref().unwrap_or("").to_owned(),
-                dop_info.internal_unit.as_deref().unwrap_or("").to_owned(),
-                dop_info.phys_unit.as_deref().unwrap_or("").to_owned(),
-                dop_info.desc_id.as_deref().unwrap_or("").to_owned(),
-            ],
-            cell_types: vec![
-                CellType::ParameterName,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-            ],
-            cell_jump_targets: vec![Some(CellJumpTarget::TreeNodeByName), None, None, None, None],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
+        .map(|dop_info| {
+            let parsed = parse_dop_name(&dop_info.name);
+            let display = parsed.display_name();
+            let name = if display.is_empty() {
+                dop_info.name.clone()
+            } else {
+                display
+            };
+            DetailRow {
+                cells: vec![
+                    name,
+                    dop_info.category.as_deref().unwrap_or("").to_owned(),
+                    dop_info.internal_unit.as_deref().unwrap_or("").to_owned(),
+                    dop_info.phys_unit.as_deref().unwrap_or("").to_owned(),
+                    dop_info.desc_id.as_deref().unwrap_or("").to_owned(),
+                ],
+                cell_types: vec![
+                    CellType::ParameterName,
+                    CellType::Text,
+                    CellType::Text,
+                    CellType::Text,
+                    CellType::Text,
+                ],
+                cell_jump_targets: vec![
+                    Some(CellJumpTarget::TreeNodeByName),
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
+                indent: 0,
+                row_type: DetailRowType::Normal,
+                metadata: None,
+            }
         })
         .collect();
 
