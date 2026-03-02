@@ -127,7 +127,30 @@ fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSect
             "Short Name".to_owned(),
             cp.short_name().unwrap_or("?").to_owned(),
         ));
-        general_rows.push(("Type".to_owned(), format!("{:?}", cp.com_param_type())));
+        let com_param_type_str = format!("{:?}", cp.com_param_type());
+        general_rows.push(("Type".to_owned(), com_param_type_str.clone()));
+
+        // Show the actual specific data type from the union
+        let specific_data_type_raw = format!("{:?}", cp.specific_data_type());
+        let specific_data_type = specific_data_type_raw.trim_matches('"');
+
+        // Detect mismatch between com_param_type enum and actual specific_data union
+        let has_regular_data = cp.specific_data_as_regular_com_param().is_some();
+        let has_complex_data = cp.specific_data_as_complex_com_param().is_some();
+        let is_type_regular = com_param_type_str == "REGULAR";
+        let is_type_complex = com_param_type_str == "COMPLEX";
+
+        let mismatch = (is_type_regular && !has_regular_data)
+            || (is_type_complex && !has_complex_data)
+            || (!has_regular_data && !has_complex_data);
+
+        let specific_data_display = if mismatch {
+            format!("{specific_data_type} (MISMATCH: Type={com_param_type_str})")
+        } else {
+            specific_data_type.to_owned()
+        };
+        general_rows.push(("Specific Data Type".to_owned(), specific_data_display));
+
         general_rows.push((
             "Param Class".to_owned(),
             cp.param_class().unwrap_or("-").to_owned(),
@@ -268,10 +291,12 @@ fn build_sub_params_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailS
         vec![
             "Short Name".to_owned(),
             "Type".to_owned(),
+            "Specific Data".to_owned(),
             "Param Class".to_owned(),
             "Default Value".to_owned(),
         ],
         vec![
+            CellType::Text,
             CellType::Text,
             CellType::Text,
             CellType::Text,
@@ -288,9 +313,33 @@ fn build_sub_params_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailS
                 .specific_data_as_regular_com_param()
                 .and_then(|r| r.physical_default_value().map(format_value_hex_decimal))
                 .unwrap_or_default();
+
+            // Show specific data type with mismatch detection
+            let specific_data_raw = format!("{:?}", sp.specific_data_type());
+            let specific_data_type = specific_data_raw.trim_matches('"');
+            let has_regular = sp.specific_data_as_regular_com_param().is_some();
+            let has_complex = sp.specific_data_as_complex_com_param().is_some();
+            let is_regular = sp_type == "REGULAR";
+            let is_complex = sp_type == "COMPLEX";
+            let mismatch = (is_regular && !has_regular)
+                || (is_complex && !has_complex)
+                || (!has_regular && !has_complex);
+            let specific_data_display = if mismatch {
+                format!("{specific_data_type} (MISMATCH)")
+            } else {
+                specific_data_type.to_owned()
+            };
+
             DetailRow::normal(
-                vec![name, sp_type, param_class, default_val],
                 vec![
+                    name,
+                    sp_type,
+                    specific_data_display,
+                    param_class,
+                    default_val,
+                ],
+                vec![
+                    CellType::Text,
                     CellType::Text,
                     CellType::Text,
                     CellType::Text,
@@ -312,10 +361,11 @@ fn build_sub_params_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailS
                 header,
                 rows,
                 constraints: vec![
-                    ColumnConstraint::Percentage(30),
+                    ColumnConstraint::Percentage(25),
+                    ColumnConstraint::Percentage(15),
                     ColumnConstraint::Percentage(20),
-                    ColumnConstraint::Percentage(20),
-                    ColumnConstraint::Percentage(30),
+                    ColumnConstraint::Percentage(15),
+                    ColumnConstraint::Percentage(25),
                 ],
                 use_row_selection: true,
             },
