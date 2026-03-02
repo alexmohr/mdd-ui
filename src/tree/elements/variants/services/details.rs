@@ -97,7 +97,7 @@ pub(super) fn build_diag_comms_table_section(
 
         let funct_class = dc
             .funct_class()
-            .map(|fc_list| fc_list.get(0))
+            .and_then(|fc_list| (!fc_list.is_empty()).then(|| fc_list.get(0)))
             .and_then(|fc| fc.short_name())
             .unwrap_or("-")
             .to_owned();
@@ -277,7 +277,7 @@ fn build_overview_section(
 
         let funct_class_name = dc
             .funct_class()
-            .map(|fc_list| fc_list.get(0))
+            .and_then(|fc_list| (!fc_list.is_empty()).then(|| fc_list.get(0)))
             .and_then(|fc| fc.short_name())
             .unwrap_or("-");
         rows.push(DetailRow::with_jump_targets(

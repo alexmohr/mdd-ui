@@ -116,6 +116,9 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
 
 fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSectionData> {
     let cp_refs = layer.com_param_refs()?;
+    if idx >= cp_refs.len() {
+        return None;
+    }
     let cpr = cp_refs.get(idx);
     let mut general_rows: Vec<(String, String)> = Vec::new();
 
@@ -201,6 +204,9 @@ fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSect
 
 fn build_complex_value_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSectionData> {
     let cp_refs = layer.com_param_refs()?;
+    if idx >= cp_refs.len() {
+        return None;
+    }
     let cpr = cp_refs.get(idx);
     let cv = cpr.complex_value()?;
     let entries_type = cv.entries_type()?;
@@ -250,6 +256,9 @@ fn build_complex_value_section(layer: &DiagLayer<'_>, idx: usize) -> Option<Deta
 
 fn build_sub_params_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSectionData> {
     let cp_refs = layer.com_param_refs()?;
+    if idx >= cp_refs.len() {
+        return None;
+    }
     let cpr = cp_refs.get(idx);
     let cp = cpr.com_param()?;
     let ccp = cp.specific_data_as_complex_com_param()?;
