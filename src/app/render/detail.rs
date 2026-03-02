@@ -260,7 +260,7 @@ impl App {
             return;
         };
         let help_text = if self.focus_state == FocusState::Detail {
-            " H/L:tabs  J/K:row  ,/.:col  [/]:resize  </> :scroll  S:sort  a-z:jump"
+            " H/L:tabs  J/K:row  ,/.:col  [/]:resize  </>:scroll  S:sort  C:copy  a-z:jump"
         } else {
             ""
         };

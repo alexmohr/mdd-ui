@@ -21,6 +21,9 @@ clap = { version = "4", features = ["derive"] }
 # Error handling
 anyhow = "1"
 
+# Clipboard
+arboard = "3"
+
 # Configuration
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"

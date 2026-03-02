@@ -98,6 +98,7 @@ mdd-ui my_ecu.mdd --theme ~/.config/mdd-ui/config.toml
 | `←` / `→` or `Shift+H` / `Shift+L` | Switch tabs |
 | `Enter` | Navigate to element or show detail popup |
 | `Shift+S` | Toggle sort on focused column |
+| `Shift+C` | Copy table to clipboard as markdown |
 | `[` / `]` | Decrease / increase column width |
 | `,` / `.` | Focus previous / next column |
 | `<` / `>` | Scroll table left / right |

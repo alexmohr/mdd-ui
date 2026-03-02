@@ -71,6 +71,7 @@ impl App {
             "  ←/→ or Shift+H/L  Switch between tabs",
             "  Enter              Navigate to element (or show details popup)",
             "  Shift+S            Toggle sort on focused column",
+            "  Shift+C            Copy table to clipboard as markdown",
             "  [ / ]              Decrease/increase column width",
             "  , / .              Select previous/next column",
             "  < / >              Scroll table left/right",

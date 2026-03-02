@@ -211,6 +211,11 @@ impl App {
                 self.toggle_table_column_sort();
             }
 
+            // Copy table to clipboard as markdown (Shift+C when detail pane is focused)
+            KeyCode::Char('C') if self.focus_state == FocusState::Detail => {
+                self.status = self.copy_table_to_clipboard();
+            }
+
             KeyCode::Char('/') => {
                 self.search.active = true;
                 self.search.query.clear();

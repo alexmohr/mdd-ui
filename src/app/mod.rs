@@ -3,6 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
+mod clipboard;
 mod column_widths;
 pub(crate) mod config;
 mod cursor;
