@@ -21,7 +21,7 @@ use crate::database::{extract_data, get_ecu_summary};
 
 /// Walk the entire database and produce a flat list of tree nodes ready for
 /// the TUI to display, together with the ECU name.
-pub fn build_tree(db: &DiagnosticDatabase) -> (Vec<TreeNode>, String) {
+pub fn build_tree(db: &DiagnosticDatabase, file_path: &str) -> (Vec<TreeNode>, String) {
     let mut b = TreeBuilder::new();
 
     // Extract database data
@@ -30,7 +30,7 @@ pub fn build_tree(db: &DiagnosticDatabase) -> (Vec<TreeNode>, String) {
 
     // Add General section with ECU info
     if let Some(ref ecu) = data.ecu {
-        let ecu_details = get_ecu_summary(db, &data.ecu_name);
+        let ecu_details = get_ecu_summary(db, &data.ecu_name, file_path);
         let ecu_section = lines_to_single_section("Summary", ecu_details);
         b.push_section_header(
             "General".to_string(),

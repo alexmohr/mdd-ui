@@ -36,7 +36,7 @@ fn main() -> Result<()> {
         .with_context(|| format!("Failed to load: {}", cli.mdd_file))?;
 
     eprintln!("Building tree...");
-    let (nodes, ecu_name) = tree::build_tree(&db);
+    let (nodes, ecu_name) = tree::build_tree(&db, &cli.mdd_file);
     eprintln!("Loaded {} nodes. Starting UI...", nodes.len());
 
     let mut terminal = ratatui::init();

@@ -20,8 +20,11 @@ pub fn extract_data(db: &DiagnosticDatabase) -> DatabaseData<'_> {
 }
 
 /// Get ECU summary lines
-pub fn get_ecu_summary(db: &DiagnosticDatabase, ecu_name: &str) -> Vec<String> {
-    let mut d = vec![format!("ECU Name: {ecu_name}")];
+pub fn get_ecu_summary(db: &DiagnosticDatabase, ecu_name: &str, file_path: &str) -> Vec<String> {
+    let mut d = vec![
+        format!("ECU Name: {ecu_name}"),
+        format!("File: {file_path}"),
+    ];
     let Ok(ecu_data) = db.ecu_data() else {
         return d;
     };
