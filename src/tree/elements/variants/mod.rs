@@ -26,7 +26,7 @@ use crate::tree::{
     builder::TreeBuilder,
     types::{
         CellJumpTarget, CellType, ChildElementType, ColumnConstraint, DetailContent, DetailRow,
-        DetailRowType, DetailSectionData, DetailSectionType, RowMetadata, SectionType,
+        DetailRowType, DetailSectionData, DetailSectionType, NodeType, RowMetadata, SectionType,
     },
 };
 
@@ -191,14 +191,35 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
     }
 }
 
-/// Collect `DiagLayer`s reachable via functional-group parent refs, using
-/// `get_layer` to extract the inner layer for a chosen parent-ref type (all
-/// other types should return `None`). Deduplicates by short name.
+/// Collect `DiagLayer`s reachable via variant or functional-group parent refs,
+/// using `get_layer` to extract the inner layer for a chosen parent-ref type
+/// (all other types should return `None`). Deduplicates by short name.
 fn collect_parent_ref_layers<'a>(
     ecu: &EcuDb<'a>,
     get_layer: impl Fn(cda_database::datatypes::ParentRef<'a>) -> Option<DiagLayer<'a>>,
 ) -> Vec<DiagLayer<'a>> {
-    let all: Vec<DiagLayer<'a>> = ecu
+    let mut all: Vec<DiagLayer<'a>> = Vec::new();
+
+    // Collect from variants
+    if let Some(variants) = ecu.variants() {
+        let variant_layers: Vec<DiagLayer<'a>> = variants
+            .iter()
+            .filter_map(|v| {
+                VariantWrap(v).parent_refs().and_then(|parent_refs| {
+                    let layers: Vec<DiagLayer<'a>> = parent_refs
+                        .iter()
+                        .filter_map(|pr| get_layer(cda_database::datatypes::ParentRef(pr)))
+                        .collect();
+                    (!layers.is_empty()).then_some(layers)
+                })
+            })
+            .flatten()
+            .collect();
+        all.extend(variant_layers);
+    }
+
+    // Collect from functional groups
+    let fg_layers: Vec<DiagLayer<'a>> = ecu
         .functional_groups()
         .into_iter()
         .flatten()
@@ -213,6 +234,7 @@ fn collect_parent_ref_layers<'a>(
         })
         .flatten()
         .collect();
+    all.extend(fg_layers);
 
     let mut seen = std::collections::HashSet::new();
     all.into_iter()
@@ -305,13 +327,38 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
         )
         | Err(_) => None,
     });
-    add_layer_section(
-        b,
-        &layers,
-        "Protocols",
+
+    if layers.is_empty() {
+        return;
+    }
+
+    let names: Vec<String> = layers
+        .iter()
+        .filter_map(|dl| dl.short_name().map(str::to_owned))
+        .collect();
+    let overview = build_names_overview_table(&names, "Protocols Overview");
+
+    b.push_section_header(
+        "Protocols".to_string(),
+        false,
+        true,
+        overview,
         SectionType::Protocols,
-        "Protocols Overview",
     );
+
+    for layer in &layers {
+        let name = layer.short_name().unwrap_or("unnamed");
+        let detail_sections = build_layer_summary_section(layer, name);
+
+        b.push_details_structured(
+            1,
+            name.to_string(),
+            false,
+            false,
+            detail_sections,
+            NodeType::Default,
+        );
+    }
 }
 
 /// Build variant summary section with info and children table
