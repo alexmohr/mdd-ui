@@ -117,7 +117,7 @@ impl App {
                     } else {
                         let section_idx = self.get_section_index();
                         if let Some(cursor) = self.detail.section_cursors.get_mut(section_idx) {
-                            *cursor = cursor.saturating_add(3);
+                            *cursor = cursor.saturating_add(1);
                         }
                     }
                 }
@@ -136,7 +136,7 @@ impl App {
                     } else {
                         let section_idx = self.get_section_index();
                         if let Some(cursor) = self.detail.section_cursors.get_mut(section_idx) {
-                            *cursor = cursor.saturating_sub(3);
+                            *cursor = cursor.saturating_sub(1);
                         }
                     }
                 }

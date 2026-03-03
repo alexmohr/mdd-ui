@@ -28,6 +28,54 @@ pub fn extract_parent_ref_short_names<'a>(
     .collect()
 }
 
+/// Build a "Parent Refs" detail section for a container's detail pane.
+/// Returns `None` if there are no parent refs.
+pub fn build_parent_refs_detail_section<'a>(
+    parent_refs: Option<impl Iterator<Item = ParentRef<'a>>>,
+) -> Option<DetailSectionData> {
+    let refs = parent_refs?;
+
+    let parent_refs_list: Vec<_> = refs.collect();
+    if parent_refs_list.is_empty() {
+        return None;
+    }
+
+    let header = DetailRow::header(
+        vec!["Short Name".to_owned(), "Type".to_owned()],
+        vec![CellType::Text, CellType::Text],
+    );
+
+    let rows: Vec<DetailRow> = parent_refs_list
+        .iter()
+        .map(|pr| {
+            let (ref_type, name) = extract_parent_ref_info(pr);
+            DetailRow::with_jump_targets(
+                vec![name, ref_type.to_owned()],
+                vec![CellType::ParameterName, CellType::Text],
+                vec![Some(CellJumpTarget::ContainerByName), None],
+                0,
+            )
+        })
+        .collect();
+
+    Some(
+        DetailSectionData::new(
+            "Parent Refs".to_owned(),
+            DetailContent::Table {
+                header,
+                rows,
+                constraints: vec![
+                    ColumnConstraint::Percentage(70),
+                    ColumnConstraint::Percentage(30),
+                ],
+                use_row_selection: true,
+            },
+            false,
+        )
+        .with_type(DetailSectionType::RelatedRefs),
+    )
+}
+
 /// Add a Parent Refs section with an overview table at the section level,
 /// and individual parent refs as children in the tree with their own detail views.
 pub fn add_parent_refs_with_details<'a>(

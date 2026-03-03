@@ -19,14 +19,14 @@ pub mod tables;
 pub mod unit_spec;
 
 use cda_database::datatypes::{DiagLayer, DiagService, EcuDb, Variant as VariantWrap};
-use parent_refs::extract_parent_ref_short_names;
+use parent_refs::{build_parent_refs_detail_section, extract_parent_ref_short_names};
 
 use super::layers::LayerExt;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
         CellJumpTarget, CellType, ChildElementType, ColumnConstraint, DetailContent, DetailRow,
-        DetailRowType, DetailSectionData, DetailSectionType, NodeType, RowMetadata, SectionType,
+        DetailRowType, DetailSectionData, DetailSectionType, RowMetadata, SectionType,
     },
 };
 
@@ -113,13 +113,19 @@ pub fn add_variants(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
 
             detail_sections.extend(build_variant_summary_section(&vw, &name));
 
+            // Add parent refs section if present
+            if let Some(parent_refs_section) = build_parent_refs_detail_section(
+                vw.parent_refs()
+                    .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
+            ) {
+                detail_sections.push(parent_refs_section);
+            }
+
             // Extract parent ref container names from the DB for hierarchy navigation
             let parent_ref_names = extract_parent_ref_short_names(
                 vw.parent_refs()
                     .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
             );
-
-            // Note: Parent refs are not shown in variant detail view per user request
 
             b.push_container(1, name.clone(), detail_sections, parent_ref_names);
 
@@ -166,7 +172,15 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                 let layer = DiagLayer(dl);
                 let name = layer.short_name().unwrap_or("unnamed");
 
-                let detail_sections = build_layer_summary_section(&layer, name);
+                let mut detail_sections = build_layer_summary_section(&layer, name);
+
+                // Add parent refs section if present
+                if let Some(parent_refs_section) = build_parent_refs_detail_section(
+                    fg.parent_refs()
+                        .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
+                ) {
+                    detail_sections.push(parent_refs_section);
+                }
 
                 // Extract parent ref container names from the DB for hierarchy navigation
                 let parent_ref_names = extract_parent_ref_short_names(
@@ -350,13 +364,15 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
         let name = layer.short_name().unwrap_or("unnamed");
         let detail_sections = build_layer_summary_section(layer, name);
 
-        b.push_details_structured(
-            1,
-            name.to_string(),
-            false,
-            false,
-            detail_sections,
-            NodeType::Default,
+        // Protocols are at the top of the hierarchy — their parent refs are handled
+        // by the layers that reference them (variants, functional groups)
+        b.push_container(1, name.to_string(), detail_sections, Vec::new());
+
+        b.add_diag_layer_structured(
+            layer,
+            2,
+            None::<std::iter::Empty<cda_database::datatypes::ParentRef>>,
+            None::<std::iter::Empty<cda_database::datatypes::Variant>>,
         );
     }
 }

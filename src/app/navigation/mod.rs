@@ -34,6 +34,16 @@ impl App {
         }
 
         if matches!(node.node_type, NodeType::Container) {
+            // Check if we're on the Parent Refs tab - if so, navigate to parent ref
+            let section_idx = self.get_section_index();
+            if node
+                .detail_sections
+                .get(section_idx)
+                .is_some_and(|s| s.section_type == DetailSectionType::RelatedRefs)
+            {
+                self.try_navigate_to_parent_ref();
+                return;
+            }
             self.try_navigate_from_variant_overview();
             return;
         }
