@@ -24,6 +24,7 @@ pub struct ColorTheme {
     pub ui: UiColors,
     pub table: TableColors,
     pub popup: PopupColors,
+    pub diff: DiffColors,
 }
 
 /// Colors used in the tree pane.
@@ -74,6 +75,16 @@ pub struct PopupColors {
     pub detail_border: String,
     pub detail_bg: String,
     pub detail_text: String,
+}
+
+/// Colors for diff annotations in the tree.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct DiffColors {
+    pub added: String,
+    pub removed: String,
+    pub modified: String,
+    pub unchanged: String,
 }
 
 // -------------------------------------------------------------------
@@ -134,6 +145,17 @@ impl Default for PopupColors {
     }
 }
 
+impl Default for DiffColors {
+    fn default() -> Self {
+        Self {
+            added: "green".into(),
+            removed: "red".into(),
+            modified: "yellow".into(),
+            unchanged: "darkgray".into(),
+        }
+    }
+}
+
 // -------------------------------------------------------------------
 // Colour parsing
 // -------------------------------------------------------------------
@@ -171,6 +193,11 @@ pub struct ResolvedTheme {
     pub detail_border: Color,
     pub detail_bg: Color,
     pub detail_text: Color,
+    // Diff
+    pub diff_added: Color,
+    pub diff_removed: Color,
+    pub diff_modified: Color,
+    pub diff_unchanged: Color,
 }
 
 impl Default for ResolvedTheme {
@@ -211,6 +238,11 @@ impl From<&ColorTheme> for ResolvedTheme {
             detail_border: parse_color(&theme.popup.detail_border),
             detail_bg: parse_color(&theme.popup.detail_bg),
             detail_text: parse_color(&theme.popup.detail_text),
+
+            diff_added: parse_color(&theme.diff.added),
+            diff_removed: parse_color(&theme.diff.removed),
+            diff_modified: parse_color(&theme.diff.modified),
+            diff_unchanged: parse_color(&theme.diff.unchanged),
         }
     }
 }

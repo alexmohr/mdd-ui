@@ -46,3 +46,9 @@ help_text = "white"      # Help popup text
 detail_border = "yellow" # Detail popup border
 detail_bg = "black"      # Detail popup background
 detail_text = "white"    # Detail popup text
+
+[colors.diff]
+added = "green"          # Added nodes in diff view
+removed = "red"          # Removed nodes in diff view
+modified = "yellow"      # Modified nodes in diff view
+unchanged = "darkgray"   # Unchanged nodes in diff view
