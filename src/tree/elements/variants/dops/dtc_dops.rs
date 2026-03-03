@@ -295,7 +295,7 @@ pub(super) fn build_dtc_dop_tabs(
     if let Some(dtcs) = dtc_dop.dtcs() {
         let compu_category_label = dtc_dop
             .compu_method()
-            .map(|cm| format!("Compu Category: {:?}", cm.category()));
+            .map(|cm| format!("{:?}", cm.category()));
 
         let dtcs_header = DetailRow {
             cells: vec![
@@ -331,10 +331,13 @@ pub(super) fn build_dtc_dop_tabs(
             })
             .collect();
 
-        let table_section = DetailSectionData {
-            title: String::new(),
+        let title = compu_category_label
+            .map_or_else(|| "DTCs".to_owned(), |cat| format!("DTCs (Compu: {cat})"));
+
+        sections.push(DetailSectionData {
+            title,
             render_as_header: false,
-            section_type: DetailSectionType::Custom,
+            section_type: DetailSectionType::Overview,
             content: DetailContent::Table {
                 header: dtcs_header,
                 rows: dtcs_rows,
@@ -345,24 +348,6 @@ pub(super) fn build_dtc_dop_tabs(
                 ],
                 use_row_selection: true,
             },
-        };
-
-        let mut subsections = Vec::new();
-        if let Some(label) = compu_category_label {
-            subsections.push(DetailSectionData {
-                title: String::new(),
-                render_as_header: false,
-                section_type: DetailSectionType::Custom,
-                content: DetailContent::PlainText(vec![label]),
-            });
-        }
-        subsections.push(table_section);
-
-        sections.push(DetailSectionData {
-            title: "DTCS".to_owned(),
-            render_as_header: false,
-            section_type: DetailSectionType::Overview,
-            content: DetailContent::Composite(subsections),
         });
     }
 }
