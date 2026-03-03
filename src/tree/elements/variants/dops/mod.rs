@@ -168,7 +168,7 @@ pub(crate) fn parse_dop_name(name: &str) -> ParsedDopName {
             }
         } else if part.starts_with("A_") {
             // Fallback: if somehow joined (shouldn't happen with _ split)
-            parsed.data_type = Some(part.to_string());
+            parsed.data_type = Some((*part).to_string());
             break;
         }
     }
