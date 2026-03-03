@@ -317,6 +317,66 @@ pub(super) fn build_normal_dop_tabs(
         }
     }
 
+    if let Some(phys_type) = normal_dop.physical_type() {
+        types_rows.push(DetailRow {
+            cells: vec![
+                "Physical Type".to_owned(),
+                format!("{:?}", phys_type.base_data_type()),
+            ],
+            cell_types: vec![CellType::Text, CellType::Text],
+            cell_jump_targets: vec![None; 2],
+            indent: 0,
+            row_type: DetailRowType::Normal,
+            metadata: None,
+        });
+
+        if let Some(precision) = phys_type.precision() {
+            types_rows.push(DetailRow {
+                cells: vec!["Precision".to_owned(), precision.to_string()],
+                cell_types: vec![CellType::Text, CellType::NumericValue],
+                cell_jump_targets: vec![None; 2],
+                indent: 0,
+                row_type: DetailRowType::Normal,
+                metadata: None,
+            });
+        }
+
+        types_rows.push(DetailRow {
+            cells: vec![
+                "Display Radix".to_owned(),
+                format!("{:?}", phys_type.display_radix()),
+            ],
+            cell_types: vec![CellType::Text, CellType::Text],
+            cell_jump_targets: vec![None; 2],
+            indent: 0,
+            row_type: DetailRowType::Normal,
+            metadata: None,
+        });
+    }
+
+    if let Some(unit) = normal_dop.unit_ref() {
+        if let Some(short_name) = unit.short_name() {
+            types_rows.push(DetailRow {
+                cells: vec!["Unit".to_owned(), short_name.to_owned()],
+                cell_types: vec![CellType::Text, CellType::Text],
+                cell_jump_targets: vec![None; 2],
+                indent: 0,
+                row_type: DetailRowType::Normal,
+                metadata: None,
+            });
+        }
+        if let Some(display_name) = unit.display_name() {
+            types_rows.push(DetailRow {
+                cells: vec!["Unit Display".to_owned(), display_name.to_owned()],
+                cell_types: vec![CellType::Text, CellType::Text],
+                cell_jump_targets: vec![None; 2],
+                indent: 0,
+                row_type: DetailRowType::Normal,
+                metadata: None,
+            });
+        }
+    }
+
     if let Some(ref data_type) = parsed_name.data_type {
         types_rows.push(DetailRow {
             cells: vec!["Data Type (from name)".to_owned(), data_type.clone()],
