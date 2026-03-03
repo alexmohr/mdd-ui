@@ -523,4 +523,60 @@ impl App {
             self.status = format!("'{target_name}' not found in tree");
         }
     }
+
+    /// Navigate to a specific node by its index in `all_nodes`.
+    pub(crate) fn navigate_to_node(&mut self, target_node_idx: usize) {
+        // Clear search stack so navigation target is always reachable
+        if !self.search.stack.is_empty() {
+            self.search.stack.clear();
+            self.search.query.clear();
+            self.status = "Search cleared for navigation".into();
+        }
+
+        self.ensure_node_visible(target_node_idx);
+
+        let Some(visible_pos) = self
+            .tree
+            .visible
+            .iter()
+            .position(|&idx| idx == target_node_idx)
+        else {
+            return;
+        };
+
+        self.push_to_history();
+        self.focus_state = FocusState::Tree;
+        self.tree.cursor = visible_pos;
+        self.reset_detail_state();
+        self.tree.scroll_offset = self.tree.cursor.saturating_sub(SCROLL_CONTEXT_LINES);
+    }
+
+    /// Ensure a node is visible by expanding only its direct ancestors.
+    pub(crate) fn ensure_node_visible(&mut self, target_node_idx: usize) {
+        let Some(target_node) = self.tree.all_nodes.get(target_node_idx) else {
+            return;
+        };
+
+        let mut needed_depth = target_node.depth;
+
+        // Walk backwards, expanding only the direct ancestor at each level
+        for i in (0..target_node_idx).rev() {
+            let Some(node) = self.tree.all_nodes.get_mut(i) else {
+                continue;
+            };
+            let node_depth = node.depth;
+
+            if node_depth < needed_depth {
+                node.expanded = true;
+                needed_depth = node_depth;
+
+                if node_depth == 0 {
+                    break;
+                }
+            }
+        }
+
+        // Rebuild visible list to reflect expansions
+        self.rebuild_visible();
+    }
 }
