@@ -4,7 +4,7 @@
  */
 
 use super::{App, SearchScope};
-use crate::tree::{NodeType, TreeNode};
+use crate::tree::{DiffStatus, NodeType, TreeNode};
 
 impl App {
     /// Check if a node at index i is under a specific section type
@@ -76,6 +76,32 @@ impl App {
                     continue;
                 }
                 collapsed_below = None;
+            }
+
+            // Skip unchanged diff nodes when filter is active
+            if self.hide_unchanged && matches!(node.diff_status, Some(DiffStatus::Unchanged)) {
+                continue;
+            }
+
+            // Skip section headers whose children are all hidden (unchanged).
+            // Section headers have diff_status: None and depth 0.
+            if self.hide_unchanged
+                && node.diff_status.is_none()
+                && node.node_type == NodeType::SectionHeader
+            {
+                let all_children_unchanged = self
+                    .tree
+                    .all_nodes
+                    .get(i.saturating_add(1)..)
+                    .unwrap_or_default()
+                    .iter()
+                    .take_while(|ch| ch.depth > node.depth)
+                    .all(|ch| matches!(ch.diff_status, Some(DiffStatus::Unchanged)));
+                if all_children_unchanged {
+                    // Also skip children under this header
+                    collapsed_below = Some(node.depth);
+                    continue;
+                }
             }
 
             self.tree.visible.push(i);

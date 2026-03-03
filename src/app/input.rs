@@ -8,6 +8,8 @@ use crossterm::{
     execute,
 };
 
+use crate::tree::DiffStatus;
+
 use super::{
     App, COMPOSITE_SCROLL_STEP, DIVIDER_MAX_PCT, DIVIDER_MIN_PCT, FocusState, PAGE_SIZE,
     TREE_WIDTH_STEP,
@@ -93,6 +95,7 @@ impl App {
     }
 
     /// Handle a key press in normal (non-search) mode.
+    #[allow(clippy::too_many_lines)]
     pub(super) fn handle_normal_key(&mut self, code: KeyCode, ctrl: bool) -> Action {
         // Early return for help popup
         if self.focus_state == FocusState::HelpPopup {
@@ -226,8 +229,20 @@ impl App {
                     self.status = "Search: ".into();
                 }
             }
-            KeyCode::Char('n') => self.next_search_match(),
-            KeyCode::Char('N') => self.prev_search_match(),
+            KeyCode::Char('n') => {
+                if self.is_diff_mode && self.search.stack.is_empty() {
+                    self.jump_to_next_diff();
+                } else {
+                    self.next_search_match();
+                }
+            }
+            KeyCode::Char('N') => {
+                if self.is_diff_mode && self.search.stack.is_empty() {
+                    self.jump_to_prev_diff();
+                } else {
+                    self.prev_search_match();
+                }
+            }
 
             // Column/scroll keys (only when detail pane is focused)
             KeyCode::Char('[' | ']' | ',' | '.' | '<' | '>')
@@ -244,6 +259,17 @@ impl App {
             // Show help popup
             KeyCode::Char('?') => {
                 self.focus_state = FocusState::HelpPopup;
+            }
+
+            // Toggle hiding unchanged nodes (diff mode only)
+            KeyCode::Char('u') if self.is_diff_mode && self.focus_state != FocusState::Detail => {
+                self.hide_unchanged = !self.hide_unchanged;
+                self.rebuild_visible();
+                self.status = if self.hide_unchanged {
+                    "Hiding unchanged nodes".into()
+                } else {
+                    "Showing all nodes".into()
+                };
             }
 
             // Type-to-jump: alphanumeric keys jump to matching row in detail pane
@@ -419,6 +445,49 @@ impl App {
             self.status = format!("Mouse: {}", if desired { "enabled" } else { "disabled" });
         } else {
             self.status = "Failed to toggle mouse mode".into();
+        }
+    }
+
+    /// Returns true if the visible node at `vi` has a meaningful diff change.
+    fn is_diff_changed_at(&self, vi: usize) -> bool {
+        self.tree
+            .visible
+            .get(vi)
+            .and_then(|&node_idx| self.tree.all_nodes.get(node_idx))
+            .is_some_and(|node| {
+                matches!(
+                    node.diff_status,
+                    Some(DiffStatus::Added | DiffStatus::Removed | DiffStatus::Modified)
+                )
+            })
+    }
+
+    /// Jump to the next visible node that has a diff change (Added, Removed, or Modified).
+    fn jump_to_next_diff(&mut self) {
+        let start = self.tree.cursor.saturating_add(1);
+        let len = self.tree.visible.len();
+        // Search forward from cursor+1, then wrap around from beginning
+        if let Some(vi) = (start..len)
+            .chain(0..start)
+            .find(|&vi| self.is_diff_changed_at(vi))
+        {
+            self.tree.cursor = vi;
+            self.reset_detail_state();
+        }
+    }
+
+    /// Jump to the previous visible node that has a diff change (Added, Removed, or Modified).
+    fn jump_to_prev_diff(&mut self) {
+        let cursor = self.tree.cursor;
+        let len = self.tree.visible.len();
+        // Walk backward from cursor-1, then wrap around from end
+        if let Some(vi) = (0..cursor)
+            .rev()
+            .chain((cursor..len).rev())
+            .find(|&vi| self.is_diff_changed_at(vi))
+        {
+            self.tree.cursor = vi;
+            self.reset_detail_state();
         }
     }
 }

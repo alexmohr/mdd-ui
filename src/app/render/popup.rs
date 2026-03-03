@@ -41,7 +41,7 @@ impl App {
         frame.render_widget(block, popup_rect);
 
         // Help content
-        let help_text = vec![
+        let mut help_text = vec![
             "NAVIGATION",
             "  ↑/↓ or k/j      Move cursor up/down",
             "  ←/→ or h/l      Collapse/expand node (or navigate tabs in detail)",
@@ -87,6 +87,15 @@ impl App {
             "  ?               Show this help",
             "  Q or Esc        Quit application",
         ];
+
+        if self.is_diff_mode {
+            help_text.extend_from_slice(&[
+                "",
+                "DIFF MODE",
+                "  u               Toggle show/hide unchanged nodes",
+                "  n / N           Jump to next/previous change (when no search active)",
+            ]);
+        }
 
         let help_paragraph = Paragraph::new(help_text.join("\n"))
             .style(Style::default().fg(self.theme.help_text))

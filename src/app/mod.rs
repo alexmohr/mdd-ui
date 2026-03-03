@@ -356,6 +356,10 @@ pub struct App {
     pub(crate) focus_state: FocusState,
     pub(crate) theme: ResolvedTheme,
     pub(crate) ecu_name: String,
+    /// Whether to hide unchanged nodes in diff mode.
+    pub(crate) hide_unchanged: bool,
+    /// Whether this app instance is in diff mode.
+    pub(crate) is_diff_mode: bool,
 }
 
 /// Data for a popup overlay (e.g. DOP reference details).
@@ -376,7 +380,12 @@ pub(crate) struct HistoryEntry {
 }
 
 impl App {
-    pub fn new(nodes: Vec<TreeNode>, ecu_name: String, theme: ResolvedTheme) -> Self {
+    pub fn new(
+        nodes: Vec<TreeNode>,
+        ecu_name: String,
+        theme: ResolvedTheme,
+        is_diff_mode: bool,
+    ) -> Self {
         let mut app = Self {
             tree: TreeState {
                 all_nodes: nodes,
@@ -399,6 +408,8 @@ impl App {
             focus_state: FocusState::Tree,
             theme,
             ecu_name,
+            hide_unchanged: false,
+            is_diff_mode,
         };
         // Apply initial sort order (default is by ID)
         app.sort_diagcomm_nodes_in_place();
