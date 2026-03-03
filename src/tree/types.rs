@@ -89,6 +89,19 @@ pub enum NodeType {
     Default,
 }
 
+/// Diff status for comparison mode.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DiffStatus {
+    /// Element exists only in the new file.
+    Added,
+    /// Element exists only in the old file.
+    Removed,
+    /// Element exists in both but differs.
+    Modified,
+    /// Element is identical in both files.
+    Unchanged,
+}
+
 /// A single row in the flat tree view. Depth controls indentation, and
 /// `expanded` / `has_children` drive the collapse/expand behaviour.
 #[derive(Clone, Debug)]
@@ -115,6 +128,8 @@ pub struct TreeNode {
     /// database hierarchy. Used by the navigation system to walk the DB
     /// inheritance chain instead of scanning the tree.
     pub parent_ref_names: Vec<String>,
+    /// Diff annotation for comparison mode. `None` in browse mode.
+    pub diff_status: Option<DiffStatus>,
 }
 
 /// Type of detail section for logic and navigation.

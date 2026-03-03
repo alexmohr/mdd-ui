@@ -48,6 +48,7 @@ impl TreeBuilder {
             service_list_type: cfg.service_list_type,
             param_id: cfg.param_id,
             parent_ref_names: cfg.parent_ref_names,
+            diff_status: None,
         });
     }
 

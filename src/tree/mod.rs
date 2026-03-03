@@ -13,8 +13,8 @@ use elements::{add_ecu_shared_data, add_functional_groups, add_protocols, add_va
 // Re-export public types
 pub use types::{
     CellJumpTarget, CellType, ChildElementType, ColumnConstraint, DetailContent, DetailRow,
-    DetailRowType, DetailSectionData, DetailSectionType, NodeTextPrefix, NodeType, RowMetadata,
-    SectionType, ServiceListType, TreeNode, lines_to_single_section,
+    DetailRowType, DetailSectionData, DetailSectionType, DiffStatus, NodeTextPrefix, NodeType,
+    RowMetadata, SectionType, ServiceListType, TreeNode, lines_to_single_section,
 };
 
 use crate::database::{extract_data, get_ecu_summary};
