@@ -205,6 +205,7 @@ fn add_single_ecu_jobs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize)
 
 /// Recursively resolve services from parent references, returning each
 /// service paired with the name of the layer it was inherited from.
+/// Deduplicates services by short name, keeping the first occurrence.
 pub fn get_parent_ref_services_recursive<'a>(
     parent_refs: impl Iterator<Item = ParentRef<'a>>,
 ) -> Vec<(DiagService<'a>, String)> {
@@ -288,5 +289,18 @@ pub fn get_parent_ref_services_recursive<'a>(
             .collect()
     }
 
-    find_services_recursive(parent_refs)
+    let all_services = find_services_recursive(parent_refs);
+
+    // Deduplicate by service short name, keeping the first occurrence
+    let mut seen = std::collections::HashSet::new();
+    all_services
+        .into_iter()
+        .filter(|(service, _)| {
+            let short_name = service
+                .diag_comm()
+                .and_then(|dc| dc.short_name())
+                .unwrap_or("");
+            seen.insert(short_name.to_owned())
+        })
+        .collect()
 }
