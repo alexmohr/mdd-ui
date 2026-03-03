@@ -203,7 +203,7 @@ pub(crate) fn parse_dop_name(name: &str) -> ParsedDopName {
             "Pascal",
         ];
         if units.iter().any(|&u| last.contains(u)) {
-            parsed.unit = Some(last.to_string());
+            parsed.unit = Some((*last).to_string());
         }
     }
 
