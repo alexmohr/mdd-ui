@@ -21,6 +21,13 @@ struct Cli {
     theme_file: Option<String>,
 }
 
+/// Restores the terminal to its original state.
+/// This disables mouse capture and restores the terminal mode.
+fn restore_terminal() {
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableMouseCapture);
+    ratatui::restore();
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -43,10 +50,17 @@ fn main() -> Result<()> {
     crossterm::execute!(std::io::stdout(), crossterm::event::EnableMouseCapture)
         .context("Failed to enable mouse capture")?;
 
+    // Install a panic hook that restores the terminal before printing the panic message.
+    // This prevents mouse escape sequences from leaking to the terminal on panic.
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        restore_terminal();
+        original_hook(panic_info);
+    }));
+
     let result = app::App::new(nodes, ecu_name, theme).run(&mut terminal);
 
-    let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableMouseCapture);
-    ratatui::restore();
+    restore_terminal();
 
     result.context("TUI error")
 }

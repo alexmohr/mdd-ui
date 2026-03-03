@@ -367,12 +367,10 @@ pub struct PopupData {
     pub content: Vec<String>,
 }
 
-/// A single entry in the navigation history, storing the node index and the
-/// full path from root so that the target can be found even after
-/// expand/collapse changes.
+/// A single entry in the navigation history, storing the full path from root
+/// so that the target can be found even after expand/collapse or search changes.
 #[derive(Clone)]
 pub(crate) struct HistoryEntry {
-    node_idx: usize,
     /// Path from root to target: `(depth, text)` pairs.
     node_path: Vec<(usize, String)>,
 }

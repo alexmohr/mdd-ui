@@ -66,13 +66,28 @@ impl App {
     /// Add current node to navigation history, storing the full path for
     /// robust lookup even after expand/collapse changes.
     pub(crate) fn push_to_history(&mut self) {
-        const MAX_HISTORY: usize = 100;
-
         let Some(&node_idx) = self.tree.visible.get(self.tree.cursor) else {
             return;
         };
-
         let path = self.build_node_path(node_idx);
+        self.push_path_to_history(path);
+    }
+
+    /// Build and return the path for the current cursor position.
+    /// Call this BEFORE any operation that changes the visible list.
+    pub(crate) fn capture_current_path(&self) -> Option<Vec<(usize, String)>> {
+        let &node_idx = self.tree.visible.get(self.tree.cursor)?;
+        Some(self.build_node_path(node_idx))
+    }
+
+    /// Add a pre-captured path to navigation history.
+    /// Use this when the visible list may change before `push_to_history` would be called.
+    pub(crate) fn push_path_to_history(&mut self, path: Vec<(usize, String)>) {
+        const MAX_HISTORY: usize = 100;
+
+        if path.is_empty() {
+            return;
+        }
 
         // Don't store duplicate consecutive entries
         if self
@@ -89,10 +104,7 @@ impl App {
             self.history.entries.truncate(self.history.position);
         }
 
-        let entry = HistoryEntry {
-            node_idx,
-            node_path: path,
-        };
+        let entry = HistoryEntry { node_path: path };
 
         self.history.entries.push_back(entry);
         if self.history.entries.len() > MAX_HISTORY {
@@ -119,26 +131,11 @@ impl App {
             return;
         };
 
-        // First try the stored node_idx (fast path — still correct if tree
-        // structure hasn't changed)
-        let target_node_idx = if self
-            .tree
-            .all_nodes
-            .get(entry.node_idx)
-            .is_some_and(|n| entry.node_path.last().is_some_and(|(_, t)| *t == n.text))
-        {
-            // Index still points to the same node; ensure it's visible
-            self.ensure_node_visible(entry.node_idx);
-            entry.node_idx
-        } else {
-            // Fall back to path-based resolution
-            let Some(idx) = self.resolve_path(&entry.node_path) else {
-                self.status = "Previous element no longer reachable".into();
-                return;
-            };
-            self.ensure_node_visible(idx);
-            idx
+        let Some(target_node_idx) = self.resolve_path(&entry.node_path) else {
+            self.status = "Previous element no longer reachable".into();
+            return;
         };
+        self.ensure_node_visible(target_node_idx);
 
         let Some(cursor_pos) = self
             .tree

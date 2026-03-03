@@ -526,6 +526,9 @@ impl App {
 
     /// Navigate to a specific node by its index in `all_nodes`.
     pub(crate) fn navigate_to_node(&mut self, target_node_idx: usize) {
+        // Capture current path BEFORE clearing search (visible list will change)
+        let current_path = self.capture_current_path();
+
         // Clear search stack so navigation target is always reachable
         if !self.search.stack.is_empty() {
             self.search.stack.clear();
@@ -544,7 +547,9 @@ impl App {
             return;
         };
 
-        self.push_to_history();
+        if let Some(path) = current_path {
+            self.push_path_to_history(path);
+        }
         self.focus_state = FocusState::Tree;
         self.tree.cursor = visible_pos;
         self.reset_detail_state();
