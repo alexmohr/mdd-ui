@@ -3,4 +3,5 @@
 
 pub mod compare;
 pub mod diff_tree;
+pub mod export;
 pub mod snapshot;

@@ -41,6 +41,18 @@ enum Command {
         #[arg(long = "theme")]
         theme_file: Option<String>,
     },
+    /// Export diff between two MDD databases as plain text
+    ExportDiff {
+        /// Path to the old/reference MDD file
+        old_file: String,
+
+        /// Path to the new MDD file
+        new_file: String,
+
+        /// Output file path (prints to stdout if omitted)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
 }
 
 /// Restores the terminal to its original state.
@@ -63,6 +75,11 @@ fn main() -> Result<()> {
             new_file,
             theme_file,
         } => run_diff(&old_file, &new_file, theme_file.as_deref()),
+        Command::ExportDiff {
+            old_file,
+            new_file,
+            output,
+        } => run_export_diff(&old_file, &new_file, output.as_deref()),
     }
 }
 
@@ -147,4 +164,37 @@ fn run_diff(old_file: &str, new_file: &str, theme_file: Option<&str>) -> Result<
     restore_terminal();
 
     result.context("TUI error")
+}
+
+fn run_export_diff(old_file: &str, new_file: &str, output: Option<&str>) -> Result<()> {
+    eprintln!("Loading {old_file}...");
+    let db_old =
+        database::load_mdd(old_file).with_context(|| format!("Failed to load: {old_file}"))?;
+
+    eprintln!("Loading {new_file}...");
+    let db_new =
+        database::load_mdd(new_file).with_context(|| format!("Failed to load: {new_file}"))?;
+
+    eprintln!("Extracting snapshots...");
+    let snap_old = diff::snapshot::EcuSnapshot::from_database(&db_old)
+        .context("Failed to extract old database snapshot")?;
+    let snap_new = diff::snapshot::EcuSnapshot::from_database(&db_new)
+        .context("Failed to extract new database snapshot")?;
+
+    eprintln!("Comparing...");
+    let diff_result = diff::compare::compare(&snap_old, &snap_new);
+
+    if let Some(path) = output {
+        let mut file = std::fs::File::create(path)
+            .with_context(|| format!("Failed to create output file: {path}"))?;
+        diff::export::write_text_report(&mut file, &diff_result)
+            .context("Failed to write report")?;
+        eprintln!("Report written to {path}");
+    } else {
+        let mut stdout = std::io::stdout().lock();
+        diff::export::write_text_report(&mut stdout, &diff_result)
+            .context("Failed to write report")?;
+    }
+
+    Ok(())
 }
