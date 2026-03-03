@@ -11,7 +11,10 @@ use ratatui::{
 };
 
 use super::{border_style, expand_icon, render_scrollbar, row_style};
-use crate::app::{App, FocusState};
+use crate::{
+    app::{App, FocusState},
+    tree::DiffStatus,
+};
 
 impl App {
     pub(in crate::app) fn draw_tree(&mut self, frame: &mut Frame, area: Rect) {
@@ -45,10 +48,17 @@ impl App {
 
                 let indent = "  ".repeat(node.depth);
                 let icon = expand_icon(node);
+                let diff_prefix = match node.diff_status {
+                    Some(DiffStatus::Added) => "[+] ",
+                    Some(DiffStatus::Removed) => "[-] ",
+                    Some(DiffStatus::Modified) => "[~] ",
+                    Some(DiffStatus::Unchanged) | None => "",
+                };
 
                 Some(Line::from(vec![
                     Span::styled(indent, row_style),
                     Span::styled(icon, row_style),
+                    Span::styled(diff_prefix, row_style),
                     Span::styled(&node.text, row_style),
                 ]))
             })

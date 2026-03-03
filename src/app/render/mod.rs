@@ -20,7 +20,7 @@ use ratatui::{
 use super::{App, BreadcrumbSegment, FocusState};
 use crate::{
     app::config::ResolvedTheme,
-    tree::{NodeType, TreeNode},
+    tree::{DiffStatus, NodeType, TreeNode},
 };
 
 const BREADCRUMB_SEPARATOR: &str = " > ";
@@ -31,6 +31,19 @@ const BREADCRUMB_SEPARATOR_LEN: u16 = 3;
 // -----------------------------------------------------------------------
 
 fn node_style(node: &TreeNode, theme: &ResolvedTheme) -> Style {
+    // Diff status takes priority over node type styling
+    if let Some(status) = node.diff_status {
+        return match status {
+            DiffStatus::Added => Style::default().fg(theme.diff_added),
+            DiffStatus::Removed => Style::default()
+                .fg(theme.diff_removed)
+                .add_modifier(Modifier::CROSSED_OUT),
+            DiffStatus::Modified => Style::default().fg(theme.diff_modified),
+            DiffStatus::Unchanged => Style::default().fg(theme.diff_unchanged),
+        };
+    }
+
+    // Browse mode: style by node type
     match node.node_type {
         NodeType::Container => styled(theme.tree_container, true),
         NodeType::SectionHeader | NodeType::ParentRefs | NodeType::Dop => {
