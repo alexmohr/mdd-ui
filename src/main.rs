@@ -5,20 +5,42 @@
 
 mod app;
 mod database;
+mod diff;
 mod tree;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "mdd-ui", about = "Browse MDD diagnostic databases")]
+#[command(name = "mdd-ui", about = "Browse and compare MDD diagnostic databases")]
 struct Cli {
-    /// Path to the MDD file to open
-    mdd_file: String,
+    #[command(subcommand)]
+    command: Command,
+}
 
-    /// Path to a theme configuration file (TOML format)
-    #[arg(long = "theme")]
-    theme_file: Option<String>,
+#[derive(Subcommand)]
+enum Command {
+    /// Browse an MDD diagnostic database
+    Browse {
+        /// Path to the MDD file to open
+        mdd_file: String,
+
+        /// Path to a theme configuration file (TOML format)
+        #[arg(long = "theme")]
+        theme_file: Option<String>,
+    },
+    /// Compare two MDD diagnostic databases
+    Diff {
+        /// Path to the old/reference MDD file
+        old_file: String,
+
+        /// Path to the new MDD file
+        new_file: String,
+
+        /// Path to a theme configuration file (TOML format)
+        #[arg(long = "theme")]
+        theme_file: Option<String>,
+    },
 }
 
 /// Restores the terminal to its original state.
@@ -31,19 +53,35 @@ fn restore_terminal() {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Load colour configuration (uses defaults if no config file exists)
-    let config = app::config::load_config(cli.theme_file.as_deref()).unwrap_or_else(|e| {
+    match cli.command {
+        Command::Browse {
+            mdd_file,
+            theme_file,
+        } => run_browse(&mdd_file, theme_file.as_deref()),
+        Command::Diff {
+            old_file,
+            new_file,
+            theme_file,
+        } => run_diff(&old_file, &new_file, theme_file.as_deref()),
+    }
+}
+
+fn load_theme(theme_file: Option<&str>) -> app::config::ResolvedTheme {
+    let config = app::config::load_config(theme_file).unwrap_or_else(|e| {
         eprintln!("Warning: {e:#}. Using defaults.");
         app::config::AppConfig::default()
     });
-    let theme = app::config::ResolvedTheme::from(&config.colors);
+    app::config::ResolvedTheme::from(&config.colors)
+}
 
-    eprintln!("Loading {}...", cli.mdd_file);
-    let db = database::load_mdd(&cli.mdd_file)
-        .with_context(|| format!("Failed to load: {}", cli.mdd_file))?;
+fn run_browse(mdd_file: &str, theme_file: Option<&str>) -> Result<()> {
+    let theme = load_theme(theme_file);
+
+    eprintln!("Loading {mdd_file}...");
+    let db = database::load_mdd(mdd_file).with_context(|| format!("Failed to load: {mdd_file}"))?;
 
     eprintln!("Building tree...");
-    let (nodes, ecu_name) = tree::build_tree(&db, &cli.mdd_file);
+    let (nodes, ecu_name) = tree::build_tree(&db, mdd_file);
     eprintln!("Loaded {} nodes. Starting UI...", nodes.len());
 
     let mut terminal = ratatui::init();
@@ -58,7 +96,53 @@ fn main() -> Result<()> {
         original_hook(panic_info);
     }));
 
-    let result = app::App::new(nodes, ecu_name, theme).run(&mut terminal);
+    let result = app::App::new(nodes, ecu_name, theme, false).run(&mut terminal);
+
+    restore_terminal();
+
+    result.context("TUI error")
+}
+
+fn run_diff(old_file: &str, new_file: &str, theme_file: Option<&str>) -> Result<()> {
+    let theme = load_theme(theme_file);
+
+    eprintln!("Loading {old_file}...");
+    let db_old =
+        database::load_mdd(old_file).with_context(|| format!("Failed to load: {old_file}"))?;
+
+    eprintln!("Loading {new_file}...");
+    let db_new =
+        database::load_mdd(new_file).with_context(|| format!("Failed to load: {new_file}"))?;
+
+    eprintln!("Extracting snapshots...");
+    let snap_old = diff::snapshot::EcuSnapshot::from_database(&db_old)
+        .context("Failed to extract old database snapshot")?;
+    let snap_new = diff::snapshot::EcuSnapshot::from_database(&db_new)
+        .context("Failed to extract new database snapshot")?;
+
+    eprintln!("Comparing...");
+    let diff_result = diff::compare::compare(&snap_old, &snap_new);
+
+    eprintln!(
+        "Found {} added, {} removed, {} modified elements.",
+        diff_result.summary.added, diff_result.summary.removed, diff_result.summary.modified,
+    );
+
+    let (nodes, ecu_name) = diff::diff_tree::build_diff_tree(&diff_result);
+    eprintln!("Built {} diff tree nodes. Starting UI...", nodes.len());
+
+    let mut terminal = ratatui::init();
+    crossterm::execute!(std::io::stdout(), crossterm::event::EnableMouseCapture)
+        .context("Failed to enable mouse capture")?;
+
+    // Install a panic hook that restores the terminal before printing the panic message.
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        restore_terminal();
+        original_hook(panic_info);
+    }));
+
+    let result = app::App::new(nodes, ecu_name, theme, true).run(&mut terminal);
 
     restore_terminal();
 
