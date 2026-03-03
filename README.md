@@ -19,6 +19,7 @@ A terminal-based (TUI) browser for MDD diagnostic databases, built with [Ratatui
 - **Navigation history** — breadcrumb trail with back-navigation so you never lose your place.
 - **Mouse support** — click to select, drag the pane divider to resize, scroll with the mouse wheel, and click breadcrumbs to jump back. Toggle mouse mode with `m` to regain terminal text selection.
 - **Fully configurable colour theme** — customise every colour via a TOML config file (named colours, hex, or ANSI-256 indices).
+- **Diff mode** — compare two MDD files and output structural differences (added, removed, modified nodes) in text or JSON format.
 
 ## Installation
 
@@ -39,6 +40,8 @@ The binary is placed at `target/release/mdd-ui`.
 
 ## Usage
 
+### View Mode (Interactive TUI)
+
 ```sh
 mdd-ui <MDD_FILE> [--theme <THEME_FILE>]
 ```
@@ -48,11 +51,38 @@ mdd-ui <MDD_FILE> [--theme <THEME_FILE>]
 | `<MDD_FILE>` | Path to the MDD file to open (required). |
 | `--theme <THEME_FILE>` | Path to a TOML colour-theme configuration file (optional). |
 
-### Example
+#### Example
 
 ```sh
 mdd-ui my_ecu.mdd
 mdd-ui my_ecu.mdd --theme ~/.config/mdd-ui/config.toml
+```
+
+### Diff Mode (Compare Two Files)
+
+```sh
+mdd-ui <BASE_FILE> --diff <COMPARE_FILE> [--format <FORMAT>]
+```
+
+| Argument | Description |
+|---|---|
+| `<BASE_FILE>` | Path to the base (first) MDD file for comparison. |
+| `--diff <COMPARE_FILE>` | Path to the MDD file to compare against the base. |
+| `--format <FORMAT>` | Output format: `text` (default) or `json`. |
+
+The diff command compares the tree structures of two MDD files and outputs:
+- **Removed nodes**: present in the base file but not in the compare file.
+- **Added nodes**: present in the compare file but not in the base file.
+- **Modified nodes**: present in both files but with differences in content.
+
+#### Example
+
+```sh
+# Text output (human-readable)
+mdd-ui old_ecu.mdd --diff new_ecu.mdd
+
+# JSON output (for scripting/automation)
+mdd-ui old_ecu.mdd --diff new_ecu.mdd --format json > diff.json
 ```
 
 ## Keybindings
@@ -170,6 +200,10 @@ src/
 ├── database/            # MDD file loading and data extraction
 │   ├── mod.rs
 │   └── reader.rs
+├── diff/                # Diff functionality for comparing MDD files
+│   ├── mod.rs           #   Entry point for diff command
+│   ├── tree_differ.rs   #   Tree comparison logic
+│   └── output.rs        #   Output formatting (text/JSON)
 └── tree/                # Tree model
     ├── mod.rs           #   build_tree entry point
     ├── builder.rs       #   TreeBuilder helper
