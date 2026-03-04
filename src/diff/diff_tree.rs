@@ -117,23 +117,16 @@ pub fn build_diff_tree(diff: &DiffResult) -> (Vec<TreeNode>, String) {
 fn add_element_diff_nodes(nodes: &mut Vec<TreeNode>, diff: &ElementDiff, depth: usize) {
     let has_children = !diff.children.is_empty();
 
-    // Determine display text.
-    // For modified leaf nodes with exactly one property diff, inline the change.
-    let text = if let (DiffStatus::Modified, true, Some(p)) = (
-        diff.status,
-        diff.children.is_empty() && diff.property_diffs.len() == 1,
-        diff.property_diffs.first(),
-    ) {
-        format!("{}: {} -> {}", diff.name, p.old_value, p.new_value)
-    } else {
-        diff.name.clone()
-    };
+    // Use the element name as the tree text
+    let text = diff.name.clone();
 
-    // Build detail sections for property diffs (if more than one).
-    let sections: Vec<DetailSectionData> = if diff.property_diffs.len() > 1 {
-        vec![build_property_diff_section("Changes", &diff.property_diffs)]
-    } else {
+    // Build detail sections for any property diffs.
+    // In diff mode, we always show a detail section table for modified elements
+    // to provide consistent visibility of what changed.
+    let sections: Vec<DetailSectionData> = if diff.property_diffs.is_empty() {
         Vec::new()
+    } else {
+        vec![build_property_diff_section("Changes", &diff.property_diffs)]
     };
 
     nodes.push(TreeNode {
@@ -373,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn single_property_diff_inlined_in_text() {
+    fn single_property_diff_shown_in_detail_pane() {
         let diff = DiffResult {
             old_name: "A".to_owned(),
             new_name: "B".to_owned(),
@@ -401,11 +394,11 @@ mod tests {
         let (nodes, _) = build_diff_tree(&diff);
         let dtc_node = nodes
             .iter()
-            .find(|n| n.text.contains("DTC_0x10"))
+            .find(|n| n.text == "DTC_0x10")
             .expect("should find DTC node");
-        assert_eq!(dtc_node.text, "DTC_0x10: old desc -> new desc");
-        // Single-property inline means no detail sections needed
-        assert!(dtc_node.detail_sections.is_empty());
+        assert_eq!(dtc_node.text, "DTC_0x10");
+        // Single-property diffs are now shown in detail pane for consistency
+        assert_eq!(dtc_node.detail_sections.len(), 1);
     }
 
     #[test]

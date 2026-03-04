@@ -52,14 +52,60 @@ impl App {
             frame.render_widget(block, area);
 
             // Add helpful message in the center
-            let help_message = [
-                "",
-                "No detailed information available for this item.",
-                "",
-                "Navigate the tree to select items with more details.",
-                "",
-                "Press ? for help.",
-            ];
+            let help_message = if self.is_diff_mode {
+                // In diff mode, show message about no differences
+                if let Some(status) = selected_node.diff_status {
+                    use crate::tree::DiffStatus;
+                    match status {
+                        DiffStatus::Unchanged => vec![
+                            "",
+                            "No differences found.",
+                            "",
+                            "This element is identical in both files.",
+                            "",
+                        ],
+                        DiffStatus::Added => vec![
+                            "",
+                            "This element was added.",
+                            "",
+                            "It exists only in the new file.",
+                            "",
+                        ],
+                        DiffStatus::Removed => vec![
+                            "",
+                            "This element was removed.",
+                            "",
+                            "It exists only in the old file.",
+                            "",
+                        ],
+                        DiffStatus::Modified => vec![
+                            "",
+                            "This element was modified.",
+                            "",
+                            "No property-level differences to display.",
+                            "",
+                        ],
+                    }
+                } else {
+                    vec![
+                        "",
+                        "No differences to display.",
+                        "",
+                        "Press ? for help.",
+                        "",
+                    ]
+                }
+            } else {
+                // Browse mode: show generic help message
+                vec![
+                    "",
+                    "No detailed information available for this item.",
+                    "",
+                    "Navigate the tree to select items with more details.",
+                    "",
+                    "Press ? for help.",
+                ]
+            };
 
             let paragraph = Paragraph::new(help_message.join("\n"))
                 .style(Style::default().fg(self.theme.border_unfocused))
