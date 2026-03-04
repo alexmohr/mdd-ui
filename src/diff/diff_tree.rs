@@ -10,10 +10,12 @@
 
 use std::rc::Rc;
 
-use crate::diff::compare::{DiffResult, ElementDiff, PropertyDiff};
-use crate::tree::{
-    CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DiffStatus, NodeType,
-    SectionType, TreeNode,
+use crate::{
+    diff::compare::{DiffResult, ElementDiff, PropertyDiff},
+    tree::{
+        CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DiffStatus,
+        NodeType, SectionType, TreeNode,
+    },
 };
 
 // ---------------------------------------------------------------------------

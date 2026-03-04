@@ -9,12 +9,14 @@
 
 use std::collections::BTreeMap;
 
-use crate::diff::snapshot::{
-    AudienceSnapshot, DiagCommSnapshot, DiagLayerSnapshot, DiagServiceSnapshot, DtcSnapshot,
-    EcuSnapshot, FunctionalGroupSnapshot, ParamSnapshot, ResponseSnapshot, SingleEcuJobSnapshot,
-    StateChartSnapshot, VariantSnapshot,
+use crate::{
+    diff::snapshot::{
+        AudienceSnapshot, DiagCommSnapshot, DiagLayerSnapshot, DiagServiceSnapshot, DtcSnapshot,
+        EcuSnapshot, FunctionalGroupSnapshot, ParamSnapshot, ResponseSnapshot,
+        SingleEcuJobSnapshot, StateChartSnapshot, VariantSnapshot,
+    },
+    tree::DiffStatus,
 };
-use crate::tree::DiffStatus;
 
 // ---------------------------------------------------------------------------
 // Public types

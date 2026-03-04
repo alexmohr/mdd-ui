@@ -3,9 +3,8 @@
 
 use std::io::Write;
 
-use crate::tree::DiffStatus;
-
 use super::compare::{DiffResult, ElementDiff, PropertyDiff};
+use crate::tree::DiffStatus;
 
 /// Writes a plain-text diff report to the given writer.
 ///
@@ -15,10 +14,7 @@ pub fn write_text_report(w: &mut impl Write, diff: &DiffResult) -> std::io::Resu
     writeln!(
         w,
         "+{} added, -{} removed, ~{} modified, {} unchanged",
-        diff.summary.added,
-        diff.summary.removed,
-        diff.summary.modified,
-        diff.summary.unchanged,
+        diff.summary.added, diff.summary.removed, diff.summary.modified, diff.summary.unchanged,
     )?;
 
     if !diff.ecu_diffs.is_empty() {
@@ -30,7 +26,12 @@ pub fn write_text_report(w: &mut impl Write, diff: &DiffResult) -> std::io::Resu
     }
 
     write_section(w, "Variants", &diff.variants, "Variant")?;
-    write_section(w, "Functional groups", &diff.functional_groups, "FunctionalGroup")?;
+    write_section(
+        w,
+        "Functional groups",
+        &diff.functional_groups,
+        "FunctionalGroup",
+    )?;
     write_section(w, "DTCs", &diff.dtcs, "DTC")?;
 
     Ok(())
@@ -68,8 +69,7 @@ fn write_element(
     let marker = status_marker(elem.status);
 
     // Inline single property diff for modified leaf nodes (matches TUI behavior).
-    let is_leaf_with_single_diff =
-        elem.children.is_empty() && elem.property_diffs.len() == 1;
+    let is_leaf_with_single_diff = elem.children.is_empty() && elem.property_diffs.len() == 1;
     if elem.status == DiffStatus::Modified && is_leaf_with_single_diff {
         let Some(p) = elem.property_diffs.first() else {
             return Ok(());
@@ -184,7 +184,10 @@ mod tests {
         let mut buf = Vec::new();
         write_text_report(&mut buf, &diff).unwrap();
         let output = String::from_utf8(buf).unwrap();
-        assert!(!output.contains("V1"), "unchanged element should be omitted");
+        assert!(
+            !output.contains("V1"),
+            "unchanged element should be omitted"
+        );
         assert!(output.contains("[+] V2 (Variant)"));
     }
 
@@ -212,7 +215,10 @@ mod tests {
         let mut buf = Vec::new();
         write_text_report(&mut buf, &diff).unwrap();
         let output = String::from_utf8(buf).unwrap();
-        assert!(!output.contains("Variants:"), "fully unchanged section should be omitted");
+        assert!(
+            !output.contains("Variants:"),
+            "fully unchanged section should be omitted"
+        );
     }
 
     #[test]
@@ -302,10 +308,22 @@ mod tests {
         let mut buf = Vec::new();
         write_text_report(&mut buf, &diff).unwrap();
         let output = String::from_utf8(buf).unwrap();
-        assert!(output.contains("[~] BaseVariant (Variant)"), "top-level item gets kind label");
-        assert!(output.contains("[+] ReadDID (Service)"), "service child gets kind label");
-        assert!(output.contains("[~] WriteDID (Service)"), "modified service gets kind label");
-        assert!(output.contains("addressing: physical -> functional"), "multi-property diffs listed");
+        assert!(
+            output.contains("[~] BaseVariant (Variant)"),
+            "top-level item gets kind label"
+        );
+        assert!(
+            output.contains("[+] ReadDID (Service)"),
+            "service child gets kind label"
+        );
+        assert!(
+            output.contains("[~] WriteDID (Service)"),
+            "modified service gets kind label"
+        );
+        assert!(
+            output.contains("addressing: physical -> functional"),
+            "multi-property diffs listed"
+        );
     }
 
     #[test]
