@@ -131,21 +131,8 @@ fn run_diff(old_file: &str, new_file: &str, theme_file: Option<&str>) -> Result<
     let db_new =
         database::load_mdd(new_file).with_context(|| format!("Failed to load: {new_file}"))?;
 
-    eprintln!("Extracting snapshots...");
-    let snap_old = diff::snapshot::EcuSnapshot::from_database(&db_old)
-        .context("Failed to extract old database snapshot")?;
-    let snap_new = diff::snapshot::EcuSnapshot::from_database(&db_new)
-        .context("Failed to extract new database snapshot")?;
-
-    eprintln!("Comparing...");
-    let diff_result = diff::compare::compare(&snap_old, &snap_new);
-
-    eprintln!(
-        "Found {} added, {} removed, {} modified elements.",
-        diff_result.summary.added, diff_result.summary.removed, diff_result.summary.modified,
-    );
-
-    let (nodes, ecu_name) = diff::diff_tree::build_diff_tree(&diff_result);
+    eprintln!("Building diff tree...");
+    let (nodes, ecu_name) = diff::diff_tree::build_diff_tree(&db_old, &db_new, old_file, new_file);
     eprintln!("Built {} diff tree nodes. Starting UI...", nodes.len());
 
     let mut terminal = ratatui::init();
