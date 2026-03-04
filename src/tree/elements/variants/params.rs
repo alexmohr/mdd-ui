@@ -14,6 +14,125 @@ use crate::tree::types::{
     DetailSectionData, DetailSectionType,
 };
 
+/// Format a `ParamType` value as a static label.
+fn param_type_label(pt: &cda_database::datatypes::ParamType) -> &'static str {
+    use cda_database::datatypes::ParamType;
+    match pt {
+        ParamType::CodedConst => "CodedConst",
+        ParamType::Dynamic => "Dynamic",
+        ParamType::LengthKey => "LengthKey",
+        ParamType::MatchingRequestParam => "MatchingRequestParam",
+        ParamType::NrcConst => "NrcConst",
+        ParamType::PhysConst => "PhysConst",
+        ParamType::Reserved => "Reserved",
+        ParamType::System => "System",
+        ParamType::TableEntry => "TableEntry",
+        ParamType::TableKey => "TableKey",
+        ParamType::TableStruct => "TableStruct",
+        ParamType::Value => "Value",
+    }
+}
+
+/// Append detail rows for a `DiagCodedType` flatbuf value.  Implemented as a
+/// macro because the underlying flatbuf types are crate-private and cannot be
+/// named in function signatures.
+macro_rules! append_dct_rows {
+    ($dct:expr, $rows:expr) => {{
+        let dct = &$dct;
+        $rows.push(DetailRow::normal(
+            vec!["DCT Type".to_owned(), format!("{:?}", dct.type_())],
+            vec![CellType::Text, CellType::Text],
+            0,
+        ));
+
+        if let Some(enc) = dct.base_type_encoding() {
+            $rows.push(DetailRow::normal(
+                vec!["Base Type Encoding".to_owned(), enc.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+
+        $rows.push(DetailRow::normal(
+            vec![
+                "Base Data Type".to_owned(),
+                format!("{:?}", dct.base_data_type()),
+            ],
+            vec![CellType::Text, CellType::Text],
+            0,
+        ));
+
+        $rows.push(DetailRow::normal(
+            vec![
+                "High-Low Byte Order".to_owned(),
+                dct.is_high_low_byte_order().to_string(),
+            ],
+            vec![CellType::Text, CellType::Text],
+            0,
+        ));
+
+        let length_type = format!("{:?}", dct.specific_data_type());
+        $rows.push(DetailRow::normal(
+            vec!["Length Type".to_owned(), length_type],
+            vec![CellType::Text, CellType::Text],
+            0,
+        ));
+
+        if let Some(slt) = dct.specific_data_as_standard_length_type() {
+            $rows.push(DetailRow::normal(
+                vec!["Bit Length".to_owned(), slt.bit_length().to_string()],
+                vec![CellType::Text, CellType::NumericValue],
+                0,
+            ));
+            let mask_str = slt
+                .bit_mask()
+                .map_or_else(|| "None".to_owned(), |m| format!("{m:?}"));
+            $rows.push(DetailRow::normal(
+                vec!["Bit Mask".to_owned(), mask_str],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+            $rows.push(DetailRow::normal(
+                vec!["Condensed".to_owned(), slt.condensed().to_string()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        } else if let Some(mml) = dct.specific_data_as_min_max_length_type() {
+            $rows.push(DetailRow::normal(
+                vec!["Min Length".to_owned(), mml.min_length().to_string()],
+                vec![CellType::Text, CellType::NumericValue],
+                0,
+            ));
+            let max = mml
+                .max_length()
+                .map_or_else(|| "None".to_owned(), |v| v.to_string());
+            $rows.push(DetailRow::normal(
+                vec!["Max Length".to_owned(), max],
+                vec![CellType::Text, CellType::NumericValue],
+                0,
+            ));
+            $rows.push(DetailRow::normal(
+                vec!["Termination".to_owned(), format!("{:?}", mml.termination())],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        } else if let Some(lli) = dct.specific_data_as_leading_length_info_type() {
+            $rows.push(DetailRow::normal(
+                vec!["Bit Length".to_owned(), lli.bit_length().to_string()],
+                vec![CellType::Text, CellType::NumericValue],
+                0,
+            ));
+        } else if let Some(pli) = dct.specific_data_as_param_length_info_type() {
+            let key_name = pli.length_key().and_then(|p| p.short_name()).unwrap_or("-");
+            $rows.push(DetailRow::normal(
+                vec!["Length Key Param".to_owned(), key_name.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+    }};
+}
+
 /// Build detail sections for a single parameter (Overview with key-value
 /// properties).  Shared by both request and response parameter views.
 pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionData> {
@@ -29,6 +148,13 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
 
     let mut overview_rows = Vec::new();
 
+    // ID
+    overview_rows.push(DetailRow::normal(
+        vec!["ID".to_owned(), param.id().to_string()],
+        vec![CellType::Text, CellType::NumericValue],
+        0,
+    ));
+
     if let Some(short_name) = param.short_name() {
         overview_rows.push(DetailRow::normal(
             vec!["Short Name".to_owned(), short_name.to_owned()],
@@ -38,23 +164,8 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
     }
 
     if let Ok(param_type) = param.param_type() {
-        use cda_database::datatypes::ParamType;
-        let param_type_str = match param_type {
-            ParamType::CodedConst => "CodedConst",
-            ParamType::Dynamic => "Dynamic",
-            ParamType::LengthKey => "LengthKey",
-            ParamType::MatchingRequestParam => "MatchingRequestParam",
-            ParamType::NrcConst => "NrcConst",
-            ParamType::PhysConst => "PhysConst",
-            ParamType::Reserved => "Reserved",
-            ParamType::System => "System",
-            ParamType::TableEntry => "TableEntry",
-            ParamType::TableKey => "TableKey",
-            ParamType::TableStruct => "TableStruct",
-            ParamType::Value => "Value",
-        };
         overview_rows.push(DetailRow::normal(
-            vec!["Type".to_owned(), param_type_str.to_owned()],
+            vec!["Type".to_owned(), param_type_label(&param_type).to_owned()],
             vec![CellType::Text, CellType::Text],
             0,
         ));
@@ -68,24 +179,39 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
         ));
     }
 
-    let byte_pos = param.byte_position();
-    if byte_pos != 0 {
-        overview_rows.push(DetailRow::normal(
-            vec!["Byte Position".to_owned(), byte_pos.to_string()],
-            vec![CellType::Text, CellType::NumericValue],
-            0,
-        ));
-    }
+    // Always show byte/bit position
+    overview_rows.push(DetailRow::normal(
+        vec![
+            "Byte Position".to_owned(),
+            param.byte_position().to_string(),
+        ],
+        vec![CellType::Text, CellType::NumericValue],
+        0,
+    ));
 
     let bit_pos = param.bit_position();
-    if bit_pos != BIT_POSITION_UNSET {
+    overview_rows.push(DetailRow::normal(
+        vec![
+            "Bit Position".to_owned(),
+            if bit_pos == BIT_POSITION_UNSET {
+                "unset".to_owned()
+            } else {
+                bit_pos.to_string()
+            },
+        ],
+        vec![CellType::Text, CellType::NumericValue],
+        0,
+    ));
+
+    if let Some(pdv) = param.physical_default_value() {
         overview_rows.push(DetailRow::normal(
-            vec!["Bit Position".to_owned(), bit_pos.to_string()],
-            vec![CellType::Text, CellType::NumericValue],
+            vec!["Physical Default Value".to_owned(), pdv.to_owned()],
+            vec![CellType::Text, CellType::Text],
             0,
         ));
     }
 
+    // Coded value (hex formatted, for CodedConst)
     let coded_value = extract_coded_value(param);
     if !coded_value.is_empty() {
         overview_rows.push(DetailRow::normal(
@@ -95,6 +221,7 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
         ));
     }
 
+    // DOP reference (for Value type)
     let dop_name = extract_dop_name(param);
     if !dop_name.is_empty() {
         overview_rows.push(DetailRow::normal(
@@ -104,7 +231,36 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
         ));
     }
 
-    if !overview_rows.is_empty() {
+    let header = DetailRow::header(
+        vec!["Property".to_owned(), "Value".to_owned()],
+        vec![CellType::Text, CellType::Text],
+    );
+
+    sections.push(
+        DetailSectionData::new(
+            "Overview".to_owned(),
+            DetailContent::Table {
+                header,
+                rows: overview_rows,
+                constraints: vec![
+                    ColumnConstraint::Percentage(40),
+                    ColumnConstraint::Percentage(60),
+                ],
+                use_row_selection: true,
+            },
+            false,
+        )
+        .with_type(DetailSectionType::Overview),
+    );
+
+    // Type-specific section
+    let specific_rows = build_specific_data_rows(param);
+    if !specific_rows.is_empty() {
+        let title = param.param_type().map_or_else(
+            |_| "Specific Data".to_owned(),
+            |pt| param_type_label(&pt).to_owned(),
+        );
+
         let header = DetailRow::header(
             vec!["Property".to_owned(), "Value".to_owned()],
             vec![CellType::Text, CellType::Text],
@@ -112,10 +268,10 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
 
         sections.push(
             DetailSectionData::new(
-                "Overview".to_owned(),
+                title,
                 DetailContent::Table {
                     header,
-                    rows: overview_rows,
+                    rows: specific_rows,
                     constraints: vec![
                         ColumnConstraint::Percentage(40),
                         ColumnConstraint::Percentage(60),
@@ -124,11 +280,197 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
                 },
                 false,
             )
-            .with_type(DetailSectionType::Overview),
+            .with_type(DetailSectionType::Custom),
         );
     }
 
     sections
+}
+
+/// Build rows for the type-specific data of a parameter.
+fn build_specific_data_rows(param: &Parameter<'_>) -> Vec<DetailRow> {
+    let mut rows = Vec::new();
+
+    // CodedConst
+    if let Some(cc) = param.specific_data_as_coded_const() {
+        if let Some(cv) = cc.coded_value() {
+            rows.push(DetailRow::normal(
+                vec!["Coded Value".to_owned(), cv.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+        if let Some(dct) = cc.diag_coded_type() {
+            append_dct_rows!(dct, rows);
+        }
+        return rows;
+    }
+
+    // NrcConst
+    if let Some(nrc) = param.specific_data_as_nrc_const() {
+        if let Some(vals) = nrc.coded_values() {
+            let values_str: Vec<&str> = vals.iter().collect();
+            rows.push(DetailRow::normal(
+                vec!["Coded Values".to_owned(), values_str.join(", ")],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+        if let Some(dct) = nrc.diag_coded_type() {
+            append_dct_rows!(dct, rows);
+        }
+        return rows;
+    }
+
+    build_remaining_specific_rows(param)
+}
+
+/// Build type-specific rows for param types that do not use `DiagCodedType`.
+fn build_remaining_specific_rows(param: &Parameter<'_>) -> Vec<DetailRow> {
+    let mut rows = Vec::new();
+
+    // MatchingRequestParam
+    if let Some(mrp) = param.specific_data_as_matching_request_param() {
+        rows.push(DetailRow::normal(
+            vec![
+                "Request Byte Pos".to_owned(),
+                mrp.request_byte_pos().to_string(),
+            ],
+            vec![CellType::Text, CellType::NumericValue],
+            0,
+        ));
+        rows.push(DetailRow::normal(
+            vec!["Byte Length".to_owned(), mrp.byte_length().to_string()],
+            vec![CellType::Text, CellType::NumericValue],
+            0,
+        ));
+        return rows;
+    }
+
+    // PhysConst
+    if let Some(pc) = param.specific_data_as_phys_const() {
+        if let Some(v) = pc.phys_constant_value() {
+            rows.push(DetailRow::normal(
+                vec!["Phys Constant Value".to_owned(), v.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+        if let Some(dop) = pc.dop() {
+            rows.push(DetailRow::normal(
+                vec!["DOP".to_owned(), dop.short_name().unwrap_or("-").to_owned()],
+                vec![CellType::Text, CellType::DopReference],
+                0,
+            ));
+        }
+        return rows;
+    }
+
+    // Reserved
+    if let Some(res) = param.specific_data_as_reserved() {
+        rows.push(DetailRow::normal(
+            vec!["Bit Length".to_owned(), res.bit_length().to_string()],
+            vec![CellType::Text, CellType::NumericValue],
+            0,
+        ));
+        return rows;
+    }
+
+    // Value
+    if let Some(val) = param.specific_data_as_value() {
+        if let Some(pdv) = val.physical_default_value() {
+            rows.push(DetailRow::normal(
+                vec!["Physical Default Value".to_owned(), pdv.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+        if let Some(dop) = val.dop() {
+            rows.push(DetailRow::normal(
+                vec!["DOP".to_owned(), dop.short_name().unwrap_or("-").to_owned()],
+                vec![CellType::Text, CellType::DopReference],
+                0,
+            ));
+        }
+        return rows;
+    }
+
+    // System
+    if let Some(sys) = param.specific_data_as_system() {
+        if let Some(sp) = sys.sys_param() {
+            rows.push(DetailRow::normal(
+                vec!["Sys Param".to_owned(), sp.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+        if let Some(dop) = sys.dop() {
+            rows.push(DetailRow::normal(
+                vec!["DOP".to_owned(), dop.short_name().unwrap_or("-").to_owned()],
+                vec![CellType::Text, CellType::DopReference],
+                0,
+            ));
+        }
+        return rows;
+    }
+
+    // LengthKeyRef
+    if let Some(lkr) = param.specific_data_as_length_key_ref() {
+        if let Some(dop) = lkr.dop() {
+            rows.push(DetailRow::normal(
+                vec!["DOP".to_owned(), dop.short_name().unwrap_or("-").to_owned()],
+                vec![CellType::Text, CellType::DopReference],
+                0,
+            ));
+        }
+        return rows;
+    }
+
+    // TableEntry
+    if let Some(te) = param.specific_data_as_table_entry() {
+        rows.push(DetailRow::normal(
+            vec!["Target".to_owned(), format!("{:?}", te.target())],
+            vec![CellType::Text, CellType::Text],
+            0,
+        ));
+        if let Some(p) = te.param() {
+            rows.push(DetailRow::normal(
+                vec![
+                    "Entry Param".to_owned(),
+                    p.short_name().unwrap_or("-").to_owned(),
+                ],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+        if let Some(tr) = te.table_row()
+            && let Some(sn) = tr.short_name()
+        {
+            rows.push(DetailRow::normal(
+                vec!["Table Row".to_owned(), sn.to_owned()],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+        return rows;
+    }
+
+    // TableStruct
+    if let Some(ts) = param.specific_data_as_table_struct() {
+        if let Some(key) = ts.table_key() {
+            rows.push(DetailRow::normal(
+                vec![
+                    "Table Key Param".to_owned(),
+                    key.short_name().unwrap_or("-").to_owned(),
+                ],
+                vec![CellType::Text, CellType::Text],
+                0,
+            ));
+        }
+        return rows;
+    }
+
+    rows
 }
 
 /// Build a parameter table section (the column-based param list used by
