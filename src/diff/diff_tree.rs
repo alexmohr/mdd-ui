@@ -32,6 +32,11 @@ struct HierNode {
 struct MergedNode {
     node: TreeNode,
     children: Vec<MergedNode>,
+    /// Whether this node's own content (text + detail sections) differs
+    /// between the old and new trees.  Used to limit upward propagation of
+    /// `DiffStatus::Modified`: a parent is only marked modified when a
+    /// **direct** child has `own_changed == true` or is Added/Removed.
+    own_changed: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -155,12 +160,30 @@ fn merge_children(old_children: &[HierNode], new_children: &[HierNode]) -> Vec<M
             // Node exists in both trees — recurse into children
             let merged_children = merge_children(&old_node.children, &new_node.children);
 
-            let own_changed = !node_content_equal(&old_node.tree_node, &new_node.tree_node);
+            // A node has its own change only when we can produce a visible
+            // "Changes" section for the user.  Raw content may differ (e.g.
+            // embedded parameter tables) without yielding user-presentable
+            // diffs; in that case the node should not appear Modified.
+            let changes_section = if node_content_equal(&old_node.tree_node, &new_node.tree_node) {
+                None
+            } else {
+                build_changes_section(&old_node.tree_node, &new_node.tree_node)
+            };
+            let own_changed = changes_section.is_some();
+
+            // A node is marked Modified only when a direct child has its
+            // own content change or was structurally added/removed.
+            // Children reachable only through parent-ref inheritance are
+            // excluded so that inherited-service changes do not bubble up.
             let children_changed = merged_children.iter().any(|c| {
-                matches!(
-                    c.node.diff_status,
-                    Some(DiffStatus::Added | DiffStatus::Removed | DiffStatus::Modified)
-                )
+                !matches!(
+                    c.node.node_type,
+                    NodeType::ParentRefService | NodeType::ParentRefs
+                ) && (c.own_changed
+                    || matches!(
+                        c.node.diff_status,
+                        Some(DiffStatus::Added | DiffStatus::Removed)
+                    ))
             });
 
             let status = if own_changed || children_changed {
@@ -172,11 +195,8 @@ fn merge_children(old_children: &[HierNode], new_children: &[HierNode]) -> Vec<M
             let mut node = new_node.tree_node.clone();
             node.diff_status = Some(status);
 
-            // Prepend a "Changes" section for nodes whose own content differs
-            if own_changed
-                && let Some(changes) =
-                    build_changes_section(&old_node.tree_node, &new_node.tree_node)
-            {
+            // Prepend the "Changes" section when we have one
+            if let Some(changes) = changes_section {
                 let mut sections: Vec<DetailSectionData> = vec![changes];
                 sections.extend(node.detail_sections.iter().cloned());
                 node.detail_sections = Rc::from(sections);
@@ -185,6 +205,7 @@ fn merge_children(old_children: &[HierNode], new_children: &[HierNode]) -> Vec<M
             result.push(MergedNode {
                 node,
                 children: merged_children,
+                own_changed,
             });
         } else {
             // Node exists only in new tree — Added
@@ -217,6 +238,8 @@ fn mark_subtree(node: &HierNode, status: DiffStatus) -> MergedNode {
     MergedNode {
         node: tree_node,
         children,
+        // Added/Removed nodes are inherently different.
+        own_changed: true,
     }
 }
 
@@ -328,6 +351,42 @@ fn build_changes_section(old: &TreeNode, new: &TreeNode) -> Option<DetailSection
         });
     }
 
+    // Detect sections removed in new
+    for old_section in old.detail_sections.iter() {
+        if old_section.render_as_header {
+            continue;
+        }
+        let found = new
+            .detail_sections
+            .iter()
+            .any(|s| s.title == old_section.title);
+        if !found {
+            diffs.push(ChangedProperty {
+                name: format!("Section removed: {}", old_section.title),
+                old_value: "(present)".to_owned(),
+                new_value: "(absent)".to_owned(),
+            });
+        }
+    }
+
+    // Detect sections added in new
+    for new_section in new.detail_sections.iter() {
+        if new_section.render_as_header {
+            continue;
+        }
+        let found = old
+            .detail_sections
+            .iter()
+            .any(|s| s.title == new_section.title);
+        if !found {
+            diffs.push(ChangedProperty {
+                name: format!("Section added: {}", new_section.title),
+                old_value: "(absent)".to_owned(),
+                new_value: "(present)".to_owned(),
+            });
+        }
+    }
+
     // Compare detail section content — extract row-level diffs from tables
     for old_section in old.detail_sections.iter() {
         // Find the matching section in new by type+title, falling back to title
@@ -381,8 +440,15 @@ fn extract_table_diffs(
                     continue;
                 };
                 if old_row.cells != new_row.cells {
-                    let old_val = old_row.cells.get(1).cloned().unwrap_or_default();
-                    let new_val = new_row.cells.get(1).cloned().unwrap_or_default();
+                    // Collect all differing columns beyond the key
+                    let changed_cols: Vec<String> = old_row
+                        .cells
+                        .iter()
+                        .zip(new_row.cells.iter())
+                        .skip(1)
+                        .filter(|(o, n)| o != n)
+                        .map(|(o, n)| format!("{o} → {n}"))
+                        .collect();
                     let prop_name = if section_title.is_empty() {
                         key.clone()
                     } else {
@@ -390,11 +456,30 @@ fn extract_table_diffs(
                     };
                     diffs.push(ChangedProperty {
                         name: prop_name,
-                        old_value: old_val,
-                        new_value: new_val,
+                        old_value: old_row
+                            .cells
+                            .get(1..)
+                            .map_or_else(String::new, |s| s.join(", ")),
+                        new_value: if changed_cols.is_empty() {
+                            new_row
+                                .cells
+                                .get(1..)
+                                .map_or_else(String::new, |s| s.join(", "))
+                        } else {
+                            changed_cols.join("; ")
+                        },
                     });
                 }
             }
+        }
+        (DetailContent::PlainText(old_lines), DetailContent::PlainText(new_lines))
+            if old_lines != new_lines =>
+        {
+            diffs.push(ChangedProperty {
+                name: section_title.to_owned(),
+                old_value: old_lines.join(", "),
+                new_value: new_lines.join(", "),
+            });
         }
         (DetailContent::Composite(old_subs), DetailContent::Composite(new_subs)) => {
             for (old_sub, new_sub) in old_subs.iter().zip(new_subs.iter()) {
@@ -572,6 +657,7 @@ fn add_summary_to_general(
             diff_status: None,
         },
         children: Vec::new(),
+        own_changed: false,
     });
 
     nodes
@@ -838,6 +924,7 @@ mod tests {
                         n
                     },
                     children: Vec::new(),
+                    own_changed: true,
                 },
                 MergedNode {
                     node: {
@@ -846,6 +933,7 @@ mod tests {
                         n
                     },
                     children: Vec::new(),
+                    own_changed: true,
                 },
                 MergedNode {
                     node: {
@@ -854,8 +942,10 @@ mod tests {
                         n
                     },
                     children: Vec::new(),
+                    own_changed: false,
                 },
             ],
+            own_changed: false,
         }];
 
         let summary = compute_summary(&merged);
@@ -874,8 +964,11 @@ mod tests {
                 children: vec![MergedNode {
                     node: make_node("Grandchild", 99, false),
                     children: Vec::new(),
+                    own_changed: false,
                 }],
+                own_changed: false,
             }],
+            own_changed: false,
         }];
 
         let flat = flatten_merged(&merged, 0);
@@ -933,6 +1026,49 @@ mod tests {
             Some(DiffStatus::Added)
         );
         assert_eq!(merged.children[1].node.diff_status, Some(DiffStatus::Added));
+    }
+
+    /// A deep change should only propagate one level: the leaf's parent is
+    /// Modified, but the grandparent stays Unchanged because the parent has
+    /// no own content change.
+    #[test]
+    fn deep_change_does_not_propagate_to_grandparent() {
+        // Root > Mid > Leaf (Leaf has a section change)
+        let old_tree = vec![
+            make_node("Root", 0, true),
+            make_node("Mid", 1, true),
+            make_node("Leaf", 2, false),
+        ];
+        let new_tree = vec![
+            make_node("Root", 0, true),
+            make_node("Mid", 1, true),
+            make_node_with_sections(
+                "Leaf",
+                2,
+                vec![DetailSectionData::new(
+                    "New".to_owned(),
+                    DetailContent::PlainText(vec!["data".to_owned()]),
+                    false,
+                )],
+            ),
+        ];
+
+        let hier_old = flat_to_hier(&old_tree);
+        let hier_new = flat_to_hier(&new_tree);
+        let merged = merge_children(&hier_old, &hier_new);
+
+        // Leaf: own content changed → Modified
+        assert_eq!(
+            merged[0].children[0].children[0].node.diff_status,
+            Some(DiffStatus::Modified)
+        );
+        // Mid: direct child (Leaf) has own_changed → Modified
+        assert_eq!(
+            merged[0].children[0].node.diff_status,
+            Some(DiffStatus::Modified)
+        );
+        // Root: direct child (Mid) has own_changed=false → Unchanged
+        assert_eq!(merged[0].node.diff_status, Some(DiffStatus::Unchanged));
     }
 
     #[test]
