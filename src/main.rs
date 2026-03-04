@@ -8,27 +8,25 @@ mod database;
 mod diff;
 mod tree;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "mdd-ui", about = "Browse and compare MDD diagnostic databases")]
 struct Cli {
+    /// Path to the MDD file to browse (default mode)
+    mdd_file: Option<String>,
+
+    /// Path to a theme configuration file (TOML format)
+    #[arg(long = "theme")]
+    theme_file: Option<String>,
+
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Browse an MDD diagnostic database
-    Browse {
-        /// Path to the MDD file to open
-        mdd_file: String,
-
-        /// Path to a theme configuration file (TOML format)
-        #[arg(long = "theme")]
-        theme_file: Option<String>,
-    },
     /// Compare two MDD diagnostic databases
     Diff {
         /// Path to the old/reference MDD file
@@ -66,20 +64,22 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Browse {
-            mdd_file,
-            theme_file,
-        } => run_browse(&mdd_file, theme_file.as_deref()),
-        Command::Diff {
+        Some(Command::Diff {
             old_file,
             new_file,
             theme_file,
-        } => run_diff(&old_file, &new_file, theme_file.as_deref()),
-        Command::ExportDiff {
+        }) => run_diff(&old_file, &new_file, theme_file.as_deref()),
+        Some(Command::ExportDiff {
             old_file,
             new_file,
             output,
-        } => run_export_diff(&old_file, &new_file, output.as_deref()),
+        }) => run_export_diff(&old_file, &new_file, output.as_deref()),
+        None => {
+            let Some(mdd_file) = cli.mdd_file else {
+                bail!("No MDD file specified. Usage: mdd-ui <MDD_FILE> [--theme <THEME_FILE>]");
+            };
+            run_browse(&mdd_file, cli.theme_file.as_deref())
+        }
     }
 }
 

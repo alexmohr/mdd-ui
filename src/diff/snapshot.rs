@@ -96,6 +96,8 @@ pub struct DiagLayerSnapshot {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DiagServiceSnapshot {
     pub diag_comm: DiagCommSnapshot,
+    pub request_id: Option<u8>,
+    pub request_sub_function: Option<(u16, u32)>,
     pub addressing: String,
     pub transmission_mode: String,
     pub is_cyclic: bool,
@@ -400,6 +402,8 @@ impl DiagServiceSnapshot {
             DiagCommSnapshot::from_diag_comm(&DiagComm(dc))
         });
 
+        let request_id = ds.request_id();
+        let request_sub_function = ds.request_sub_function_id();
         let addressing = format!("{:?}", ds.addressing());
         let transmission_mode = format!("{:?}", ds.transmission_mode());
         let is_cyclic = ds.is_cyclic();
@@ -455,6 +459,8 @@ impl DiagServiceSnapshot {
 
         Self {
             diag_comm,
+            request_id,
+            request_sub_function,
             addressing,
             transmission_mode,
             is_cyclic,

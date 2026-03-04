@@ -392,6 +392,30 @@ fn compare_services(
     new: &DiagServiceSnapshot,
 ) -> (Vec<PropertyDiff>, Vec<ElementDiff>) {
     let mut diffs = Vec::new();
+    if old.request_id != new.request_id {
+        diffs.push(PropertyDiff {
+            name: "request_id".to_owned(),
+            old_value: old
+                .request_id
+                .map_or_else(|| "None".to_owned(), |id| format!("0x{id:02X}")),
+            new_value: new
+                .request_id
+                .map_or_else(|| "None".to_owned(), |id| format!("0x{id:02X}")),
+        });
+    }
+    if old.request_sub_function != new.request_sub_function {
+        let format_sub_fn = |opt: Option<(u16, u32)>| -> String {
+            opt.map_or_else(
+                || "None".to_owned(),
+                |(sub_fn, bit_len)| format!("0x{sub_fn:X} ({bit_len} bits)"),
+            )
+        };
+        diffs.push(PropertyDiff {
+            name: "request_sub_function".to_owned(),
+            old_value: format_sub_fn(old.request_sub_function),
+            new_value: format_sub_fn(new.request_sub_function),
+        });
+    }
     diff_prop("addressing", &old.addressing, &new.addressing, &mut diffs);
     diff_prop(
         "transmission_mode",
@@ -1043,6 +1067,8 @@ mod tests {
     fn service_modification_detected() {
         let svc = DiagServiceSnapshot {
             diag_comm: empty_diag_comm(),
+            request_id: Some(0x22),
+            request_sub_function: None,
             addressing: "physical".to_owned(),
             transmission_mode: "send".to_owned(),
             is_cyclic: false,

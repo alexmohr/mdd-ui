@@ -12,6 +12,7 @@ A terminal-based (TUI) browser for MDD diagnostic databases, built with [Ratatui
 ## Features
 
 - **Hierarchical tree view** — browse ECU variants, functional groups, ECU shared data, protocols, layers, services, requests, responses, DOPs, SDGs, state charts, communication parameters, and functional classes.
+  - **Grey elements in browse mode** — inherited services (from parent variants or functional groups) appear grey. They show no detail pane because they're references to services defined elsewhere; navigate to the actual service definition to see details.
 - **Detail pane** — tabbed tables showing overview data, parameter lists, inherited references, and related items for the selected node.
 - **Per-cell jump targets** — cells highlighted in blue are clickable links that navigate to the referenced element in the tree (e.g., jumping from a service's request to the request node itself).
 - **Stacked search** — incremental, stackable search filters with configurable scope (All, Variants, Services, Diag-Comms, Requests, Responses, or a user-defined subtree).
@@ -19,6 +20,7 @@ A terminal-based (TUI) browser for MDD diagnostic databases, built with [Ratatui
 - **Navigation history** — breadcrumb trail with back-navigation so you never lose your place.
 - **Mouse support** — click to select, drag the pane divider to resize, scroll with the mouse wheel, and click breadcrumbs to jump back. Toggle mouse mode with `m` to regain terminal text selection.
 - **Fully configurable colour theme** — customise every colour via a TOML config file (named colours, hex, or ANSI-256 indices).
+- **Diff mode** — compare two MDD files with colour-coded additions (green), removals (red/strikethrough), modifications (yellow), and unchanged elements (grey). Detail panes show property-level changes in a structured table format, or a message indicating no differences when elements are identical.
 
 ## Installation
 
@@ -39,20 +41,64 @@ The binary is placed at `target/release/mdd-ui`.
 
 ## Usage
 
+### Browse Mode (default)
+
 ```sh
 mdd-ui <MDD_FILE> [--theme <THEME_FILE>]
 ```
 
 | Argument | Description |
 |---|---|
-| `<MDD_FILE>` | Path to the MDD file to open (required). |
+| `<MDD_FILE>` | Path to the MDD file to browse (required). |
 | `--theme <THEME_FILE>` | Path to a TOML colour-theme configuration file (optional). |
 
-### Example
+#### Example
 
 ```sh
 mdd-ui my_ecu.mdd
 mdd-ui my_ecu.mdd --theme ~/.config/mdd-ui/config.toml
+```
+
+### Diff Mode
+
+Compare two MDD files side by side in the TUI. Modified elements are shown in the detail pane with a table comparing old and new values.
+
+```sh
+mdd-ui diff <OLD_FILE> <NEW_FILE> [--theme <THEME_FILE>]
+```
+
+| Argument | Description |
+|---|---|
+| `<OLD_FILE>` | Path to the reference/old MDD file. |
+| `<NEW_FILE>` | Path to the new MDD file to compare. |
+| `--theme <THEME_FILE>` | Path to a TOML colour-theme configuration file (optional). |
+
+#### Example
+
+```sh
+mdd-ui diff old_ecu.mdd new_ecu.mdd
+```
+
+#### Diff Mode Keybindings
+
+| Key | Action |
+|---|---|
+| `u` | Toggle show/hide unchanged elements |
+| `n` / `N` | Jump to next/previous change (when no search is active) |
+
+### Export Diff (plain text)
+
+Export a text-based diff report to a file or stdout:
+
+```sh
+mdd-ui export-diff <OLD_FILE> <NEW_FILE> [-o <OUTPUT_FILE>]
+```
+
+#### Example
+
+```sh
+mdd-ui export-diff old_ecu.mdd new_ecu.mdd -o diff_report.txt
+mdd-ui export-diff old_ecu.mdd new_ecu.mdd  # prints to stdout
 ```
 
 ## Keybindings
