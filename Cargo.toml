@@ -8,8 +8,8 @@ edition = "2024"
 license = "Apache-2.0"
 
 [dependencies]
-cda-database = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "dbaddf1f9d615613b899198277f85400e0b0a91e" }
-cda-interfaces = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "dbaddf1f9d615613b899198277f85400e0b0a91e" }
+cda-database = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "df6a178d3bf5f1a7f75ef796b20a0c4c8e5fd995" }
+cda-interfaces = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "df6a178d3bf5f1a7f75ef796b20a0c4c8e5fd995" }
 
 # TUI
 ratatui = "0.30.0"
