@@ -63,12 +63,16 @@ impl App {
                             "",
                             "This element is identical in both files.",
                             "",
+                            "No additional details available for this element type.",
+                            "",
                         ],
                         DiffStatus::Added => vec![
                             "",
                             "This element was added.",
                             "",
                             "It exists only in the new file.",
+                            "",
+                            "No additional details available for this element type.",
                             "",
                         ],
                         DiffStatus::Removed => vec![
@@ -77,12 +81,16 @@ impl App {
                             "",
                             "It exists only in the old file.",
                             "",
+                            "No additional details available for this element type.",
+                            "",
                         ],
                         DiffStatus::Modified => vec![
                             "",
                             "This element was modified.",
                             "",
                             "No property-level differences to display.",
+                            "",
+                            "No additional details available for this element type.",
                             "",
                         ],
                     }

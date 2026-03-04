@@ -333,13 +333,17 @@ fn compare_diag_layers(
 
     let mut discard = DiffSummary::default();
     let service_diffs = compare_maps(&old.services, &new.services, compare_services, &mut discard);
-    if service_diffs
-        .iter()
-        .any(|d| d.status != DiffStatus::Unchanged)
-    {
+    if !service_diffs.is_empty() {
+        let has_changes = service_diffs
+            .iter()
+            .any(|d| d.status != DiffStatus::Unchanged);
         children.push(ElementDiff {
             name: "Services".to_owned(),
-            status: DiffStatus::Modified,
+            status: if has_changes {
+                DiffStatus::Modified
+            } else {
+                DiffStatus::Unchanged
+            },
             property_diffs: Vec::new(),
             children: service_diffs,
         });
@@ -352,10 +356,15 @@ fn compare_diag_layers(
         compare_single_ecu_jobs,
         &mut discard2,
     );
-    if job_diffs.iter().any(|d| d.status != DiffStatus::Unchanged) {
+    if !job_diffs.is_empty() {
+        let has_changes = job_diffs.iter().any(|d| d.status != DiffStatus::Unchanged);
         children.push(ElementDiff {
             name: "SingleEcuJobs".to_owned(),
-            status: DiffStatus::Modified,
+            status: if has_changes {
+                DiffStatus::Modified
+            } else {
+                DiffStatus::Unchanged
+            },
             property_diffs: Vec::new(),
             children: job_diffs,
         });
@@ -368,13 +377,17 @@ fn compare_diag_layers(
         compare_state_charts,
         &mut discard3,
     );
-    if chart_diffs
-        .iter()
-        .any(|d| d.status != DiffStatus::Unchanged)
-    {
+    if !chart_diffs.is_empty() {
+        let has_changes = chart_diffs
+            .iter()
+            .any(|d| d.status != DiffStatus::Unchanged);
         children.push(ElementDiff {
             name: "StateCharts".to_owned(),
-            status: DiffStatus::Modified,
+            status: if has_changes {
+                DiffStatus::Modified
+            } else {
+                DiffStatus::Unchanged
+            },
             property_diffs: Vec::new(),
             children: chart_diffs,
         });

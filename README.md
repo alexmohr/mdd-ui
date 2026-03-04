@@ -20,7 +20,10 @@ A terminal-based (TUI) browser for MDD diagnostic databases, built with [Ratatui
 - **Navigation history** — breadcrumb trail with back-navigation so you never lose your place.
 - **Mouse support** — click to select, drag the pane divider to resize, scroll with the mouse wheel, and click breadcrumbs to jump back. Toggle mouse mode with `m` to regain terminal text selection.
 - **Fully configurable colour theme** — customise every colour via a TOML config file (named colours, hex, or ANSI-256 indices).
-- **Diff mode** — compare two MDD files with colour-coded additions (green), removals (red/strikethrough), modifications (yellow), and unchanged elements (grey). Detail panes show property-level changes in a structured table format, or a message indicating no differences when elements are identical.
+- **Diff mode** — compare two MDD files with colour-coded additions (green), removals (red/strikethrough), modifications (yellow), and unchanged elements (grey). The detail pane shows:
+  - **Changes section** — A table comparing old vs. new values for modified properties
+  - **Full element details** — Complete information about the element (like browse mode), showing the current state from the appropriate file
+  - **Status notes** — Clear indicators for added/removed/unchanged elements
 
 ## Installation
 
