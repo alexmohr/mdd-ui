@@ -18,7 +18,7 @@ pub mod state_charts;
 pub mod tables;
 pub mod unit_spec;
 
-use cda_database::datatypes::{DiagLayer, DiagService, EcuDb, Variant as VariantWrap};
+use cda_database::datatypes::{DiagLayer, DiagService, EcuDb, Parameter, Variant as VariantWrap};
 use parent_refs::{build_parent_refs_detail_section, extract_parent_ref_short_names};
 
 use super::layers::LayerExt;
@@ -31,20 +31,71 @@ use crate::tree::{
     },
 };
 
+/// Collect additional const-byte values from a service's request PDU that are
+/// not already captured by the SID or sub-function fields.
+///
+/// Parameters at `byte_position` 0 (SID) and, when a sub-function is present,
+/// `byte_position` 1 are skipped.  The remaining parameters are walked in
+/// byte-position order; the first non-`CodedConst` parameter stops collection.
+///
+/// Each value is returned as a zero-padded uppercase hex string (2, 4, or 8
+/// digits depending on magnitude).
+pub(crate) fn collect_extra_const_bytes(ds: &DiagService<'_>) -> Vec<String> {
+    use cda_database::datatypes::ParamType;
+
+    let min_byte_pos: u32 = if ds.request_sub_function_id().is_some() {
+        2
+    } else {
+        1
+    };
+
+    let mut params: Vec<Parameter<'_>> = ds
+        .request()
+        .and_then(|r| r.params())
+        .into_iter()
+        .flatten()
+        .map(Parameter)
+        .collect();
+    params.sort_by_key(Parameter::byte_position);
+
+    params
+        .into_iter()
+        .filter(|p| p.byte_position() >= min_byte_pos)
+        .take_while(|p| matches!(p.param_type(), Ok(ParamType::CodedConst)))
+        .filter_map(|p| {
+            p.specific_data_as_coded_const()
+                .and_then(|cc| cc.coded_value())
+                .and_then(|v| v.parse::<u64>().ok())
+                .map(|num| {
+                    if num <= 0xFF {
+                        format!("{num:02X}")
+                    } else if num <= 0xFFFF {
+                        format!("{num:04X}")
+                    } else {
+                        format!("{num:08X}")
+                    }
+                })
+        })
+        .collect()
+}
+
 /// Format a service display name from its `diag_comm` `short_name`, `request_id`,
-/// and optional `request_sub_function_id`.
+/// and optional `request_sub_function_id`.  Any additional leading
+/// `CodedConst` parameters in the request (beyond the SID and sub-function)
+/// are embedded directly in the ID field, each byte followed by a space.
 /// Returns `None` if `diag_comm()` is absent.
 pub(crate) fn format_service_display_name(ds: &DiagService<'_>) -> Option<String> {
     let dc = ds.diag_comm()?;
     let name = dc.short_name().unwrap_or("?");
 
+    let extra_bytes = collect_extra_const_bytes(ds).join("");
     let display_name = ds.request_id().map_or_else(
         || name.to_string(),
         |sid| {
             ds.request_sub_function_id().map_or_else(
                 || {
-                    let sid_hex = format!("{sid:02X}");
-                    format!("0x{sid_hex:6} - {name}")
+                    let id = format!("{sid:02X}{extra_bytes}");
+                    format!("0x{id:8} - {name}")
                 },
                 |(sub_fn, bit_len)| {
                     let sub_fn_str = if bit_len <= 8 {
@@ -52,8 +103,8 @@ pub(crate) fn format_service_display_name(ds: &DiagService<'_>) -> Option<String
                     } else {
                         format!("{sub_fn:04X}")
                     };
-                    let full_id = format!("{sid:02X}{sub_fn_str}");
-                    format!("0x{full_id:6} - {name}")
+                    let id = format!("{sid:02X}{sub_fn_str}{extra_bytes}");
+                    format!("0x{id:8} - {name}")
                 },
             )
         },
@@ -62,19 +113,21 @@ pub(crate) fn format_service_display_name(ds: &DiagService<'_>) -> Option<String
     Some(display_name)
 }
 
-/// Format just the service ID portion (e.g., "0x2E01" or "0x22") without name.
+/// Format just the service ID portion (e.g., "0x2E010267") without name.
+/// Includes extra leading `CodedConst` bytes beyond SID/sub-function.
 /// Returns empty string if no `request_id`.
 pub(crate) fn format_service_id(ds: &DiagService<'_>) -> String {
     ds.request_id().map_or_else(String::new, |sid| {
+        let extra_bytes = collect_extra_const_bytes(ds).join("");
         ds.request_sub_function_id().map_or_else(
-            || format!("0x{sid:02X}"),
+            || format!("0x{sid:02X}{extra_bytes}"),
             |(sub_fn, bit_len)| {
                 let sub_fn_str = if bit_len <= 8 {
                     format!("{sub_fn:02X}")
                 } else {
                     format!("{sub_fn:04X}")
                 };
-                format!("0x{sid:02X}{sub_fn_str}")
+                format!("0x{sid:02X}{sub_fn_str}{extra_bytes}")
             },
         )
     })
