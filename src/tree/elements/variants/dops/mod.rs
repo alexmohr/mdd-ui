@@ -17,8 +17,8 @@ use cda_database::datatypes::{DiagLayer, DiagService, Parameter};
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
-        DetailSectionData, DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
+        DetailRowType, DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -680,10 +680,14 @@ fn build_dops_overview_table(
         .map(|(cat, dops)| DetailRow {
             cells: vec![cat.label().to_owned(), dops.len().to_string()],
             cell_types: vec![CellType::ParameterName, CellType::NumericValue],
-            cell_jump_targets: vec![Some(CellJumpTarget::TreeNodeByName), None],
+            cell_jump_targets: vec![
+                Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                None,
+            ],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         })
         .collect();
 
@@ -726,10 +730,13 @@ fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData
             DetailRow {
                 cells: vec![name],
                 cell_types: vec![CellType::ParameterName],
-                cell_jump_targets: vec![Some(CellJumpTarget::TreeNodeByName)],
+                cell_jump_targets: vec![Some(CellJumpTarget::new(
+                    CellJumpTargetType::TreeNodeByName,
+                ))],
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
             }
         })
         .collect();
@@ -805,7 +812,7 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
                     CellType::Text,
                 ],
                 cell_jump_targets: vec![
-                    Some(CellJumpTarget::TreeNodeByName),
+                    Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
                     None,
                     None,
                     None,
@@ -814,6 +821,7 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
             }
         })
         .collect();
@@ -882,6 +890,7 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
         indent: 0,
         row_type: DetailRowType::Normal,
         metadata: None,
+        diff_status: None,
     });
     types_rows.push(DetailRow {
         cells: vec!["DOP Variant".to_owned(), dop_info.dop_type.clone()],
@@ -890,6 +899,7 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
         indent: 0,
         row_type: DetailRowType::Normal,
         metadata: None,
+        diff_status: None,
     });
 
     if let Some(ref compu) = parsed_name.compu_category {
@@ -900,6 +910,7 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         });
     }
     if let Some(ref unit) = parsed_name.unit {
@@ -910,6 +921,7 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         });
     }
 

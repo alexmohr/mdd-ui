@@ -8,8 +8,8 @@ use cda_database::datatypes::DiagLayer;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
-        DetailSectionData, DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
+        DetailRowType, DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -53,6 +53,8 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
                 DetailRow {
                     row_type: DetailRowType::Normal,
                     metadata: None,
+                    diff_status: None,
+
                     cells: vec![name.to_string(), src.to_string(), tgt.to_string()],
                     cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
                     cell_jump_targets: vec![None; 3],
@@ -70,6 +72,8 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
                 DetailRow {
                     row_type: DetailRowType::Normal,
                     metadata: None,
+                    diff_status: None,
+
                     cells: vec![sn.to_string()],
                     cell_types: vec![CellType::Text],
                     cell_jump_targets: vec![None; 1],
@@ -114,6 +118,8 @@ fn build_transitions_section(mut transitions: Vec<DetailRow>) -> DetailSectionDa
                 header: DetailRow {
                     row_type: DetailRowType::Normal,
                     metadata: None,
+                    diff_status: None,
+
                     cells: vec![
                         "Name".to_string(),
                         "Source".to_string(),
@@ -149,6 +155,8 @@ fn build_states_section(mut states: Vec<DetailRow>) -> DetailSectionData {
                 header: DetailRow {
                     row_type: DetailRowType::Normal,
                     metadata: None,
+                    diff_status: None,
+
                     cells: vec!["Name".to_string()],
                     cell_types: vec![CellType::Text],
                     cell_jump_targets: vec![None; 1],
@@ -193,7 +201,11 @@ fn build_state_charts_overview_table(layer: &DiagLayer<'_>) -> Vec<DetailSection
                     CellType::NumericValue,
                     CellType::NumericValue,
                 ],
-                vec![Some(CellJumpTarget::TreeNodeByName), None, None],
+                vec![
+                    Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    None,
+                    None,
+                ],
                 0,
             )
         })

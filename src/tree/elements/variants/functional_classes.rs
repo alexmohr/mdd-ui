@@ -8,8 +8,8 @@ use cda_database::datatypes::{DiagLayer, DiagService, Variant};
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData,
-        DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
+        DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -121,7 +121,9 @@ fn build_functional_classes_table_section(items: &[String]) -> DetailSectionData
             DetailRow::with_jump_targets(
                 vec![name.clone()],
                 vec![CellType::ParameterName],
-                vec![Some(CellJumpTarget::TreeNodeByName)],
+                vec![Some(CellJumpTarget::new(
+                    CellJumpTargetType::TreeNodeByName,
+                ))],
                 0,
             )
         })
@@ -267,12 +269,12 @@ fn build_service_row(service: &DiagService<'_>, layer_name: &str) -> Option<Deta
             CellType::ParameterName,
         ],
         vec![
-            Some(CellJumpTarget::ServiceOrJobByName),
+            Some(CellJumpTarget::new(CellJumpTargetType::ServiceOrJobByName)),
             None,
             None,
             None,
             None,
-            Some(CellJumpTarget::ContainerByName),
+            Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
         ],
         0,
     ))
@@ -297,12 +299,12 @@ fn build_job_row(job_name: &str, layer_name: &str) -> DetailRow {
             CellType::ParameterName,
         ],
         vec![
-            Some(CellJumpTarget::ServiceOrJobByName),
+            Some(CellJumpTarget::new(CellJumpTargetType::ServiceOrJobByName)),
             None,
             None,
             None,
             None,
-            Some(CellJumpTarget::ContainerByName),
+            Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
         ],
         0,
     )

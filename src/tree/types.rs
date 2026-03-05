@@ -247,10 +247,9 @@ pub enum CellType {
     ParameterName,
 }
 
-/// Per-cell jump target metadata: tells the navigation system where clicking
-/// a blue cell should navigate to.
+/// Classification of the navigation target for a jump cell.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CellJumpTarget {
+pub enum CellJumpTargetType {
     /// Navigate to a parameter node by its ID
     Parameter { param_id: u32 },
     /// Navigate to a DOP node by name
@@ -264,6 +263,21 @@ pub enum CellJumpTarget {
     /// `text == value` comparison does not work; this variant uses the
     /// dedicated service-name extraction logic instead.
     ServiceOrJobByName,
+}
+
+/// Per-cell jump target metadata: tells the navigation system where clicking
+/// a jump cell should navigate to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CellJumpTarget {
+    /// What kind of navigation this cell performs.
+    pub target_type: CellJumpTargetType,
+}
+
+impl CellJumpTarget {
+    /// Create a new jump target.
+    pub fn new(target_type: CellJumpTargetType) -> Self {
+        Self { target_type }
+    }
 }
 
 /// A row in a detail table.
@@ -281,6 +295,8 @@ pub struct DetailRow {
     pub row_type: DetailRowType,
     /// Optional metadata for navigation lookups.
     pub metadata: Option<RowMetadata>,
+    /// Diff status for comparison mode.  `None` in browse mode.
+    pub diff_status: Option<DiffStatus>,
 }
 
 impl Default for DetailRow {
@@ -292,6 +308,7 @@ impl Default for DetailRow {
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         }
     }
 }
@@ -401,6 +418,7 @@ impl DetailRow {
             indent,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         }
     }
 
@@ -418,6 +436,7 @@ impl DetailRow {
             indent,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         }
     }
 
@@ -431,6 +450,7 @@ impl DetailRow {
             indent: 0,
             row_type: DetailRowType::Header,
             metadata: None,
+            diff_status: None,
         }
     }
 
@@ -439,10 +459,14 @@ impl DetailRow {
         Self {
             cells: vec!["Inherited From".to_owned(), layer_name.clone()],
             cell_types: vec![CellType::Text, CellType::ParameterName],
-            cell_jump_targets: vec![None, Some(CellJumpTarget::ContainerByName)],
+            cell_jump_targets: vec![
+                None,
+                Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+            ],
             indent: 0,
             row_type: DetailRowType::InheritedFrom,
             metadata: Some(RowMetadata::InheritedFrom { layer_name }),
+            diff_status: None,
         }
     }
 }

@@ -5,8 +5,8 @@
 
 use super::kv_row;
 use crate::tree::types::{
-    CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType, DetailSectionData,
-    DetailSectionType,
+    CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
+    DetailSectionData, DetailSectionType,
 };
 
 /// Build tabbed sections for Structure DOP: Overview + Params tabs
@@ -117,9 +117,9 @@ fn build_params_section(
             let param_id = param.id();
 
             let dop_jump = if has_dop {
-                Some(crate::tree::CellJumpTarget::Dop {
+                Some(crate::tree::CellJumpTarget::new(CellJumpTargetType::Dop {
                     name: dop_name.clone(),
-                })
+                }))
             } else {
                 None
             };
@@ -148,7 +148,9 @@ fn build_params_section(
                     CellType::Text,
                 ],
                 cell_jump_targets: vec![
-                    Some(crate::tree::CellJumpTarget::Parameter { param_id }),
+                    Some(crate::tree::CellJumpTarget::new(
+                        CellJumpTargetType::Parameter { param_id },
+                    )),
                     None,
                     None,
                     None,
@@ -159,6 +161,7 @@ fn build_params_section(
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: Some(crate::tree::RowMetadata::ParameterRow { param_id }),
+                diff_status: None,
             }
         })
         .collect();

@@ -12,8 +12,8 @@ use crate::tree::{
         responses::{build_neg_responses_sections, build_pos_responses_sections},
     },
     types::{
-        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
-        DetailSectionData, DetailSectionType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
+        DetailRowType, DetailSectionData, DetailSectionType,
     },
 };
 
@@ -65,6 +65,8 @@ pub(super) fn build_diag_comms_table_section(
     let header = DetailRow {
         row_type: DetailRowType::Normal,
         metadata: None,
+        diff_status: None,
+
         cells: vec![
             "Short Name".to_owned(),
             "ID".to_owned(),
@@ -105,6 +107,8 @@ pub(super) fn build_diag_comms_table_section(
         Some(DetailRow {
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
+
             cells: vec![
                 name,
                 id,
@@ -120,7 +124,9 @@ pub(super) fn build_diag_comms_table_section(
                 CellType::Text,
             ],
             cell_jump_targets: vec![
-                Some(crate::tree::CellJumpTarget::TreeNodeByName),
+                Some(crate::tree::CellJumpTarget::new(
+                    CellJumpTargetType::TreeNodeByName,
+                )),
                 None,
                 None,
                 None,
@@ -145,6 +151,8 @@ pub(super) fn build_diag_comms_table_section(
     rows.extend(job_names.iter().map(|job_name| DetailRow {
         row_type: DetailRowType::Normal,
         metadata: None,
+        diff_status: None,
+
         cells: vec![
             job_name.clone(),
             "-".to_owned(),
@@ -160,7 +168,9 @@ pub(super) fn build_diag_comms_table_section(
             CellType::Text,
         ],
         cell_jump_targets: vec![
-            Some(crate::tree::CellJumpTarget::TreeNodeByName),
+            Some(crate::tree::CellJumpTarget::new(
+                CellJumpTargetType::TreeNodeByName,
+            )),
             None,
             None,
             None,
@@ -283,7 +293,10 @@ fn build_overview_section(
         rows.push(DetailRow::with_jump_targets(
             vec!["Functional Class".to_owned(), funct_class_name.to_owned()],
             vec![CellType::Text, CellType::ParameterName],
-            vec![None, Some(CellJumpTarget::TreeNodeByName)],
+            vec![
+                None,
+                Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+            ],
             0,
         ));
     }
@@ -308,6 +321,8 @@ fn build_comparam_refs_section() -> DetailSectionData {
     let comparam_header = DetailRow {
         row_type: DetailRowType::Normal,
         metadata: None,
+        diff_status: None,
+
         cells: vec![
             "ComParam".to_owned(),
             "Value".to_owned(),
@@ -334,6 +349,8 @@ fn build_comparam_refs_section() -> DetailSectionData {
             rows: vec![DetailRow {
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
+
                 cells: vec!["(No ComParam refs at comm level)".to_owned()],
                 cell_types: vec![CellType::Text],
                 cell_jump_targets: vec![None; 1],
@@ -484,6 +501,8 @@ fn build_related_refs_section() -> DetailSectionData {
     let related_header = DetailRow {
         row_type: DetailRowType::Normal,
         metadata: None,
+        diff_status: None,
+
         cells: vec!["Short Name".to_owned()],
         cell_types: vec![CellType::Text],
         cell_jump_targets: vec![None; 1],
@@ -498,6 +517,8 @@ fn build_related_refs_section() -> DetailSectionData {
             rows: vec![DetailRow {
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
+
                 cells: vec!["(Related comms not available)".to_owned()],
                 cell_types: vec![CellType::Text],
                 cell_jump_targets: vec![None; 1],

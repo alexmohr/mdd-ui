@@ -303,6 +303,7 @@ pub(super) fn build_normal_dop_tabs(
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         });
 
         if let Some(bit_len) = coded_type.bit_len() {
@@ -313,6 +314,7 @@ pub(super) fn build_normal_dop_tabs(
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
             });
         }
     }
@@ -328,6 +330,7 @@ pub(super) fn build_normal_dop_tabs(
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         });
 
         if let Some(precision) = phys_type.precision() {
@@ -338,6 +341,7 @@ pub(super) fn build_normal_dop_tabs(
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
             });
         }
 
@@ -351,6 +355,7 @@ pub(super) fn build_normal_dop_tabs(
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         });
     }
 
@@ -363,6 +368,7 @@ pub(super) fn build_normal_dop_tabs(
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
             });
         }
         if let Some(display_name) = unit.display_name() {
@@ -373,6 +379,7 @@ pub(super) fn build_normal_dop_tabs(
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
             });
         }
     }
@@ -385,6 +392,7 @@ pub(super) fn build_normal_dop_tabs(
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         });
     }
 

@@ -41,6 +41,7 @@ pub(super) fn build_dtc_dops_category_sections(dops: &[DopInfo<'_>]) -> Vec<Deta
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
             }
         })
         .collect();
@@ -113,6 +114,7 @@ macro_rules! emit_sdg_header {
                 indent: $base_indent,
                 row_type: DetailRowType::Header,
                 metadata: None,
+                diff_status: None,
             });
             if let Some(si) = $sdg.si() {
                 $rows.push(kv_row(
@@ -276,6 +278,7 @@ pub(super) fn build_dtc_dop_tabs(
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         });
     }
 
@@ -287,6 +290,7 @@ pub(super) fn build_dtc_dop_tabs(
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         });
     }
 
@@ -327,6 +331,7 @@ pub(super) fn build_dtc_dop_tabs(
                     indent: 0,
                     row_type: DetailRowType::Normal,
                     metadata: None,
+                    diff_status: None,
                 }
             })
             .collect();

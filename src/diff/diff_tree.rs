@@ -160,16 +160,19 @@ fn merge_children(old_children: &[HierNode], new_children: &[HierNode]) -> Vec<M
             // Node exists in both trees — recurse into children
             let merged_children = merge_children(&old_node.children, &new_node.children);
 
-            // A node has its own change only when we can produce a visible
-            // "Changes" section for the user.  Raw content may differ (e.g.
-            // embedded parameter tables) without yielding user-presentable
-            // diffs; in that case the node should not appear Modified.
-            let changes_section = if node_content_equal(&old_node.tree_node, &new_node.tree_node) {
-                None
-            } else {
+            // Check whether this node's own content actually differs.
+            let content_differs = !node_content_equal(&old_node.tree_node, &new_node.tree_node);
+
+            // Build the human-readable "Changes" summary tab when content
+            // differs.  Even when the summary builder finds nothing to show
+            // (e.g. only row-order changes), the node is still considered
+            // modified because its content IS different.
+            let changes_section = if content_differs {
                 build_changes_section(&old_node.tree_node, &new_node.tree_node)
+            } else {
+                None
             };
-            let own_changed = changes_section.is_some();
+            let own_changed = content_differs;
 
             // A node is marked Modified only when a direct child has its
             // own content change or was structurally added/removed.
@@ -195,11 +198,29 @@ fn merge_children(old_children: &[HierNode], new_children: &[HierNode]) -> Vec<M
             let mut node = new_node.tree_node.clone();
             node.diff_status = Some(status);
 
-            // Prepend the "Changes" section when we have one
+            // Insert the "Changes" section right after any header section so
+            // that `split_header_and_tabs` still recognises the header.
             if let Some(changes) = changes_section {
-                let mut sections: Vec<DetailSectionData> = vec![changes];
-                sections.extend(node.detail_sections.iter().cloned());
+                let mut sections: Vec<DetailSectionData> =
+                    Vec::with_capacity(node.detail_sections.len().saturating_add(1));
+                let mut inserted = false;
+                for s in node.detail_sections.iter() {
+                    sections.push(s.clone());
+                    if !inserted && s.render_as_header {
+                        sections.push(changes.clone());
+                        inserted = true;
+                    }
+                }
+                if !inserted {
+                    sections.insert(0, changes);
+                }
                 node.detail_sections = Rc::from(sections);
+            }
+
+            // Annotate individual table rows in matching sections with
+            // per-row diff status so the detail tabs highlight changes.
+            if content_differs {
+                annotate_section_rows(&old_node.tree_node, &mut node);
             }
 
             result.push(MergedNode {
@@ -309,11 +330,18 @@ fn detail_content_equal(old: &DetailContent, new: &DetailContent) -> bool {
             DetailContent::Table { rows: old_rows, .. },
             DetailContent::Table { rows: new_rows, .. },
         ) => {
+            // Order-independent comparison: match rows by their first cell
+            // (key column) and compare cell content.  Row reordering alone
+            // is not considered a change.
             old_rows.len() == new_rows.len()
-                && old_rows
-                    .iter()
-                    .zip(new_rows.iter())
-                    .all(|(o, n)| o.cells == n.cells)
+                && old_rows.iter().all(|old_row| {
+                    let Some(key) = old_row.cells.first() else {
+                        return false;
+                    };
+                    new_rows.iter().any(|new_row| {
+                        new_row.cells.first() == Some(key) && new_row.cells == old_row.cells
+                    })
+                })
         }
         (DetailContent::Composite(o), DetailContent::Composite(n)) => {
             o.len() == n.len()
@@ -323,6 +351,144 @@ fn detail_content_equal(old: &DetailContent, new: &DetailContent) -> bool {
         }
         _ => false,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Per-row diff annotation for detail sections
+// ---------------------------------------------------------------------------
+
+/// Walk matching detail sections between `old` and `new` and set
+/// [`DiffStatus`] on each table row so the table renderer can highlight
+/// added, removed, and modified rows.
+fn annotate_section_rows(old: &TreeNode, new: &mut TreeNode) {
+    let old_sections = &old.detail_sections;
+    let mut new_sections: Vec<DetailSectionData> = new.detail_sections.to_vec();
+
+    for new_section in &mut new_sections {
+        // Skip the "Changes" section we injected — it has its own styling.
+        if new_section.title == "Changes" {
+            continue;
+        }
+
+        // Match by section_type + title, then title only, then section_type
+        // only (for sections with dynamic titles like "Diag-Comms (N services,
+        // M jobs)" where the count changes between versions).
+        let matching_old = old_sections
+            .iter()
+            .find(|s| s.section_type == new_section.section_type && s.title == new_section.title)
+            .or_else(|| old_sections.iter().find(|s| s.title == new_section.title))
+            .or_else(|| {
+                // Type-only fallback for sections with dynamic titles (e.g.
+                // "Diag-Comms (N services, M jobs)").  Only match when there
+                // is exactly one section of that type to avoid ambiguity.
+                let mut by_type = old_sections
+                    .iter()
+                    .filter(|s| s.section_type == new_section.section_type);
+                let first = by_type.next();
+                let second = by_type.next();
+                (second.is_none()).then_some(first).flatten()
+            });
+
+        let Some(old_section) = matching_old else {
+            // Entire section is new — mark all rows as Added.
+            mark_all_content_rows(&mut new_section.content, DiffStatus::Added);
+            continue;
+        };
+
+        annotate_content_rows(&old_section.content, &mut new_section.content);
+    }
+
+    // Append rows from removed sections (old-only) so they are visible in the
+    // closest matching tab. For simplicity we do not create new tabs for
+    // removed sections — the "Changes" summary already notes them.
+
+    new.detail_sections = Rc::from(new_sections);
+}
+
+/// Set `diff_status` on every row in a `DetailContent`.
+fn mark_all_content_rows(content: &mut DetailContent, status: DiffStatus) {
+    match content {
+        DetailContent::Table { rows, .. } => {
+            for row in rows.iter_mut() {
+                row.diff_status = Some(status);
+            }
+        }
+        DetailContent::Composite(subs) => {
+            for sub in subs.iter_mut() {
+                mark_all_content_rows(&mut sub.content, status);
+            }
+        }
+        DetailContent::PlainText(_) => {}
+    }
+}
+
+/// Compare old and new `DetailContent` and annotate new rows with diff status.
+///
+/// For tables the first column (Short Name / Property key) is used as the
+/// match key.  Rows present in both are compared cell-by-cell; rows only in
+/// the new table are `Added`; rows only in the old table are appended as
+/// `Removed`.
+fn annotate_content_rows(old: &DetailContent, new: &mut DetailContent) {
+    match (old, new) {
+        (
+            DetailContent::Table { rows: old_rows, .. },
+            DetailContent::Table { rows: new_rows, .. },
+        ) => {
+            annotate_table_rows(old_rows, new_rows);
+        }
+        (DetailContent::Composite(old_subs), DetailContent::Composite(new_subs)) => {
+            for (old_sub, new_sub) in old_subs.iter().zip(new_subs.iter_mut()) {
+                annotate_content_rows(&old_sub.content, &mut new_sub.content);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Annotate table rows by matching on the first cell (key column).
+///
+/// For rows present in both old and new with differing cells, per-cell diff
+/// statuses are set so only the actually changed cells are highlighted.
+fn annotate_table_rows(old_rows: &[DetailRow], new_rows: &mut Vec<DetailRow>) {
+    // Index old rows by first cell value.
+    let old_by_key: std::collections::BTreeMap<&str, &DetailRow> = old_rows
+        .iter()
+        .filter_map(|r| r.cells.first().map(|k| (k.as_str(), r)))
+        .collect();
+
+    let mut matched_old_keys: HashSet<String> = HashSet::new();
+
+    for new_row in new_rows.iter_mut() {
+        let Some(key) = new_row.cells.first().cloned() else {
+            continue;
+        };
+        if let Some(old_row) = old_by_key.get(key.as_str()) {
+            matched_old_keys.insert(key);
+            if old_row.cells != new_row.cells {
+                // Row has changes — mark at row level.
+                new_row.diff_status = Some(DiffStatus::Modified);
+            }
+            // Otherwise leave diff_status as None (unchanged) — no highlight.
+        } else {
+            new_row.diff_status = Some(DiffStatus::Added);
+        }
+    }
+
+    // Append old-only rows as Removed so they stay visible in the tab.
+    let removed_rows: Vec<DetailRow> = old_rows
+        .iter()
+        .filter(|r| {
+            r.cells
+                .first()
+                .is_some_and(|k| !matched_old_keys.contains(k.as_str()))
+        })
+        .map(|r| {
+            let mut row = r.clone();
+            row.diff_status = Some(DiffStatus::Removed);
+            row
+        })
+        .collect();
+    new_rows.extend(removed_rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -389,7 +555,8 @@ fn build_changes_section(old: &TreeNode, new: &TreeNode) -> Option<DetailSection
 
     // Compare detail section content — extract row-level diffs from tables
     for old_section in old.detail_sections.iter() {
-        // Find the matching section in new by type+title, falling back to title
+        // Find the matching section in new by type+title, then title only,
+        // then type only (for sections with dynamic titles).
         let matching_new = new
             .detail_sections
             .iter()
@@ -398,6 +565,15 @@ fn build_changes_section(old: &TreeNode, new: &TreeNode) -> Option<DetailSection
                 new.detail_sections
                     .iter()
                     .find(|s| s.title == old_section.title)
+            })
+            .or_else(|| {
+                let mut by_type = new
+                    .detail_sections
+                    .iter()
+                    .filter(|s| s.section_type == old_section.section_type);
+                let first = by_type.next();
+                let second = by_type.next();
+                (second.is_none()).then_some(first).flatten()
             });
 
         let Some(new_section) = matching_new else {
@@ -431,7 +607,16 @@ fn extract_table_diffs(
             DetailContent::Table { rows: old_rows, .. },
             DetailContent::Table { rows: new_rows, .. },
         ) => {
-            // For key-value tables, compare by first column (key)
+            let old_keys: HashSet<&str> = old_rows
+                .iter()
+                .filter_map(|r| r.cells.first().map(String::as_str))
+                .collect();
+            let new_keys: HashSet<&str> = new_rows
+                .iter()
+                .filter_map(|r| r.cells.first().map(String::as_str))
+                .collect();
+
+            // Modified rows — present in both with differing cells.
             for old_row in old_rows {
                 let Some(key) = old_row.cells.first() else {
                     continue;
@@ -440,7 +625,6 @@ fn extract_table_diffs(
                     continue;
                 };
                 if old_row.cells != new_row.cells {
-                    // Collect all differing columns beyond the key
                     let changed_cols: Vec<String> = old_row
                         .cells
                         .iter()
@@ -468,6 +652,50 @@ fn extract_table_diffs(
                         } else {
                             changed_cols.join("; ")
                         },
+                    });
+                }
+            }
+
+            // Removed rows — present in old but not in new.
+            for old_row in old_rows {
+                let Some(key) = old_row.cells.first() else {
+                    continue;
+                };
+                if !new_keys.contains(key.as_str()) {
+                    let prop_name = if section_title.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{section_title}: {key}")
+                    };
+                    diffs.push(ChangedProperty {
+                        name: prop_name,
+                        old_value: old_row
+                            .cells
+                            .get(1..)
+                            .map_or_else(String::new, |s| s.join(", ")),
+                        new_value: "(removed)".to_owned(),
+                    });
+                }
+            }
+
+            // Added rows — present in new but not in old.
+            for new_row in new_rows {
+                let Some(key) = new_row.cells.first() else {
+                    continue;
+                };
+                if !old_keys.contains(key.as_str()) {
+                    let prop_name = if section_title.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{section_title}: {key}")
+                    };
+                    diffs.push(ChangedProperty {
+                        name: prop_name,
+                        old_value: "(added)".to_owned(),
+                        new_value: new_row
+                            .cells
+                            .get(1..)
+                            .map_or_else(String::new, |s| s.join(", ")),
                     });
                 }
             }
@@ -543,13 +771,49 @@ struct DiffSummary {
     unchanged: usize,
 }
 
-/// Compute diff summary by counting statuses of section header children
-/// (top-level elements like variants, functional groups, etc.).
+/// Compute diff summary by recursively counting services and jobs
+/// (the most meaningful unit for diagnostic databases).
 fn compute_summary(root_nodes: &[MergedNode]) -> DiffSummary {
     let mut summary = DiffSummary::default();
-    for section in root_nodes {
-        for child in &section.children {
-            match child.node.diff_status {
+    for root in root_nodes {
+        count_service_statuses(&root.children, &mut summary);
+    }
+    // If no services/jobs were found (unlikely but possible), fall back to
+    // counting top-level section children so the summary is never empty.
+    if summary.added == 0 && summary.removed == 0 && summary.modified == 0 && summary.unchanged == 0
+    {
+        for section in root_nodes {
+            for child in &section.children {
+                match child.node.diff_status {
+                    Some(DiffStatus::Added) => {
+                        summary.added = summary.added.saturating_add(1);
+                    }
+                    Some(DiffStatus::Removed) => {
+                        summary.removed = summary.removed.saturating_add(1);
+                    }
+                    Some(DiffStatus::Modified) => {
+                        summary.modified = summary.modified.saturating_add(1);
+                    }
+                    Some(DiffStatus::Unchanged) => {
+                        summary.unchanged = summary.unchanged.saturating_add(1);
+                    }
+                    None => {}
+                }
+            }
+        }
+    }
+    summary
+}
+
+/// Recursively walk merged nodes and tally [`DiffStatus`] for service and job
+/// nodes only.  Services and jobs are the most meaningful unit for a
+/// diagnostic-database diff summary (`Requests` / `PosResponses` /
+/// `NegResponses` are counted separately by the tree but refer to the same
+/// logical entity).
+fn count_service_statuses(nodes: &[MergedNode], summary: &mut DiffSummary) {
+    for node in nodes {
+        if matches!(node.node.node_type, NodeType::Service | NodeType::Job) {
+            match node.node.diff_status {
                 Some(DiffStatus::Added) => {
                     summary.added = summary.added.saturating_add(1);
                 }
@@ -564,9 +828,29 @@ fn compute_summary(root_nodes: &[MergedNode]) -> DiffSummary {
                 }
                 None => {}
             }
+        } else {
+            count_service_statuses(&node.children, summary);
         }
     }
-    summary
+}
+
+/// Recursively count all nodes (every node type) by diff status.
+fn count_all_statuses(nodes: &[MergedNode], summary: &mut DiffSummary) {
+    for node in nodes {
+        match node.node.diff_status {
+            Some(DiffStatus::Added) => {
+                summary.added = summary.added.saturating_add(1);
+            }
+            Some(DiffStatus::Removed) => {
+                summary.removed = summary.removed.saturating_add(1);
+            }
+            Some(DiffStatus::Modified) => {
+                summary.modified = summary.modified.saturating_add(1);
+            }
+            Some(DiffStatus::Unchanged) | None => {}
+        }
+        count_all_statuses(&node.children, summary);
+    }
 }
 
 /// Add summary and file source info under the "General" section header.
@@ -576,6 +860,9 @@ fn add_summary_to_general(
     old_path: &str,
     new_path: &str,
 ) -> Vec<MergedNode> {
+    let mut totals = DiffSummary::default();
+    count_all_statuses(&nodes, &mut totals);
+
     let Some(general) = nodes.iter_mut().find(|n| n.node.text == "General") else {
         return nodes;
     };
@@ -616,6 +903,21 @@ fn add_summary_to_general(
             vec![CellType::Text, CellType::Text],
             0,
         ),
+        DetailRow::normal(
+            vec!["Total added".to_owned(), totals.added.to_string()],
+            vec![CellType::Text, CellType::Text],
+            0,
+        ),
+        DetailRow::normal(
+            vec!["Total changed".to_owned(), totals.modified.to_string()],
+            vec![CellType::Text, CellType::Text],
+            0,
+        ),
+        DetailRow::normal(
+            vec!["Total removed".to_owned(), totals.removed.to_string()],
+            vec![CellType::Text, CellType::Text],
+            0,
+        ),
     ];
     let diff_overview = DetailSectionData::new(
         "Diff Overview".to_owned(),
@@ -635,30 +937,6 @@ fn add_summary_to_general(
     let mut sections: Vec<DetailSectionData> = vec![diff_overview];
     sections.extend(general.node.detail_sections.iter().cloned());
     general.node.detail_sections = Rc::from(sections);
-    general.node.expanded = true;
-
-    // Add summary text as a child node
-    let summary_text = format!(
-        "+{} added, -{} removed, ~{} modified, {} unchanged",
-        summary.added, summary.removed, summary.modified, summary.unchanged,
-    );
-    general.children.push(MergedNode {
-        node: TreeNode {
-            depth: 0, // set during flatten
-            text: summary_text,
-            expanded: false,
-            has_children: false,
-            detail_sections: Rc::from([]),
-            node_type: NodeType::Default,
-            section_type: None,
-            service_list_type: None,
-            param_id: None,
-            parent_ref_names: Vec::new(),
-            diff_status: None,
-        },
-        children: Vec::new(),
-        own_changed: false,
-    });
 
     nodes
 }

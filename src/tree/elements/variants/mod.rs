@@ -25,8 +25,9 @@ use super::layers::LayerExt;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellType, ChildElementType, ColumnConstraint, DetailContent, DetailRow,
-        DetailRowType, DetailSectionData, DetailSectionType, RowMetadata, SectionType,
+        CellJumpTarget, CellJumpTargetType, CellType, ChildElementType, ColumnConstraint,
+        DetailContent, DetailRow, DetailRowType, DetailSectionData, DetailSectionType, RowMetadata,
+        SectionType,
     },
 };
 
@@ -593,6 +594,7 @@ fn build_child_row(
         indent: 0,
         row_type: DetailRowType::ChildElement,
         metadata: Some(RowMetadata::ChildElement { element_type }),
+        diff_status: None,
     })
 }
 
@@ -625,7 +627,10 @@ fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionD
             DetailRow::with_jump_targets(
                 vec![name, is_base.to_owned()],
                 vec![CellType::ParameterName, CellType::Text],
-                vec![Some(CellJumpTarget::ContainerByName), None],
+                vec![
+                    Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                    None,
+                ],
                 0,
             )
         })
@@ -663,10 +668,13 @@ fn build_names_overview_table(names: &[String], title: &str) -> Vec<DetailSectio
         .map(|name| DetailRow {
             cells: vec![name.clone()],
             cell_types: vec![CellType::ParameterName],
-            cell_jump_targets: vec![Some(CellJumpTarget::TreeNodeByName)],
+            cell_jump_targets: vec![Some(CellJumpTarget::new(
+                CellJumpTargetType::TreeNodeByName,
+            ))],
             indent: 0,
             row_type: DetailRowType::Normal,
             metadata: None,
+            diff_status: None,
         })
         .collect();
 
