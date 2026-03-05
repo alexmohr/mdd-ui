@@ -31,7 +31,9 @@ fn dop_kv_row(dop_name: &str) -> DetailRow {
         vec![CellType::Text, CellType::DopReference],
         vec![
             None,
-            Some(CellJumpTarget::new(CellJumpTargetType::Dop { name: nav_name })),
+            Some(CellJumpTarget::new(CellJumpTargetType::Dop {
+                name: nav_name,
+            })),
         ],
         0,
     )
