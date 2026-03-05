@@ -6,6 +6,7 @@
 use cda_database::datatypes::{DiagService, Parameter};
 
 use super::{
+    dops::parse_dop_name,
     format_service_id,
     services::{extract_coded_value, extract_dop_name},
 };
@@ -13,6 +14,28 @@ use crate::tree::types::{
     BIT_POSITION_UNSET, CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint,
     DetailContent, DetailRow, DetailSectionData, DetailSectionType,
 };
+
+/// Build a key-value row for a DOP reference that is navigable via Enter.
+/// Uses the parsed display name when available so the navigation target
+/// matches the tree node label produced by `add_dops_section`.
+fn dop_kv_row(dop_name: &str) -> DetailRow {
+    let parsed = parse_dop_name(dop_name);
+    let display = parsed.display_name();
+    let nav_name = if display.is_empty() {
+        dop_name.to_owned()
+    } else {
+        display
+    };
+    DetailRow::with_jump_targets(
+        vec!["DOP".to_owned(), nav_name.clone()],
+        vec![CellType::Text, CellType::DopReference],
+        vec![
+            None,
+            Some(CellJumpTarget::new(CellJumpTargetType::Dop { name: nav_name })),
+        ],
+        0,
+    )
+}
 
 /// Format a `ParamType` value as a static label.
 fn param_type_label(pt: &cda_database::datatypes::ParamType) -> &'static str {
@@ -224,11 +247,7 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
     // DOP reference (for Value type)
     let dop_name = extract_dop_name(param);
     if !dop_name.is_empty() {
-        overview_rows.push(DetailRow::normal(
-            vec!["DOP".to_owned(), dop_name],
-            vec![CellType::Text, CellType::DopReference],
-            0,
-        ));
+        overview_rows.push(dop_kv_row(&dop_name));
     }
 
     let header = DetailRow::header(
@@ -357,11 +376,7 @@ fn build_remaining_specific_rows(param: &Parameter<'_>) -> Vec<DetailRow> {
             ));
         }
         if let Some(dop) = pc.dop() {
-            rows.push(DetailRow::normal(
-                vec!["DOP".to_owned(), dop.short_name().unwrap_or("-").to_owned()],
-                vec![CellType::Text, CellType::DopReference],
-                0,
-            ));
+            rows.push(dop_kv_row(dop.short_name().unwrap_or("-")));
         }
         return rows;
     }
@@ -386,11 +401,7 @@ fn build_remaining_specific_rows(param: &Parameter<'_>) -> Vec<DetailRow> {
             ));
         }
         if let Some(dop) = val.dop() {
-            rows.push(DetailRow::normal(
-                vec!["DOP".to_owned(), dop.short_name().unwrap_or("-").to_owned()],
-                vec![CellType::Text, CellType::DopReference],
-                0,
-            ));
+            rows.push(dop_kv_row(dop.short_name().unwrap_or("-")));
         }
         return rows;
     }
@@ -405,11 +416,7 @@ fn build_remaining_specific_rows(param: &Parameter<'_>) -> Vec<DetailRow> {
             ));
         }
         if let Some(dop) = sys.dop() {
-            rows.push(DetailRow::normal(
-                vec!["DOP".to_owned(), dop.short_name().unwrap_or("-").to_owned()],
-                vec![CellType::Text, CellType::DopReference],
-                0,
-            ));
+            rows.push(dop_kv_row(dop.short_name().unwrap_or("-")));
         }
         return rows;
     }
@@ -417,11 +424,7 @@ fn build_remaining_specific_rows(param: &Parameter<'_>) -> Vec<DetailRow> {
     // LengthKeyRef
     if let Some(lkr) = param.specific_data_as_length_key_ref() {
         if let Some(dop) = lkr.dop() {
-            rows.push(DetailRow::normal(
-                vec!["DOP".to_owned(), dop.short_name().unwrap_or("-").to_owned()],
-                vec![CellType::Text, CellType::DopReference],
-                0,
-            ));
+            rows.push(dop_kv_row(dop.short_name().unwrap_or("-")));
         }
         return rows;
     }
