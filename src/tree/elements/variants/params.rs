@@ -391,21 +391,6 @@ fn build_remaining_specific_rows(param: &Parameter<'_>) -> Vec<DetailRow> {
         return rows;
     }
 
-    // Value
-    if let Some(val) = param.specific_data_as_value() {
-        if let Some(pdv) = val.physical_default_value() {
-            rows.push(DetailRow::normal(
-                vec!["Physical Default Value".to_owned(), pdv.to_owned()],
-                vec![CellType::Text, CellType::Text],
-                0,
-            ));
-        }
-        if let Some(dop) = val.dop() {
-            rows.push(dop_kv_row(dop.short_name().unwrap_or("-")));
-        }
-        return rows;
-    }
-
     // System
     if let Some(sys) = param.specific_data_as_system() {
         if let Some(sp) = sys.sys_param() {
