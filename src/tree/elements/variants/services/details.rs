@@ -251,6 +251,7 @@ fn build_overview_section(
             0,
         ));
     }
+
     rows.push(DetailRow::normal(
         vec!["Addressing".to_owned(), format!("{:?}", ds.addressing())],
         vec![CellType::Text, CellType::Text],
