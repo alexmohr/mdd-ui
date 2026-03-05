@@ -229,7 +229,7 @@ dependencies = [
 [[package]]
 name = "cda-database"
 version = "0.1.0"
-source = "git+https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git?rev=df6a178d3bf5f1a7f75ef796b20a0c4c8e5fd995#df6a178d3bf5f1a7f75ef796b20a0c4c8e5fd995"
+source = "git+https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git?rev=c1c9db5c9b95b790fa3e905ac1c04d38880a532e#c1c9db5c9b95b790fa3e905ac1c04d38880a532e"
 dependencies = [
  "cargo_toml",
  "cda-interfaces",
@@ -249,7 +249,7 @@ dependencies = [
 [[package]]
 name = "cda-interfaces"
 version = "0.1.0"
-source = "git+https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git?rev=df6a178d3bf5f1a7f75ef796b20a0c4c8e5fd995#df6a178d3bf5f1a7f75ef796b20a0c4c8e5fd995"
+source = "git+https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git?rev=c1c9db5c9b95b790fa3e905ac1c04d38880a532e#c1c9db5c9b95b790fa3e905ac1c04d38880a532e"
 dependencies = [
  "async-trait",
  "foldhash 0.2.0",
