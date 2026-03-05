@@ -10,8 +10,8 @@ use super::{
     services::{extract_coded_value, extract_dop_name},
 };
 use crate::tree::types::{
-    BIT_POSITION_UNSET, CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow,
-    DetailSectionData, DetailSectionType,
+    BIT_POSITION_UNSET, CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint,
+    DetailContent, DetailRow, DetailSectionData, DetailSectionType,
 };
 
 /// Format a `ParamType` value as a static label.
@@ -522,9 +522,9 @@ where
             let param_id = param.id();
 
             let dop_jump = if has_dop {
-                Some(CellJumpTarget::Dop {
+                Some(CellJumpTarget::new(CellJumpTargetType::Dop {
                     name: dop_name.clone(),
-                })
+                }))
             } else {
                 None
             };
@@ -555,7 +555,9 @@ where
                     CellType::Text,
                 ],
                 cell_jump_targets: vec![
-                    Some(CellJumpTarget::Parameter { param_id }),
+                    Some(CellJumpTarget::new(CellJumpTargetType::Parameter {
+                        param_id,
+                    })),
                     None,
                     None,
                     None,
@@ -567,6 +569,7 @@ where
                 indent: 0,
                 row_type: crate::tree::DetailRowType::Normal,
                 metadata: Some(crate::tree::RowMetadata::ParameterRow { param_id }),
+                diff_status: None,
             }
         })
         .collect();
@@ -624,7 +627,11 @@ pub fn build_service_list_table_section(
         Some(DetailRow {
             cells: vec![name, id, inherited.to_owned()],
             cell_types: vec![CellType::ParameterName, CellType::Text, CellType::Text],
-            cell_jump_targets: vec![Some(CellJumpTarget::TreeNodeByName), None, None],
+            cell_jump_targets: vec![
+                Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                None,
+                None,
+            ],
             indent: 0,
             ..Default::default()
         })

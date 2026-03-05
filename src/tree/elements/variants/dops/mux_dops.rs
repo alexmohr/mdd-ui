@@ -5,8 +5,8 @@
 
 use super::kv_row;
 use crate::tree::types::{
-    CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType, DetailSectionData,
-    DetailSectionType,
+    CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
+    DetailSectionData, DetailSectionType,
 };
 
 /// Build tabbed sections for MUXDOP
@@ -29,6 +29,7 @@ pub(super) fn build_mux_dop_tabs(
         indent: 0,
         row_type: DetailRowType::Header,
         metadata: None,
+        diff_status: None,
     });
 
     if let Some(switch_key) = mux_dop.switch_key() {
@@ -59,6 +60,7 @@ pub(super) fn build_mux_dop_tabs(
         indent: 0,
         row_type: DetailRowType::Header,
         metadata: None,
+        diff_status: None,
     });
 
     if let Some(default_case) = mux_dop.default_case() {
@@ -135,9 +137,9 @@ fn build_cases_section(mux_dop: &cda_database::datatypes::MuxDop<'_>) -> DetailS
                 .map(|l| format!("{l:?}"))
                 .unwrap_or_default();
 
-            let dop_jump = struct_name
-                .as_ref()
-                .map(|n| crate::tree::CellJumpTarget::Dop { name: n.clone() });
+            let dop_jump = struct_name.as_ref().map(|n| {
+                crate::tree::CellJumpTarget::new(CellJumpTargetType::Dop { name: n.clone() })
+            });
             let struct_display = struct_name.clone().unwrap_or_else(|| "-".to_owned());
 
             DetailRow {
@@ -156,6 +158,7 @@ fn build_cases_section(mux_dop: &cda_database::datatypes::MuxDop<'_>) -> DetailS
                 indent: 0,
                 row_type: DetailRowType::Normal,
                 metadata: None,
+                diff_status: None,
             }
         })
         .collect();

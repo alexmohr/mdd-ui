@@ -8,8 +8,8 @@ use cda_database::datatypes::ParentRef;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData,
-        DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
+        DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -52,7 +52,10 @@ pub fn build_parent_refs_detail_section<'a>(
             DetailRow::with_jump_targets(
                 vec![name, ref_type.to_owned()],
                 vec![CellType::ParameterName, CellType::Text],
-                vec![Some(CellJumpTarget::ContainerByName), None],
+                vec![
+                    Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                    None,
+                ],
                 0,
             )
         })
@@ -175,7 +178,12 @@ fn build_parent_refs_overview(parent_refs_list: &[ParentRef<'_>]) -> DetailSecti
             DetailRow::with_jump_targets(
                 vec![name, ref_type.to_owned()],
                 vec![CellType::ParameterName, CellType::Text],
-                vec![Some(crate::tree::CellJumpTarget::ContainerByName), None],
+                vec![
+                    Some(crate::tree::CellJumpTarget::new(
+                        CellJumpTargetType::ContainerByName,
+                    )),
+                    None,
+                ],
                 0,
             )
         })
@@ -300,7 +308,9 @@ fn make_tree_node_row(name: &str) -> DetailRow {
     DetailRow::with_jump_targets(
         vec![name.to_owned()],
         vec![CellType::ParameterName],
-        vec![Some(CellJumpTarget::TreeNodeByName)],
+        vec![Some(CellJumpTarget::new(
+            CellJumpTargetType::TreeNodeByName,
+        ))],
         0,
     )
 }
@@ -310,7 +320,9 @@ fn make_dop_row(name: &str) -> DetailRow {
     DetailRow::with_jump_targets(
         vec![dop_name.clone()],
         vec![CellType::DopReference],
-        vec![Some(CellJumpTarget::Dop { name: dop_name })],
+        vec![Some(CellJumpTarget::new(CellJumpTargetType::Dop {
+            name: dop_name,
+        }))],
         0,
     )
 }

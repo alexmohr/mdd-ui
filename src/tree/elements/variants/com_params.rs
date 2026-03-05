@@ -9,8 +9,8 @@ use super::dops::parse_dop_name;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData,
-        DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
+        DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -86,7 +86,10 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
             Some(DetailRow::with_jump_targets(
                 vec![name, cp_type],
                 vec![CellType::ParameterName, CellType::Text],
-                vec![Some(CellJumpTarget::TreeNodeByName), None],
+                vec![
+                    Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    None,
+                ],
                 0,
             ))
         })
@@ -143,7 +146,12 @@ fn dop_row(key: &str, dop_name: &str) -> DetailRow {
     DetailRow::with_jump_targets(
         vec![key.to_owned(), value],
         vec![CellType::Text, CellType::DopReference],
-        vec![None, Some(CellJumpTarget::Dop { name: nav_name })],
+        vec![
+            None,
+            Some(CellJumpTarget::new(CellJumpTargetType::Dop {
+                name: nav_name,
+            })),
+        ],
         0,
     )
 }

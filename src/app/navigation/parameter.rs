@@ -5,7 +5,7 @@
 
 use crate::{
     app::{App, FocusState, SCROLL_CONTEXT_LINES},
-    tree::{CellJumpTarget, CellType, NodeTextPrefix, ServiceListType},
+    tree::{CellJumpTarget, CellJumpTargetType, CellType, NodeTextPrefix, ServiceListType},
 };
 
 impl App {
@@ -62,7 +62,10 @@ impl App {
 
         // Parameter jump: navigate via section path
         // (container → section → service → param)
-        if let Some(CellJumpTarget::Parameter { .. }) = &jump_target
+        if let Some(CellJumpTarget {
+            target_type: CellJumpTargetType::Parameter { .. },
+            ..
+        }) = &jump_target
             && let Some(list_type) = target_list_type
         {
             self.navigate_to_param_in_section(node_idx, list_type, &service_name, &cell_value);

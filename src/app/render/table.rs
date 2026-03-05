@@ -16,7 +16,7 @@ use ratatui::{
 use super::{render_horizontal_scrollbar, render_scrollbar};
 use crate::{
     app::{App, COLUMN_SPACING, FocusState, SortDirection, TableSortState},
-    tree::{CellType, DetailRow},
+    tree::{CellType, DetailRow, DiffStatus},
 };
 
 /// Describes how a particular cell should be highlighted.
@@ -501,6 +501,7 @@ impl App {
 
                 let is_child_element =
                     matches!(row_data.row_type, crate::tree::DetailRowType::ChildElement);
+                let row_diff = row_data.diff_status;
                 let mut cells: Vec<Cell> = row_data
                     .cells
                     .iter()
@@ -531,7 +532,7 @@ impl App {
                         } else {
                             CellHighlight::Normal
                         };
-                        let style = self.cell_style(highlight, cell_type, has_jump);
+                        let style = self.cell_style(highlight, cell_type, has_jump, row_diff);
 
                         Cell::from(text).style(style)
                     })
@@ -557,6 +558,7 @@ impl App {
         highlight: CellHighlight,
         cell_type: CellType,
         has_jump: bool,
+        row_diff: Option<DiffStatus>,
     ) -> Style {
         match highlight {
             CellHighlight::FocusedCell => Style::default()
@@ -567,7 +569,25 @@ impl App {
                 .fg(self.theme.table_cell)
                 .bg(self.theme.cursor_bg)
                 .add_modifier(Modifier::BOLD),
-            CellHighlight::Normal => self.jump_target_style(cell_type, has_jump),
+            CellHighlight::Normal => {
+                if let Some(status) = row_diff {
+                    self.diff_row_style(status)
+                } else {
+                    self.jump_target_style(cell_type, has_jump)
+                }
+            }
+        }
+    }
+
+    /// Style for a table row annotated with a diff status.
+    fn diff_row_style(&self, status: DiffStatus) -> Style {
+        match status {
+            DiffStatus::Added => Style::default().fg(self.theme.diff_added),
+            DiffStatus::Removed => Style::default()
+                .fg(self.theme.diff_removed)
+                .add_modifier(Modifier::CROSSED_OUT),
+            DiffStatus::Modified => Style::default().fg(self.theme.diff_modified),
+            DiffStatus::Unchanged => Style::default().fg(self.theme.table_cell),
         }
     }
 

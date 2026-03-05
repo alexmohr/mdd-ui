@@ -11,7 +11,9 @@ mod variant;
 
 use crate::{
     app::App,
-    tree::{CellJumpTarget, DetailSectionType, NodeType, RowMetadata, SectionType},
+    tree::{
+        CellJumpTarget, CellJumpTargetType, DetailSectionType, NodeType, RowMetadata, SectionType,
+    },
 };
 
 impl App {
@@ -193,24 +195,24 @@ impl App {
             return;
         };
 
-        match target {
-            CellJumpTarget::Parameter { .. } => {
+        match target.target_type {
+            CellJumpTargetType::Parameter { .. } => {
                 self.navigate_to_parameter(cell_value);
             }
-            CellJumpTarget::Dop { ref name } => {
+            CellJumpTargetType::Dop { ref name } => {
                 self.navigate_to_dop(name);
             }
-            CellJumpTarget::TreeNodeByName => {
+            CellJumpTargetType::TreeNodeByName => {
                 if let Some(idx) = self.find_in_hierarchy(|n| n.text == cell_value) {
                     self.navigate_to_node(idx);
                 } else {
                     self.status = format!("Node \"{cell_value}\" not found in tree");
                 }
             }
-            CellJumpTarget::ContainerByName => {
+            CellJumpTargetType::ContainerByName => {
                 self.navigate_to_container_by_name(cell_value);
             }
-            CellJumpTarget::ServiceOrJobByName => {
+            CellJumpTargetType::ServiceOrJobByName => {
                 self.navigate_to_service_or_job(cell_value);
             }
         }
