@@ -996,12 +996,17 @@ mod tests {
 
         let hier = flat_to_hier(&nodes);
         assert_eq!(hier.len(), 2);
-        assert_eq!(hier[0].tree_node.text, "A");
-        assert_eq!(hier[0].children.len(), 2);
-        assert_eq!(hier[0].children[0].tree_node.text, "A1");
-        assert_eq!(hier[0].children[1].tree_node.text, "A2");
-        assert_eq!(hier[1].tree_node.text, "B");
-        assert!(hier[1].children.is_empty());
+        let a = hier.get(0).expect("first element");
+        let b = hier.get(1).expect("second element");
+        assert_eq!(a.tree_node.text, "A");
+        assert_eq!(a.children.len(), 2);
+        assert_eq!(a.children.get(0).expect("first child").tree_node.text, "A1");
+        assert_eq!(
+            a.children.get(1).expect("second child").tree_node.text,
+            "A2"
+        );
+        assert_eq!(b.tree_node.text, "B");
+        assert!(b.children.is_empty());
     }
 
     #[test]
@@ -1015,13 +1020,14 @@ mod tests {
 
         let hier = flat_to_hier(&nodes);
         assert_eq!(hier.len(), 1);
-        assert_eq!(hier[0].children.len(), 1);
-        assert_eq!(hier[0].children[0].children.len(), 1);
-        assert_eq!(hier[0].children[0].children[0].children.len(), 1);
-        assert_eq!(
-            hier[0].children[0].children[0].children[0].tree_node.text,
-            "L3"
-        );
+        let root = hier.get(0).expect("root");
+        let l1 = root.children.get(0).expect("l1");
+        let l2 = l1.children.get(0).expect("l2");
+        let l3 = l2.children.get(0).expect("l3");
+        assert_eq!(root.children.len(), 1);
+        assert_eq!(l1.children.len(), 1);
+        assert_eq!(l2.children.len(), 1);
+        assert_eq!(l3.tree_node.text, "L3");
     }
 
     #[test]
@@ -1037,9 +1043,10 @@ mod tests {
         let merged = merge_children(&hier_old, &hier_new);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].node.diff_status, Some(DiffStatus::Unchanged));
+        let first = merged.get(0).expect("first merged");
+        assert_eq!(first.node.diff_status, Some(DiffStatus::Unchanged));
         assert!(
-            merged[0]
+            first
                 .children
                 .iter()
                 .all(|c| c.node.diff_status == Some(DiffStatus::Unchanged))
@@ -1059,15 +1066,25 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
-        let section = &merged[0];
+        let section = merged.get(0).expect("first merged");
         assert_eq!(section.node.diff_status, Some(DiffStatus::Modified));
         assert_eq!(section.children.len(), 2);
         assert_eq!(
-            section.children[0].node.diff_status,
+            section
+                .children
+                .get(0)
+                .expect("first child")
+                .node
+                .diff_status,
             Some(DiffStatus::Unchanged)
         );
         assert_eq!(
-            section.children[1].node.diff_status,
+            section
+                .children
+                .get(1)
+                .expect("second child")
+                .node
+                .diff_status,
             Some(DiffStatus::Added)
         );
     }
@@ -1085,16 +1102,26 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
-        let section = &merged[0];
+        let section = merged.get(0).expect("first merged");
         assert_eq!(section.node.diff_status, Some(DiffStatus::Modified));
         // Child1 (Unchanged) + Child2 (Removed, appended at end)
         assert_eq!(section.children.len(), 2);
         assert_eq!(
-            section.children[0].node.diff_status,
+            section
+                .children
+                .get(0)
+                .expect("first child")
+                .node
+                .diff_status,
             Some(DiffStatus::Unchanged)
         );
         assert_eq!(
-            section.children[1].node.diff_status,
+            section
+                .children
+                .get(1)
+                .expect("second child")
+                .node
+                .diff_status,
             Some(DiffStatus::Removed)
         );
     }
@@ -1119,7 +1146,10 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
-        assert_eq!(merged[0].node.diff_status, Some(DiffStatus::Modified));
+        assert_eq!(
+            merged.get(0).expect("first merged").node.diff_status,
+            Some(DiffStatus::Modified)
+        );
     }
 
     #[test]
@@ -1142,9 +1172,15 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
-        assert_eq!(merged[0].node.diff_status, Some(DiffStatus::Modified));
+        let parent = merged.get(0).expect("first merged");
+        assert_eq!(parent.node.diff_status, Some(DiffStatus::Modified));
         assert_eq!(
-            merged[0].children[0].node.diff_status,
+            parent
+                .children
+                .get(0)
+                .expect("first child")
+                .node
+                .diff_status,
             Some(DiffStatus::Modified)
         );
     }
@@ -1251,12 +1287,15 @@ mod tests {
 
         let flat = flatten_merged(&merged, 0);
         assert_eq!(flat.len(), 3);
-        assert_eq!(flat[0].depth, 0);
-        assert_eq!(flat[0].text, "Root");
-        assert_eq!(flat[1].depth, 1);
-        assert_eq!(flat[1].text, "Child");
-        assert_eq!(flat[2].depth, 2);
-        assert_eq!(flat[2].text, "Grandchild");
+        let f0 = flat.get(0).expect("first flat");
+        let f1 = flat.get(1).expect("second flat");
+        let f2 = flat.get(2).expect("third flat");
+        assert_eq!(f0.depth, 0);
+        assert_eq!(f0.text, "Root");
+        assert_eq!(f1.depth, 1);
+        assert_eq!(f1.text, "Child");
+        assert_eq!(f2.depth, 2);
+        assert_eq!(f2.text, "Grandchild");
     }
 
     #[test]
@@ -1297,13 +1336,19 @@ mod tests {
         };
 
         let merged = mark_subtree(&hier, DiffStatus::Added);
+        let c0 = merged.children.get(0).expect("first child");
+        let c1 = merged.children.get(1).expect("second child");
         assert_eq!(merged.node.diff_status, Some(DiffStatus::Added));
-        assert_eq!(merged.children[0].node.diff_status, Some(DiffStatus::Added));
+        assert_eq!(c0.node.diff_status, Some(DiffStatus::Added));
         assert_eq!(
-            merged.children[0].children[0].node.diff_status,
+            c0.children
+                .get(0)
+                .expect("first grandchild")
+                .node
+                .diff_status,
             Some(DiffStatus::Added)
         );
-        assert_eq!(merged.children[1].node.diff_status, Some(DiffStatus::Added));
+        assert_eq!(c1.node.diff_status, Some(DiffStatus::Added));
     }
 
     /// A deep change should only propagate one level: the leaf's parent is
@@ -1335,18 +1380,15 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
+        let root = merged.get(0).expect("root");
+        let mid = root.children.get(0).expect("mid");
+        let leaf = mid.children.get(0).expect("leaf");
         // Leaf: own content changed → Modified
-        assert_eq!(
-            merged[0].children[0].children[0].node.diff_status,
-            Some(DiffStatus::Modified)
-        );
+        assert_eq!(leaf.node.diff_status, Some(DiffStatus::Modified));
         // Mid: direct child (Leaf) has own_changed → Modified
-        assert_eq!(
-            merged[0].children[0].node.diff_status,
-            Some(DiffStatus::Modified)
-        );
+        assert_eq!(mid.node.diff_status, Some(DiffStatus::Modified));
         // Root: direct child (Mid) has own_changed=false → Unchanged
-        assert_eq!(merged[0].node.diff_status, Some(DiffStatus::Unchanged));
+        assert_eq!(root.node.diff_status, Some(DiffStatus::Unchanged));
     }
 
     #[test]
@@ -1368,16 +1410,27 @@ mod tests {
 
         // Both service containers match by name "Diag-Comms"
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].children.len(), 2);
+        let diag_comms = merged.get(0).expect("first merged");
+        assert_eq!(diag_comms.children.len(), 2);
 
         // ReadDID is Unchanged (same text)
         assert_eq!(
-            merged[0].children[0].node.diff_status,
+            diag_comms
+                .children
+                .get(0)
+                .expect("first child")
+                .node
+                .diff_status,
             Some(DiffStatus::Unchanged)
         );
         // WriteDID is Modified (ID changed: 0x2E01 → 0x2E02)
         assert_eq!(
-            merged[0].children[1].node.diff_status,
+            diag_comms
+                .children
+                .get(1)
+                .expect("second child")
+                .node
+                .diff_status,
             Some(DiffStatus::Modified)
         );
     }
