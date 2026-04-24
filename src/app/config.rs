@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use std::path::PathBuf;
+use std::{fmt, path::PathBuf};
 
 use anyhow::{Context, Result};
 use ratatui::style::Color;
@@ -27,77 +27,114 @@ pub struct ColorTheme {
     pub diff: DiffColors,
 }
 
+/// A validated color string that is parsed to `ratatui::style::Color` at
+/// deserialization time.  Invalid values cause a parse-time error rather than
+/// a silent fallback.
+#[derive(Clone, Debug)]
+pub struct ColorString(pub Color);
+
+impl ColorString {
+    pub fn color(&self) -> Color {
+        self.0
+    }
+}
+
+impl TryFrom<String> for ColorString {
+    type Error = String;
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
+        try_parse_color(&s).map(ColorString)
+    }
+}
+
+impl<'de> Deserialize<'de> for ColorString {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        ColorString::try_from(s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl fmt::Display for ColorString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
 /// Colors used in the tree pane.
 #[derive(Deserialize)]
 #[serde(default)]
 pub struct TreeColors {
-    pub container: String,
-    pub section_header: String,
-    pub inherited_service: String,
-    pub default_node: String,
+    pub container: ColorString,
+    pub section_header: ColorString,
+    pub inherited_service: ColorString,
+    pub default_node: ColorString,
 }
 
 /// General UI chrome colors.
 #[derive(Deserialize)]
 #[serde(default)]
 pub struct UiColors {
-    pub border_focused: String,
-    pub border_unfocused: String,
-    pub cursor_fg: String,
-    pub cursor_bg: String,
-    pub breadcrumb_fg: String,
-    pub breadcrumb_bg: String,
-    pub status_fg: String,
-    pub separator: String,
+    pub border_focused: ColorString,
+    pub border_unfocused: ColorString,
+    pub cursor_fg: ColorString,
+    pub cursor_bg: ColorString,
+    pub breadcrumb_fg: ColorString,
+    pub breadcrumb_bg: ColorString,
+    pub status_fg: ColorString,
+    pub separator: ColorString,
 }
 
 /// Colors used in the detail pane tables.
 #[derive(Deserialize)]
 #[serde(default)]
 pub struct TableColors {
-    pub header: String,
-    pub cell: String,
-    pub jump_cell: String,
-    pub focused_cell_fg: String,
-    pub focused_cell_bg: String,
-    pub tab_active_fg: String,
-    pub tab_active_bg: String,
-    pub tab_inactive_fg: String,
-    pub tab_inactive_bg: String,
+    pub header: ColorString,
+    pub cell: ColorString,
+    pub jump_cell: ColorString,
+    pub focused_cell_fg: ColorString,
+    pub focused_cell_bg: ColorString,
+    pub tab_active_fg: ColorString,
+    pub tab_active_bg: ColorString,
+    pub tab_inactive_fg: ColorString,
+    pub tab_inactive_bg: ColorString,
 }
 
 /// Colors for popups (help, detail).
 #[derive(Deserialize)]
 #[serde(default)]
 pub struct PopupColors {
-    pub help_border: String,
-    pub help_text: String,
-    pub detail_border: String,
-    pub detail_bg: String,
-    pub detail_text: String,
+    pub help_border: ColorString,
+    pub help_text: ColorString,
+    pub detail_border: ColorString,
+    pub detail_bg: ColorString,
+    pub detail_text: ColorString,
 }
 
 /// Colors for diff annotations in the tree.
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct DiffColors {
-    pub added: String,
-    pub removed: String,
-    pub modified: String,
-    pub unchanged: String,
+    pub added: ColorString,
+    pub removed: ColorString,
+    pub modified: ColorString,
+    pub unchanged: ColorString,
 }
 
 // -------------------------------------------------------------------
 // Defaults (matching the original hard-coded values)
 // -------------------------------------------------------------------
 
+/// Helper: create a `ColorString` from a known-good literal (panics on bad input).
+fn cs(s: &str) -> ColorString {
+    ColorString::try_from(s.to_owned()).expect("default color must be valid")
+}
+
 impl Default for TreeColors {
     fn default() -> Self {
         Self {
-            container: "blue".into(),
-            section_header: "yellow".into(),
-            inherited_service: "darkgray".into(),
-            default_node: "white".into(),
+            container: cs("blue"),
+            section_header: cs("yellow"),
+            inherited_service: cs("darkgray"),
+            default_node: cs("white"),
         }
     }
 }
@@ -105,14 +142,14 @@ impl Default for TreeColors {
 impl Default for UiColors {
     fn default() -> Self {
         Self {
-            border_focused: "cyan".into(),
-            border_unfocused: "darkgray".into(),
-            cursor_fg: "white".into(),
-            cursor_bg: "darkgray".into(),
-            breadcrumb_fg: "cyan".into(),
-            breadcrumb_bg: "reset".into(),
-            status_fg: "gray".into(),
-            separator: "darkgray".into(),
+            border_focused: cs("cyan"),
+            border_unfocused: cs("darkgray"),
+            cursor_fg: cs("white"),
+            cursor_bg: cs("darkgray"),
+            breadcrumb_fg: cs("cyan"),
+            breadcrumb_bg: cs("reset"),
+            status_fg: cs("gray"),
+            separator: cs("darkgray"),
         }
     }
 }
@@ -120,15 +157,15 @@ impl Default for UiColors {
 impl Default for TableColors {
     fn default() -> Self {
         Self {
-            header: "yellow".into(),
-            cell: "white".into(),
-            jump_cell: "blue".into(),
-            focused_cell_fg: "white".into(),
-            focused_cell_bg: "cyan".into(),
-            tab_active_fg: "white".into(),
-            tab_active_bg: "cyan".into(),
-            tab_inactive_fg: "white".into(),
-            tab_inactive_bg: "none".into(),
+            header: cs("yellow"),
+            cell: cs("white"),
+            jump_cell: cs("blue"),
+            focused_cell_fg: cs("white"),
+            focused_cell_bg: cs("cyan"),
+            tab_active_fg: cs("white"),
+            tab_active_bg: cs("cyan"),
+            tab_inactive_fg: cs("white"),
+            tab_inactive_bg: cs("none"),
         }
     }
 }
@@ -136,11 +173,11 @@ impl Default for TableColors {
 impl Default for PopupColors {
     fn default() -> Self {
         Self {
-            help_border: "cyan".into(),
-            help_text: "white".into(),
-            detail_border: "yellow".into(),
-            detail_bg: "reset".into(),
-            detail_text: "white".into(),
+            help_border: cs("cyan"),
+            help_text: cs("white"),
+            detail_border: cs("yellow"),
+            detail_bg: cs("reset"),
+            detail_text: cs("white"),
         }
     }
 }
@@ -148,10 +185,10 @@ impl Default for PopupColors {
 impl Default for DiffColors {
     fn default() -> Self {
         Self {
-            added: "green".into(),
-            removed: "red".into(),
-            modified: "yellow".into(),
-            unchanged: "darkgray".into(),
+            added: cs("green"),
+            removed: cs("red"),
+            modified: cs("yellow"),
+            unchanged: cs("darkgray"),
         }
     }
 }
@@ -209,50 +246,52 @@ impl Default for ResolvedTheme {
 impl From<&ColorTheme> for ResolvedTheme {
     fn from(theme: &ColorTheme) -> Self {
         Self {
-            tree_container: parse_color(&theme.tree.container),
-            tree_section_header: parse_color(&theme.tree.section_header),
-            tree_inherited_service: parse_color(&theme.tree.inherited_service),
-            tree_default_node: parse_color(&theme.tree.default_node),
+            tree_container: theme.tree.container.color(),
+            tree_section_header: theme.tree.section_header.color(),
+            tree_inherited_service: theme.tree.inherited_service.color(),
+            tree_default_node: theme.tree.default_node.color(),
 
-            border_focused: parse_color(&theme.ui.border_focused),
-            border_unfocused: parse_color(&theme.ui.border_unfocused),
-            cursor_fg: parse_color(&theme.ui.cursor_fg),
-            cursor_bg: parse_color(&theme.ui.cursor_bg),
-            breadcrumb_fg: parse_color(&theme.ui.breadcrumb_fg),
-            breadcrumb_bg: parse_color(&theme.ui.breadcrumb_bg),
-            status_fg: parse_color(&theme.ui.status_fg),
-            separator: parse_color(&theme.ui.separator),
+            border_focused: theme.ui.border_focused.color(),
+            border_unfocused: theme.ui.border_unfocused.color(),
+            cursor_fg: theme.ui.cursor_fg.color(),
+            cursor_bg: theme.ui.cursor_bg.color(),
+            breadcrumb_fg: theme.ui.breadcrumb_fg.color(),
+            breadcrumb_bg: theme.ui.breadcrumb_bg.color(),
+            status_fg: theme.ui.status_fg.color(),
+            separator: theme.ui.separator.color(),
 
-            table_header: parse_color(&theme.table.header),
-            table_cell: parse_color(&theme.table.cell),
-            table_jump_cell: parse_color(&theme.table.jump_cell),
-            focused_cell_fg: parse_color(&theme.table.focused_cell_fg),
-            focused_cell_bg: parse_color(&theme.table.focused_cell_bg),
-            tab_active_fg: parse_color(&theme.table.tab_active_fg),
-            tab_active_bg: parse_color(&theme.table.tab_active_bg),
-            tab_inactive_fg: parse_color(&theme.table.tab_inactive_fg),
-            tab_inactive_bg: parse_color(&theme.table.tab_inactive_bg),
+            table_header: theme.table.header.color(),
+            table_cell: theme.table.cell.color(),
+            table_jump_cell: theme.table.jump_cell.color(),
+            focused_cell_fg: theme.table.focused_cell_fg.color(),
+            focused_cell_bg: theme.table.focused_cell_bg.color(),
+            tab_active_fg: theme.table.tab_active_fg.color(),
+            tab_active_bg: theme.table.tab_active_bg.color(),
+            tab_inactive_fg: theme.table.tab_inactive_fg.color(),
+            tab_inactive_bg: theme.table.tab_inactive_bg.color(),
 
-            help_border: parse_color(&theme.popup.help_border),
-            help_text: parse_color(&theme.popup.help_text),
-            detail_border: parse_color(&theme.popup.detail_border),
-            detail_bg: parse_color(&theme.popup.detail_bg),
-            detail_text: parse_color(&theme.popup.detail_text),
+            help_border: theme.popup.help_border.color(),
+            help_text: theme.popup.help_text.color(),
+            detail_border: theme.popup.detail_border.color(),
+            detail_bg: theme.popup.detail_bg.color(),
+            detail_text: theme.popup.detail_text.color(),
 
-            diff_added: parse_color(&theme.diff.added),
-            diff_removed: parse_color(&theme.diff.removed),
-            diff_modified: parse_color(&theme.diff.modified),
-            diff_unchanged: parse_color(&theme.diff.unchanged),
+            diff_added: theme.diff.added.color(),
+            diff_removed: theme.diff.removed.color(),
+            diff_modified: theme.diff.modified.color(),
+            diff_unchanged: theme.diff.unchanged.color(),
         }
     }
 }
 
-/// Parse a colour name or hex string into a `Color`.
+/// Try to parse a colour name or hex string into a `Color`.
+/// Returns `Err` for unrecognised values so callers can fail early.
+///
 /// Supported formats:
 ///  - Named: `"red"`, `"blue"`, `"darkgray"`, etc.
 ///  - Hex:   `"#ff00ff"` or `"ff00ff"`
 ///  - ANSI index: `"123"` (0-255)
-fn parse_color(s: &str) -> Color {
+fn try_parse_color(s: &str) -> std::result::Result<Color, String> {
     let s = s.trim().to_lowercase();
 
     // Try hex (#RRGGBB or RRGGBB)
@@ -262,37 +301,34 @@ fn parse_color(s: &str) -> Color {
         && let Ok(g) = u8::from_str_radix(&hex[2..4], 16)
         && let Ok(b) = u8::from_str_radix(&hex[4..6], 16)
     {
-        return Color::Rgb(r, g, b);
+        return Ok(Color::Rgb(r, g, b));
     }
 
     // Try ANSI index
     if let Ok(idx) = s.parse::<u8>() {
-        return Color::Indexed(idx);
+        return Ok(Color::Indexed(idx));
     }
 
     // Named colours
     match s.as_str() {
-        "none" | "reset" => Color::Reset,
-        "black" => Color::Black,
-        "red" => Color::Red,
-        "green" => Color::Green,
-        "yellow" => Color::Yellow,
-        "blue" => Color::Blue,
-        "magenta" => Color::Magenta,
-        "cyan" => Color::Cyan,
-        "gray" | "grey" => Color::Gray,
-        "darkgray" | "darkgrey" | "dark_gray" | "dark_grey" => Color::DarkGray,
-        "lightred" | "light_red" => Color::LightRed,
-        "lightgreen" | "light_green" => Color::LightGreen,
-        "lightyellow" | "light_yellow" => Color::LightYellow,
-        "lightblue" | "light_blue" => Color::LightBlue,
-        "lightmagenta" | "light_magenta" => Color::LightMagenta,
-        "lightcyan" | "light_cyan" => Color::LightCyan,
-        "white" => Color::White,
-        _ => {
-            eprintln!("mdd-ui: unrecognised color '{s}', using White");
-            Color::White
-        }
+        "none" | "reset" => Ok(Color::Reset),
+        "black" => Ok(Color::Black),
+        "red" => Ok(Color::Red),
+        "green" => Ok(Color::Green),
+        "yellow" => Ok(Color::Yellow),
+        "blue" => Ok(Color::Blue),
+        "magenta" => Ok(Color::Magenta),
+        "cyan" => Ok(Color::Cyan),
+        "gray" | "grey" => Ok(Color::Gray),
+        "darkgray" | "darkgrey" | "dark_gray" | "dark_grey" => Ok(Color::DarkGray),
+        "lightred" | "light_red" => Ok(Color::LightRed),
+        "lightgreen" | "light_green" => Ok(Color::LightGreen),
+        "lightyellow" | "light_yellow" => Ok(Color::LightYellow),
+        "lightblue" | "light_blue" => Ok(Color::LightBlue),
+        "lightmagenta" | "light_magenta" => Ok(Color::LightMagenta),
+        "lightcyan" | "light_cyan" => Ok(Color::LightCyan),
+        "white" => Ok(Color::White),
+        _ => Err(format!("unrecognised color: '{s}'")),
     }
 }
 
@@ -348,4 +384,59 @@ pub fn load_config(override_path: Option<&str>) -> Result<AppConfig> {
         .with_context(|| format!("Failed to read config: {}", path.display()))?;
 
     toml::from_str(&text).with_context(|| format!("Failed to parse config: {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_named_colors() {
+        assert_eq!(try_parse_color("red"), Ok(Color::Red));
+        assert_eq!(try_parse_color("Blue"), Ok(Color::Blue));
+        assert_eq!(try_parse_color(" CYAN "), Ok(Color::Cyan));
+        assert_eq!(try_parse_color("darkgray"), Ok(Color::DarkGray));
+        assert_eq!(try_parse_color("dark_grey"), Ok(Color::DarkGray));
+        assert_eq!(try_parse_color("none"), Ok(Color::Reset));
+        assert_eq!(try_parse_color("reset"), Ok(Color::Reset));
+    }
+
+    #[test]
+    fn parse_hex_colors() {
+        assert_eq!(try_parse_color("#ff0000"), Ok(Color::Rgb(255, 0, 0)));
+        assert_eq!(try_parse_color("00ff00"), Ok(Color::Rgb(0, 255, 0)));
+        assert_eq!(try_parse_color("#ABCDEF"), Ok(Color::Rgb(0xAB, 0xCD, 0xEF)));
+    }
+
+    #[test]
+    fn parse_ansi_index() {
+        assert_eq!(try_parse_color("42"), Ok(Color::Indexed(42)));
+        assert_eq!(try_parse_color("0"), Ok(Color::Indexed(0)));
+        assert_eq!(try_parse_color("255"), Ok(Color::Indexed(255)));
+    }
+
+    #[test]
+    fn parse_invalid_color_returns_err() {
+        assert!(try_parse_color("not_a_color").is_err());
+        assert!(try_parse_color("redd").is_err());
+        assert!(try_parse_color("").is_err());
+    }
+
+    #[test]
+    fn color_string_try_from_valid() {
+        let cs = ColorString::try_from("cyan".to_owned());
+        assert!(cs.is_ok());
+        assert_eq!(cs.unwrap().color(), Color::Cyan);
+    }
+
+    #[test]
+    fn color_string_try_from_invalid() {
+        let cs = ColorString::try_from("garbage".to_owned());
+        assert!(cs.is_err());
+    }
+
+    #[test]
+    fn default_theme_resolves_without_panic() {
+        let _resolved = ResolvedTheme::default();
+    }
 }

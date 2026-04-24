@@ -117,7 +117,7 @@ fn compare_maps<T: PartialEq>(
     for key in old.keys() {
         if !new.contains_key(key) {
             summary.removed = summary.removed.saturating_add(1);
-            results.push(new(key.clone(), DiffStatus::Removed));
+            results.push(simple_diff(key.clone(), DiffStatus::Removed));
         }
     }
 
@@ -126,7 +126,7 @@ fn compare_maps<T: PartialEq>(
         if let Some(new_val) = new.get(key) {
             if old_val == new_val {
                 summary.unchanged = summary.unchanged.saturating_add(1);
-                results.push(new(key.clone(), DiffStatus::Unchanged));
+                results.push(simple_diff(key.clone(), DiffStatus::Unchanged));
             } else {
                 let (prop_diffs, children) = compare_fn(old_val, new_val);
                 summary.modified = summary.modified.saturating_add(1);
@@ -144,7 +144,7 @@ fn compare_maps<T: PartialEq>(
     for key in new.keys() {
         if !old.contains_key(key) {
             summary.added = summary.added.saturating_add(1);
-            results.push(new(key.clone(), DiffStatus::Added));
+            results.push(simple_diff(key.clone(), DiffStatus::Added));
         }
     }
 
@@ -157,7 +157,7 @@ fn compare_maps<T: PartialEq>(
 
 /// Create an `ElementDiff` with the given name and status.
 /// Used for Removed, Unchanged, and Added elements where there are no property or child diffs.
-fn new(name: String, status: DiffStatus) -> ElementDiff {
+fn simple_diff(name: String, status: DiffStatus) -> ElementDiff {
     ElementDiff {
         name,
         status,
@@ -430,10 +430,10 @@ fn compare_services(
             }
         }
         (None, Some(_)) => {
-            children.push(new("Request".to_owned(), DiffStatus::Added));
+            children.push(simple_diff("Request".to_owned(), DiffStatus::Added));
         }
         (Some(_), None) => {
-            children.push(new("Request".to_owned(), DiffStatus::Removed));
+            children.push(simple_diff("Request".to_owned(), DiffStatus::Removed));
         }
         (None, None) => {}
     }
@@ -550,10 +550,10 @@ fn compare_audience(
             }
         }
         (None, Some(_)) => {
-            children.push(new("Audience".to_owned(), DiffStatus::Added));
+            children.push(simple_diff("Audience".to_owned(), DiffStatus::Added));
         }
         (Some(_), None) => {
-            children.push(new("Audience".to_owned(), DiffStatus::Removed));
+            children.push(simple_diff("Audience".to_owned(), DiffStatus::Removed));
         }
         (None, None) => {}
     }
@@ -588,7 +588,7 @@ fn compare_params_list(
     // Removed params
     for key in old_map.keys() {
         if !new_map.contains_key(key) {
-            param_elements.push(new((*key).to_owned(), DiffStatus::Removed));
+            param_elements.push(simple_diff((*key).to_owned(), DiffStatus::Removed));
         }
     }
 
@@ -610,7 +610,7 @@ fn compare_params_list(
     // Added params
     for key in new_map.keys() {
         if !old_map.contains_key(key) {
-            param_elements.push(new((*key).to_owned(), DiffStatus::Added));
+            param_elements.push(simple_diff((*key).to_owned(), DiffStatus::Added));
         }
     }
 
@@ -696,10 +696,10 @@ fn compare_response_lists(
                 }
             }
             (None, Some(_)) => {
-                children.push(new(label.clone(), DiffStatus::Added));
+                children.push(simple_diff(label.clone(), DiffStatus::Added));
             }
             (Some(_), None) => {
-                children.push(new(label.clone(), DiffStatus::Removed));
+                children.push(simple_diff(label.clone(), DiffStatus::Removed));
             }
             (None, None) => {}
         }

@@ -154,15 +154,7 @@ impl App {
         if is_functional_class {
             node.node_type == NodeType::FunctionalClass && node.text == target_name
         } else {
-            let is_target_node = matches!(
-                node.node_type,
-                NodeType::Service
-                    | NodeType::ParentRefService
-                    | NodeType::Request
-                    | NodeType::PosResponse
-                    | NodeType::NegResponse
-                    | NodeType::Job
-            );
+            let is_target_node = node.node_type.is_diagcomm();
 
             if !is_target_node {
                 return false;
@@ -182,14 +174,7 @@ impl App {
 
     /// Check if node is a service-related node
     pub(super) fn is_service_node(node: &TreeNode) -> bool {
-        matches!(
-            node.node_type,
-            NodeType::Service
-                | NodeType::ParentRefService
-                | NodeType::Request
-                | NodeType::PosResponse
-                | NodeType::NegResponse
-        )
+        node.node_type.is_service()
     }
 
     /// Extract service name from node text
