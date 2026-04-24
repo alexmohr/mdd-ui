@@ -15,7 +15,7 @@ use cda_database::datatypes::{
 
 /// Shorthand: convert `Option<&str>` to an owned `String`, defaulting to empty.
 fn s(opt: Option<&str>) -> String {
-    opt.unwrap_or_default().to_owned()
+    opt.map_or_else(String::new, str::to_owned)
 }
 
 /// Extract `short_name` values from an optional `FlatBuffers` vector whose items

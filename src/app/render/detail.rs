@@ -235,12 +235,10 @@ impl App {
         self.detail.ensure_section_capacity(last_idx);
 
         // Initialize table_sort_state and column_widths
-        while self.table.sort_state.len() < sections.len() {
-            let section_idx = self.table.sort_state.len();
-            self.table
-                .sort_state
-                .push(Self::initialize_table_sort(sections.get(section_idx)));
-        }
+        self.table.sort_state.extend(
+            (self.table.sort_state.len()..sections.len())
+                .map(|i| Self::initialize_table_sort(sections.get(i))),
+        );
 
         self.table
             .ensure_column_width_capacity(sections.len().saturating_sub(1));

@@ -191,21 +191,19 @@ impl App {
         };
         self.tree.children_sort_dirs.insert(parent_idx, next_dir);
 
-        if next_dir == SortDirection::Descending {
-            child_groups.sort_by(|a, b| {
-                let a_text = a.first().map(|n| n.text.to_lowercase());
-                let b_text = b.first().map(|n| n.text.to_lowercase());
-                b_text.cmp(&a_text)
-            });
-            self.status = "Sort: by Name ▼".into();
-        } else {
-            child_groups.sort_by(|a, b| {
-                let a_text = a.first().map(|n| n.text.to_lowercase());
-                let b_text = b.first().map(|n| n.text.to_lowercase());
-                a_text.cmp(&b_text)
-            });
-            self.status = "Sort: by Name ▲".into();
+        child_groups.sort_by(|a, b| {
+            let a_text = a.first().map(|n| n.text.to_lowercase());
+            let b_text = b.first().map(|n| n.text.to_lowercase());
+            match next_dir {
+                SortDirection::Ascending => a_text.cmp(&b_text),
+                SortDirection::Descending => b_text.cmp(&a_text),
+            }
+        });
+        self.status = match next_dir {
+            SortDirection::Ascending => "Sort: by Name ▲",
+            SortDirection::Descending => "Sort: by Name ▼",
         }
+        .into();
 
         // Re-insert sorted children
         let sorted: Vec<TreeNode> = child_groups.into_iter().flatten().collect();
@@ -252,16 +250,10 @@ impl App {
                 .collect();
 
             if self.tree.diagcomm_sort_by_id {
-                services.sort_by(|a, b| {
-                    let a_id = extract_service_id(&a.text);
-                    let b_id = extract_service_id(&b.text);
-                    a_id.cmp(&b_id)
-                });
+                services.sort_by_key(|n| extract_service_id(&n.text));
             } else {
                 services.sort_by(|a, b| {
-                    let a_name = extract_service_name(&a.text);
-                    let b_name = extract_service_name(&b.text);
-                    a_name.cmp(b_name)
+                    extract_service_name(&a.text).cmp(extract_service_name(&b.text))
                 });
             }
 
