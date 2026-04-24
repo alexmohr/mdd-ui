@@ -8,14 +8,11 @@ use cda_database::datatypes::{DiagLayer, DiagService, Parameter, ParentRef};
 use super::{
     format_service_display_name, format_service_id,
     params::{build_param_detail_sections, build_param_section, build_service_list_table_section},
-    services::get_parent_ref_services_recursive,
+    services::{build_service_overview_section, get_parent_ref_services_recursive},
 };
 use crate::tree::{
     builder::TreeBuilder,
-    types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DetailSectionType,
-        NodeType, ServiceListType,
-    },
+    types::{DetailContent, DetailSectionData, DetailSectionType, NodeType, ServiceListType},
 };
 
 /// Configuration for building response sections, capturing the difference
@@ -107,7 +104,7 @@ fn add_response_service(
     b: &mut TreeBuilder,
     ds: &DiagService<'_>,
     depth: usize,
-    source_layer: Option<String>,
+    source_layer: Option<&str>,
     kind: &ResponseKind,
 ) {
     let Some(display_name) = format_service_display_name(ds) else {
@@ -222,7 +219,7 @@ fn add_responses_section<'a>(
         }
 
         for (ds, source_layer_name) in &parent_services {
-            add_response_service(b, ds, depth, Some(source_layer_name.clone()), kind);
+            add_response_service(b, ds, depth, Some(source_layer_name.as_str()), kind);
         }
     }
 }
@@ -250,7 +247,7 @@ pub fn add_neg_responses_section<'a>(
 /// Build complete service view with response tabs
 fn build_response_view_sections(
     ds: &DiagService<'_>,
-    parent_layer_name: Option<String>,
+    parent_layer_name: Option<&str>,
     kind: &ResponseKind,
 ) -> Vec<DetailSectionData> {
     let mut sections = Vec::new();
@@ -271,107 +268,8 @@ fn build_response_view_sections(
         content: DetailContent::PlainText(vec![]),
     });
 
-    sections.push(build_overview_section(ds, parent_layer_name));
+    sections.push(build_service_overview_section(ds, parent_layer_name));
     sections.extend(build_responses_sections(ds, kind));
 
     sections
-}
-
-/// Build overview section (shared by both pos and neg response views)
-fn build_overview_section(
-    ds: &DiagService<'_>,
-    parent_layer_name: Option<String>,
-) -> DetailSectionData {
-    let header = DetailRow {
-        cells: vec!["Property".to_owned(), "Value".to_owned()],
-        cell_types: vec![CellType::Text, CellType::Text],
-        indent: 0,
-        ..Default::default()
-    };
-
-    let mut rows = Vec::new();
-
-    rows.extend(
-        ds.diag_comm()
-            .and_then(|dc| dc.short_name())
-            .map(|sn| DetailRow {
-                cells: vec!["Service".to_owned(), sn.to_owned()],
-                cell_types: vec![CellType::Text, CellType::Text],
-                indent: 0,
-                ..Default::default()
-            }),
-    );
-    rows.extend(
-        ds.diag_comm()
-            .and_then(|dc| dc.semantic())
-            .map(|semantic| DetailRow {
-                cells: vec!["Semantic".to_owned(), semantic.to_owned()],
-                cell_types: vec![CellType::Text, CellType::Text],
-                indent: 0,
-                ..Default::default()
-            }),
-    );
-    if let Some(sid) = ds.request_id() {
-        rows.push(DetailRow {
-            cells: vec!["SID".to_owned(), format!("0x{sid:02X}")],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            ..Default::default()
-        });
-    }
-    if let Some((sub_fn, bit_len)) = ds.request_sub_function_id() {
-        let sub_fn_str = if bit_len <= 8 {
-            format!("0x{sub_fn:02X}")
-        } else {
-            format!("0x{sub_fn:04X}")
-        };
-        rows.push(DetailRow {
-            cells: vec![
-                "Sub-Function".to_owned(),
-                format!("{sub_fn_str} ({bit_len} bits)"),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            ..Default::default()
-        });
-    }
-    rows.push(DetailRow {
-        cells: vec!["Addressing".to_owned(), format!("{:?}", ds.addressing())],
-        cell_types: vec![CellType::Text, CellType::Text],
-        indent: 0,
-        ..Default::default()
-    });
-    rows.push(DetailRow {
-        cells: vec![
-            "Transmission".to_owned(),
-            format!("{:?}", ds.transmission_mode()),
-        ],
-        cell_types: vec![CellType::Text, CellType::Text],
-        indent: 0,
-        ..Default::default()
-    });
-
-    if let Some(parent_name) = parent_layer_name {
-        rows.push(DetailRow {
-            cells: vec!["Inherited From".to_owned(), parent_name],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            ..Default::default()
-        });
-    }
-
-    DetailSectionData {
-        title: "Overview".to_owned(),
-        render_as_header: false,
-        section_type: DetailSectionType::Overview,
-        content: DetailContent::Table {
-            header,
-            rows,
-            constraints: vec![
-                ColumnConstraint::Percentage(30),
-                ColumnConstraint::Percentage(70),
-            ],
-            use_row_selection: true,
-        },
-    }
 }

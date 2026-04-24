@@ -20,7 +20,7 @@ use crate::tree::{
 /// Build detailed sections for a diagnostic service with optional parent info.
 pub fn build_diag_comm_details_with_parent(
     ds: &DiagService<'_>,
-    parent_layer_name: Option<String>,
+    parent_layer_name: Option<&str>,
 ) -> Vec<DetailSectionData> {
     let mut sections: Vec<DetailSectionData> = Vec::new();
 
@@ -202,15 +202,12 @@ pub(super) fn build_diag_comms_table_section(
     }
 }
 
-fn build_overview_section(
+/// Build the common property/value overview rows shared by all service views
+/// (`DiagComms`, Requests, Responses).
+pub(crate) fn build_service_overview_rows(
     ds: &DiagService<'_>,
-    parent_layer_name: Option<String>,
-) -> DetailSectionData {
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
-
+    parent_layer_name: Option<&str>,
+) -> Vec<DetailRow> {
     let mut rows = Vec::new();
 
     if let Some(dc) = ds.diag_comm() {
@@ -267,8 +264,43 @@ fn build_overview_section(
     ));
 
     if let Some(parent_name) = parent_layer_name {
-        rows.push(DetailRow::inherited_from(parent_name));
+        rows.push(DetailRow::inherited_from(parent_name.to_owned()));
     }
+
+    rows
+}
+
+/// Build a complete overview `DetailSectionData` from overview rows.
+pub(crate) fn build_service_overview_section(
+    ds: &DiagService<'_>,
+    parent_layer_name: Option<&str>,
+) -> DetailSectionData {
+    let rows = build_service_overview_rows(ds, parent_layer_name);
+
+    DetailSectionData::new(
+        "Overview".to_owned(),
+        DetailContent::Table {
+            header: DetailRow::header(
+                vec!["Property".to_owned(), "Value".to_owned()],
+                vec![CellType::Text, CellType::Text],
+            ),
+            rows,
+            constraints: vec![
+                ColumnConstraint::Percentage(30),
+                ColumnConstraint::Percentage(70),
+            ],
+            use_row_selection: true,
+        },
+        false,
+    )
+    .with_type(DetailSectionType::Overview)
+}
+
+fn build_overview_section(
+    ds: &DiagService<'_>,
+    parent_layer_name: Option<&str>,
+) -> DetailSectionData {
+    let mut rows = build_service_overview_rows(ds, parent_layer_name);
 
     if let Some(dc) = ds.diag_comm() {
         let states: Vec<String> = dc
@@ -305,7 +337,10 @@ fn build_overview_section(
     DetailSectionData::new(
         "Overview".to_owned(),
         DetailContent::Table {
-            header,
+            header: DetailRow::header(
+                vec!["Property".to_owned(), "Value".to_owned()],
+                vec![CellType::Text, CellType::Text],
+            ),
             rows,
             constraints: vec![
                 ColumnConstraint::Percentage(30),

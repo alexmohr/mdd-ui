@@ -102,7 +102,8 @@ pub fn add_diag_comms<'a>(
             let Some(display_name) = format_service_display_name(ds) else {
                 continue;
             };
-            let sections = build_diag_comm_details_with_parent(ds, Some(source_layer_name.clone()));
+            let sections =
+                build_diag_comm_details_with_parent(ds, Some(source_layer_name.as_str()));
 
             b.push_details_structured(
                 depth.saturating_add(1),

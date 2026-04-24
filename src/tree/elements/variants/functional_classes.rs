@@ -5,6 +5,7 @@
 
 use cda_database::datatypes::{DiagLayer, DiagService, Variant};
 
+use super::format_service_id;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
@@ -233,19 +234,11 @@ fn build_service_row(service: &DiagService<'_>, layer_name: &str) -> Option<Deta
     let short_name = dc.short_name().unwrap_or("?").to_owned();
     let service_type = "Service".to_owned();
 
-    let sid_rq = if let Some(sid) = service.request_id() {
-        if let Some((sub_fn, bit_len)) = service.request_sub_function_id() {
-            let sub_fn_str = if bit_len <= 8 {
-                format!("{sub_fn:02X}")
-            } else {
-                format!("{sub_fn:04X}")
-            };
-            format!("0x{sid:02X}{sub_fn_str}")
-        } else {
-            format!("0x{sid:02X}")
-        }
-    } else {
+    let id_str = format_service_id(service);
+    let sid_rq = if id_str.is_empty() {
         "-".to_owned()
+    } else {
+        id_str
     };
 
     let semantic = dc.semantic().unwrap_or("-").to_owned();

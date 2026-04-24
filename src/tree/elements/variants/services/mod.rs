@@ -7,6 +7,7 @@ mod details;
 mod diag_comms;
 
 use cda_database::datatypes::{ParamType, Parameter};
+pub(crate) use details::build_service_overview_section;
 pub use diag_comms::{add_diag_comms, get_parent_ref_services_recursive};
 
 /// Extract the hex-formatted coded value from a `CodedConst` parameter.
