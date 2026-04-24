@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::types::{DetailSectionData, NodeType, SectionType, ServiceListType, TreeNode};
 
@@ -42,7 +42,7 @@ impl TreeBuilder {
             text: cfg.text,
             expanded: cfg.expanded,
             has_children: cfg.has_children,
-            detail_sections: Rc::from(cfg.sections),
+            detail_sections: Arc::from(cfg.sections),
             node_type: cfg.node_type,
             section_type: cfg.section_type,
             service_list_type: cfg.service_list_type,

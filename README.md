@@ -104,6 +104,50 @@ mdd-ui export-diff old_ecu.mdd new_ecu.mdd -o diff_report.txt
 mdd-ui export-diff old_ecu.mdd new_ecu.mdd  # prints to stdout
 ```
 
+### MCP Server Mode
+
+mdd-ui can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server over stdio, allowing AI assistants to browse, search, and diff MDD databases programmatically.
+
+This requires building with the `mcp` feature:
+
+```sh
+cargo build --release --features mcp
+```
+
+Then start the server:
+
+```sh
+mdd-ui mcp
+```
+
+#### Available MCP Tools
+
+| Tool | Description |
+|---|---|
+| `load_mdd` | Load an MDD file and return an ECU summary (name, variant count, etc.). Must be called before other read tools. |
+| `browse_tree` | Navigate the tree hierarchy with optional depth limit and start index. |
+| `get_node_details` | Get detailed information (overview tables, parameters, etc.) for a node by index. |
+| `search_nodes` | Case-insensitive text search across all tree nodes. |
+| `diff_mdd` | Compare two MDD files and return an annotated diff tree. |
+| `export_diff` | Generate a full text diff report with property-level changes. |
+
+#### OpenCode Configuration
+
+To use the MCP server with [OpenCode](https://opencode.ai), add the following to your `opencode.json` (either in your project root or `~/.config/opencode/opencode.json`):
+
+```json
+{
+  "mcp": {
+    "mdd-ui": {
+      "type": "local",
+      "command": ["path/to/mdd-ui", "mcp"]
+    }
+  }
+}
+```
+
+Replace `path/to/mdd-ui` with the actual path to your built binary (e.g., `target/release/mdd-ui`).
+
 ## Keybindings
 
 ### Navigation
@@ -219,6 +263,14 @@ src/
 ├── database/            # MDD file loading and data extraction
 │   ├── mod.rs
 │   └── reader.rs
+├── diff/                # Diff functionality
+│   ├── mod.rs
+│   ├── snapshot.rs
+│   ├── compare.rs
+│   ├── diff_tree.rs
+│   └── export.rs
+├── mcp/                 # MCP server (optional, behind "mcp" feature)
+│   └── mod.rs
 └── tree/                # Tree model
     ├── mod.rs           #   build_tree entry point
     ├── builder.rs       #   TreeBuilder helper
@@ -245,6 +297,8 @@ src/
 | [clap](https://docs.rs/clap) | Command-line argument parsing |
 | [anyhow](https://docs.rs/anyhow) | Ergonomic error handling |
 | [serde](https://serde.rs) + [toml](https://docs.rs/toml) | Theme configuration deserialization |
+| [rmcp](https://github.com/modelcontextprotocol/rust-sdk) | MCP server SDK (optional, `mcp` feature) |
+| [tokio](https://tokio.rs) | Async runtime for MCP server (optional, `mcp` feature) |
 
 ## License
 

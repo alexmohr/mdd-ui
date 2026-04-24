@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Alexander Mohr
+
+# taplo v0.9.3 and the schemastore Cargo.toml schema both lack support for the
+# [lints] table (stabilized in Rust 1.74). Disable schema validation for
+# Cargo.toml until taplo ships an updated schema.
+[[rule]]
+include = ["**/Cargo.toml"]
+
+[rule.schema]
+enabled = false

@@ -7,6 +7,9 @@ version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 
+[features]
+mcp = ["dep:rmcp", "dep:tokio", "dep:serde_json"]
+
 [dependencies]
 cda-database = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "c1c9db5c9b95b790fa3e905ac1c04d38880a532e" }
 cda-interfaces = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "c1c9db5c9b95b790fa3e905ac1c04d38880a532e" }
@@ -28,6 +31,15 @@ arboard = "3"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
+# MCP server (optional)
+rmcp = { version = "1.5", features = [
+  "server",
+  "transport-io",
+  "macros",
+], optional = true }
+tokio = { version = "1", features = ["rt", "macros"], optional = true }
+serde_json = { version = "1", optional = true }
+
 [patch.crates-io]
 flatbuffers = { git = "https://github.com/alexmohr/flatbuffers.git", rev = "0ba3307d" }
 
@@ -43,3 +55,6 @@ indexing_slicing = "deny"
 unwrap_used = "deny"
 arithmetic_side_effects = "deny"
 separated_literal_suffix = "deny"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }

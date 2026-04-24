@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use ratatui::{
     Frame,
@@ -36,7 +36,7 @@ impl App {
             return;
         };
         let node_text = selected_node.text.clone();
-        let detail_sections = Rc::clone(&selected_node.detail_sections);
+        let detail_sections = Arc::clone(&selected_node.detail_sections);
 
         if detail_sections.is_empty() {
             // Draw a default/dummy pane with helpful information
