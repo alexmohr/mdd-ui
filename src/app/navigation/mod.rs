@@ -76,14 +76,7 @@ impl App {
             return;
         }
 
-        if matches!(
-            node.node_type,
-            NodeType::Service
-                | NodeType::ParentRefService
-                | NodeType::Request
-                | NodeType::PosResponse
-                | NodeType::NegResponse
-        ) {
+        if node.node_type.is_service() {
             self.handle_service_node_enter();
             return;
         }

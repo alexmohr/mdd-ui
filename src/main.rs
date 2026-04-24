@@ -98,16 +98,13 @@ fn load_theme(theme_file: Option<&str>) -> app::config::ResolvedTheme {
     app::config::ResolvedTheme::from(&config.colors)
 }
 
-fn run_browse(mdd_file: &str, theme_file: Option<&str>) -> Result<()> {
-    let theme = load_theme(theme_file);
-
-    eprintln!("Loading {mdd_file}...");
-    let db = database::load_mdd(mdd_file).with_context(|| format!("Failed to load: {mdd_file}"))?;
-
-    eprintln!("Building tree...");
-    let (nodes, ecu_name) = tree::build_tree(&db, mdd_file);
-    eprintln!("Loaded {} nodes. Starting UI...", nodes.len());
-
+/// Shared TUI bootstrap: terminal init, panic hook, `App::run()`, and restore.
+fn run_tui(
+    nodes: Vec<tree::TreeNode>,
+    ecu_name: String,
+    theme: app::config::ResolvedTheme,
+    is_diff_mode: bool,
+) -> Result<()> {
     let mut terminal = ratatui::init();
     crossterm::execute!(std::io::stdout(), crossterm::event::EnableMouseCapture)
         .context("Failed to enable mouse capture")?;
@@ -120,11 +117,24 @@ fn run_browse(mdd_file: &str, theme_file: Option<&str>) -> Result<()> {
         original_hook(panic_info);
     }));
 
-    let result = app::App::new(nodes, ecu_name, theme, false).run(&mut terminal);
+    let result = app::App::new(nodes, ecu_name, theme, is_diff_mode).run(&mut terminal);
 
     restore_terminal();
 
     result.context("TUI error")
+}
+
+fn run_browse(mdd_file: &str, theme_file: Option<&str>) -> Result<()> {
+    let theme = load_theme(theme_file);
+
+    eprintln!("Loading {mdd_file}...");
+    let db = database::load_mdd(mdd_file).with_context(|| format!("Failed to load: {mdd_file}"))?;
+
+    eprintln!("Building tree...");
+    let (nodes, ecu_name) = tree::build_tree(&db, mdd_file);
+    eprintln!("Loaded {} nodes. Starting UI...", nodes.len());
+
+    run_tui(nodes, ecu_name, theme, false)
 }
 
 fn run_diff(old_file: &str, new_file: &str, theme_file: Option<&str>) -> Result<()> {
@@ -142,22 +152,7 @@ fn run_diff(old_file: &str, new_file: &str, theme_file: Option<&str>) -> Result<
     let (nodes, ecu_name) = diff::diff_tree::build_diff_tree(&db_old, &db_new, old_file, new_file);
     eprintln!("Built {} diff tree nodes. Starting UI...", nodes.len());
 
-    let mut terminal = ratatui::init();
-    crossterm::execute!(std::io::stdout(), crossterm::event::EnableMouseCapture)
-        .context("Failed to enable mouse capture")?;
-
-    // Install a panic hook that restores the terminal before printing the panic message.
-    let original_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        restore_terminal();
-        original_hook(panic_info);
-    }));
-
-    let result = app::App::new(nodes, ecu_name, theme, true).run(&mut terminal);
-
-    restore_terminal();
-
-    result.context("TUI error")
+    run_tui(nodes, ecu_name, theme, true)
 }
 
 fn run_export_diff(old_file: &str, new_file: &str, output: Option<&str>) -> Result<()> {

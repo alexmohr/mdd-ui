@@ -21,6 +21,7 @@ struct NodeConfig {
     service_list_type: Option<ServiceListType>,
     param_id: Option<u32>,
     parent_ref_names: Vec<String>,
+    short_name: Option<String>,
 }
 
 /// Accumulates `TreeNode`s while walking the database model.
@@ -48,6 +49,8 @@ impl TreeBuilder {
             service_list_type: cfg.service_list_type,
             param_id: cfg.param_id,
             parent_ref_names: cfg.parent_ref_names,
+            short_name: cfg.short_name,
+            parent_idx: None,
             diff_status: None,
         });
     }
@@ -98,6 +101,7 @@ impl TreeBuilder {
     pub(crate) fn push_container(
         &mut self,
         depth: usize,
+        short_name: String,
         text: String,
         sections: Vec<DetailSectionData>,
         parent_ref_names: Vec<String>,
@@ -109,6 +113,7 @@ impl TreeBuilder {
             sections,
             node_type: NodeType::Container,
             parent_ref_names,
+            short_name: Some(short_name),
             ..NodeConfig::default()
         });
     }
@@ -155,7 +160,29 @@ impl TreeBuilder {
         });
     }
 
-    pub(crate) fn finish(self) -> Vec<TreeNode> {
+    pub(crate) fn finish(mut self) -> Vec<TreeNode> {
+        Self::compute_parent_indices(&mut self.nodes);
         self.nodes
+    }
+
+    /// Populate `parent_idx` for every node by tracking the most recent
+    /// ancestor at each depth level during a single forward pass.
+    fn compute_parent_indices(nodes: &mut [TreeNode]) {
+        // parent_at_depth[d] = index of the most recent node at depth d.
+        let max_depth = nodes.iter().map(|n| n.depth).max().unwrap_or(0);
+        let mut parent_at_depth = vec![0usize; max_depth.saturating_add(1)];
+
+        for i in 0..nodes.len() {
+            let depth = nodes.get(i).map_or(0, |n| n.depth);
+            if let Some(slot) = parent_at_depth.get_mut(depth) {
+                *slot = i;
+            }
+            if depth > 0 {
+                let parent = parent_at_depth.get(depth.saturating_sub(1)).copied();
+                if let Some(n) = nodes.get_mut(i) {
+                    n.parent_idx = parent;
+                }
+            }
+        }
     }
 }

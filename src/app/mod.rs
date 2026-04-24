@@ -73,65 +73,106 @@ pub(crate) enum SearchScope {
     Subtree { root_idx: usize, root_name: String },
 }
 
-impl std::fmt::Display for SearchScope {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SearchScope::All => write!(f, "All"),
-            SearchScope::Variants => write!(f, "Variants"),
-            SearchScope::FunctionalGroups => write!(f, "Functional Groups"),
-            SearchScope::EcuSharedData => write!(f, "ECU Shared Data"),
-            SearchScope::Services => write!(f, "Services"),
-            SearchScope::DiagComms => write!(f, "Diag-Comms"),
-            SearchScope::Requests => write!(f, "Requests"),
-            SearchScope::Responses => write!(f, "Responses"),
-            SearchScope::Subtree { root_name, .. } => write!(f, "in {root_name}"),
-        }
-    }
+/// Static display strings for a `SearchScope` variant.
+struct ScopeMetadata {
+    display_name: &'static str,
+    search_indicator: &'static str,
+    status_indicator: &'static str,
+    abbrev: &'static str,
 }
 
 impl SearchScope {
+    /// Return the display metadata for this scope variant (single match).
+    fn metadata(&self) -> &'static ScopeMetadata {
+        static ALL: ScopeMetadata = ScopeMetadata {
+            display_name: "All",
+            search_indicator: "",
+            status_indicator: "",
+            abbrev: "",
+        };
+        static VARIANTS: ScopeMetadata = ScopeMetadata {
+            display_name: "Variants",
+            search_indicator: " [variants]",
+            status_indicator: " | scope: variants",
+            abbrev: "[V]",
+        };
+        static FG: ScopeMetadata = ScopeMetadata {
+            display_name: "Functional Groups",
+            search_indicator: " [functional groups]",
+            status_indicator: " | scope: functional groups",
+            abbrev: "[FG]",
+        };
+        static ESD: ScopeMetadata = ScopeMetadata {
+            display_name: "ECU Shared Data",
+            search_indicator: " [ECU shared data]",
+            status_indicator: " | scope: ECU shared data",
+            abbrev: "[ESD]",
+        };
+        static SERVICES: ScopeMetadata = ScopeMetadata {
+            display_name: "Services",
+            search_indicator: " [services]",
+            status_indicator: " | scope: services",
+            abbrev: "[S]",
+        };
+        static DC: ScopeMetadata = ScopeMetadata {
+            display_name: "Diag-Comms",
+            search_indicator: " [diag-comms]",
+            status_indicator: " | scope: diag-comms",
+            abbrev: "[D]",
+        };
+        static RQ: ScopeMetadata = ScopeMetadata {
+            display_name: "Requests",
+            search_indicator: " [requests]",
+            status_indicator: " | scope: requests",
+            abbrev: "[Rq]",
+        };
+        static RS: ScopeMetadata = ScopeMetadata {
+            display_name: "Responses",
+            search_indicator: " [responses]",
+            status_indicator: " | scope: responses",
+            abbrev: "[Rs]",
+        };
+        static ST: ScopeMetadata = ScopeMetadata {
+            display_name: "Subtree",
+            search_indicator: " [subtree]",
+            status_indicator: " | scope: subtree",
+            abbrev: "[ST]",
+        };
+
+        match self {
+            SearchScope::All => &ALL,
+            SearchScope::Variants => &VARIANTS,
+            SearchScope::FunctionalGroups => &FG,
+            SearchScope::EcuSharedData => &ESD,
+            SearchScope::Services => &SERVICES,
+            SearchScope::DiagComms => &DC,
+            SearchScope::Requests => &RQ,
+            SearchScope::Responses => &RS,
+            SearchScope::Subtree { .. } => &ST,
+        }
+    }
+
     /// Returns the scope indicator for search mode (e.g., " [variants]")
     pub(crate) fn search_indicator(&self) -> &str {
-        match self {
-            SearchScope::All => "",
-            SearchScope::Variants => " [variants]",
-            SearchScope::FunctionalGroups => " [functional groups]",
-            SearchScope::EcuSharedData => " [ECU shared data]",
-            SearchScope::Services => " [services]",
-            SearchScope::DiagComms => " [diag-comms]",
-            SearchScope::Requests => " [requests]",
-            SearchScope::Responses => " [responses]",
-            SearchScope::Subtree { .. } => " [subtree]",
-        }
+        self.metadata().search_indicator
     }
 
     /// Returns the scope indicator for status line (e.g., " | scope: variants")
     pub(crate) fn status_indicator(&self) -> &str {
-        match self {
-            SearchScope::All => "",
-            SearchScope::Variants => " | scope: variants",
-            SearchScope::FunctionalGroups => " | scope: functional groups",
-            SearchScope::EcuSharedData => " | scope: ECU shared data",
-            SearchScope::Services => " | scope: services",
-            SearchScope::DiagComms => " | scope: diag-comms",
-            SearchScope::Requests => " | scope: requests",
-            SearchScope::Responses => " | scope: responses",
-            SearchScope::Subtree { .. } => " | scope: subtree",
-        }
+        self.metadata().status_indicator
     }
 
     /// Returns the abbreviated scope indicator (e.g., "[V]" for Variants)
     pub(crate) fn abbrev(&self) -> &str {
+        self.metadata().abbrev
+    }
+}
+
+impl std::fmt::Display for SearchScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SearchScope::All => "",
-            SearchScope::Variants => "[V]",
-            SearchScope::FunctionalGroups => "[FG]",
-            SearchScope::EcuSharedData => "[ESD]",
-            SearchScope::Services => "[S]",
-            SearchScope::DiagComms => "[D]",
-            SearchScope::Requests => "[Rq]",
-            SearchScope::Responses => "[Rs]",
-            SearchScope::Subtree { .. } => "[ST]",
+            SearchScope::Subtree { root_name, .. } => write!(f, "in {root_name}"),
+            other => f.write_str(other.metadata().display_name),
         }
     }
 }
@@ -427,10 +468,16 @@ impl App {
         matches!(&node.service_list_type, Some(t) if *t == list_type)
     }
 
-    /// Walk backwards from `node_idx` to find the nearest ancestor (first
-    /// node with a strictly smaller depth) and return its index.
+    /// Return the index of this node's direct parent.
+    ///
+    /// Uses the pre-computed `parent_idx` field when available, falling
+    /// back to a backward scan for nodes built without it (e.g. diff merge).
     fn find_parent_idx(&self, node_idx: usize) -> Option<usize> {
         let node = self.tree.all_nodes.get(node_idx)?;
+        if let Some(pi) = node.parent_idx {
+            return Some(pi);
+        }
+        // Fallback for nodes without pre-computed parent_idx
         (0..node_idx).rev().find(|&i| {
             self.tree
                 .all_nodes
@@ -521,10 +568,7 @@ impl App {
             && let Some(node) = self.tree.all_nodes.get(node_idx)
         {
             // For backward compatibility, still save diagcomm tab
-            if matches!(
-                node.node_type,
-                NodeType::Service | NodeType::ParentRefService | NodeType::Job
-            ) {
+            if node.node_type.is_diagcomm() {
                 self.detail.last_diagcomm_tab = new_tab;
             }
 
@@ -686,5 +730,59 @@ impl App {
         if self.focus_state == FocusState::HelpPopup {
             self.draw_help_popup(frame);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_scope_display_all() {
+        assert_eq!(SearchScope::All.to_string(), "All");
+    }
+
+    #[test]
+    fn search_scope_display_subtree() {
+        let scope = SearchScope::Subtree {
+            root_idx: 0,
+            root_name: "MyNode".into(),
+        };
+        assert_eq!(scope.to_string(), "in MyNode");
+    }
+
+    #[test]
+    fn search_scope_metadata_consistency() {
+        for scope in [
+            SearchScope::All,
+            SearchScope::Variants,
+            SearchScope::FunctionalGroups,
+            SearchScope::EcuSharedData,
+            SearchScope::Services,
+            SearchScope::DiagComms,
+            SearchScope::Requests,
+            SearchScope::Responses,
+        ] {
+            let display = scope.to_string();
+            let _search = scope.search_indicator();
+            let _status = scope.status_indicator();
+            let _abbrev = scope.abbrev();
+            // All methods should return non-panicking for every variant
+            assert!(!display.is_empty());
+        }
+    }
+
+    #[test]
+    fn search_scope_all_has_empty_indicators() {
+        assert_eq!(SearchScope::All.search_indicator(), "");
+        assert_eq!(SearchScope::All.status_indicator(), "");
+        assert_eq!(SearchScope::All.abbrev(), "");
+    }
+
+    #[test]
+    fn search_scope_variants_indicators() {
+        assert_eq!(SearchScope::Variants.search_indicator(), " [variants]");
+        assert_eq!(SearchScope::Variants.status_indicator(), " | scope: variants");
+        assert_eq!(SearchScope::Variants.abbrev(), "[V]");
     }
 }

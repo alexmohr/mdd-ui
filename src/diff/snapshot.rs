@@ -13,6 +13,8 @@ use cda_database::datatypes::{
     DiagComm, DiagLayer, DiagService, DiagnosticDatabase, ParamType, Parameter, StateChart, Variant,
 };
 
+use crate::tree::param_type_label;
+
 /// Shorthand: convert `Option<&str>` to an owned `String`, defaulting to empty.
 fn s(opt: Option<&str>) -> String {
     opt.map_or_else(String::new, str::to_owned)
@@ -32,24 +34,6 @@ macro_rules! collect_short_names {
             .filter_map(|item| item.short_name().map(str::to_owned))
             .collect::<Vec<String>>()
     };
-}
-
-/// Format a `ParamType` as a human-readable string.
-fn param_type_name(pt: &ParamType) -> &'static str {
-    match pt {
-        ParamType::CodedConst => "CodedConst",
-        ParamType::Dynamic => "Dynamic",
-        ParamType::LengthKey => "LengthKey",
-        ParamType::MatchingRequestParam => "MatchingRequestParam",
-        ParamType::NrcConst => "NrcConst",
-        ParamType::PhysConst => "PhysConst",
-        ParamType::Reserved => "Reserved",
-        ParamType::System => "System",
-        ParamType::TableEntry => "TableEntry",
-        ParamType::TableKey => "TableKey",
-        ParamType::TableStruct => "TableStruct",
-        ParamType::Value => "Value",
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +362,7 @@ impl DiagLayerSnapshot {
             funct_classes,
         }
     }
+}
 
 impl Default for DiagLayerSnapshot {
     fn default() -> Self {
@@ -390,7 +375,6 @@ impl Default for DiagLayerSnapshot {
             funct_classes: Vec::new(),
         }
     }
-}
 }
 
 // ---------------------------------------------------------------------------
@@ -519,6 +503,7 @@ impl DiagCommSnapshot {
             audience,
         }
     }
+}
 
 impl Default for DiagCommSnapshot {
     fn default() -> Self {
@@ -550,7 +535,7 @@ impl ParamSnapshot {
 
         let param_type = param.param_type().map_or_else(
             |_| "Unknown".to_owned(),
-            |pt| param_type_name(&pt).to_owned(),
+            |pt| param_type_label(&pt).to_owned(),
         );
 
         let specific_data_summary = build_specific_data_summary(param);

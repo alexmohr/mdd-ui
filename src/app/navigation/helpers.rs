@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashSet};
 
 use crate::{
     app::{App, FocusState, SCROLL_CONTEXT_LINES},
@@ -106,12 +106,9 @@ impl App {
                 return false;
             }
 
-            let node_name = node
-                .text
-                .find(" [")
-                .map_or(node.text.as_str(), |idx| &node.text[..idx]);
-
-            node_name == name
+            node.short_name
+                .as_deref()
+                .is_some_and(|sn| sn == name)
         })
     }
 
@@ -213,17 +210,16 @@ impl App {
         &self,
         container_idx: usize,
         predicate: &impl Fn(&TreeNode) -> bool,
-        visited: &mut Vec<usize>,
+        visited: &mut HashSet<usize>,
     ) -> Option<usize> {
         let container = self.tree.all_nodes.get(container_idx)?;
         let parent_names = &container.parent_ref_names;
 
         parent_names.iter().find_map(|parent_name| {
             let pc_idx = self.find_container_by_name(parent_name)?;
-            if visited.contains(&pc_idx) {
+            if !visited.insert(pc_idx) {
                 return None;
             }
-            visited.push(pc_idx);
 
             let (pc_start, pc_end) = self.subtree_range(pc_idx);
             self.find_in_subtree(pc_start, pc_end, predicate)
@@ -314,7 +310,7 @@ impl App {
         }
 
         // 5. Walk parent-ref containers using the DB-derived hierarchy
-        let mut visited = vec![c_idx];
+        let mut visited = HashSet::from([c_idx]);
         self.walk_parent_refs(c_idx, &predicate, &mut visited)
     }
 
@@ -392,7 +388,7 @@ impl App {
         }
 
         // Walk parent-ref containers
-        let mut visited = vec![container_idx];
+        let mut visited = HashSet::from([container_idx]);
         self.walk_parent_refs_by_path(container_idx, target_list_type, service_name, &mut visited)
     }
 
@@ -414,17 +410,16 @@ impl App {
         container_idx: usize,
         target_list_type: ServiceListType,
         service_name: &str,
-        visited: &mut Vec<usize>,
+        visited: &mut HashSet<usize>,
     ) -> Option<usize> {
         let container = self.tree.all_nodes.get(container_idx)?;
         let parent_names = &container.parent_ref_names;
 
         parent_names.iter().find_map(|parent_name| {
             let pc_idx = self.find_container_by_name(parent_name)?;
-            if visited.contains(&pc_idx) {
+            if !visited.insert(pc_idx) {
                 return None;
             }
-            visited.push(pc_idx);
 
             self.find_service_in_container_path(pc_idx, target_list_type, service_name)
                 .or_else(|| {
@@ -486,13 +481,10 @@ impl App {
     ///    navigation, e.g. variant → ECU Shared Data).
     pub(super) fn navigate_to_container_by_name(&mut self, target_short_name: &str) {
         let is_target = |n: &TreeNode| -> bool {
-            matches!(n.node_type, NodeType::Container) && {
-                let name = n
-                    .text
-                    .find(" [")
-                    .map_or(n.text.as_str(), |idx| &n.text[..idx]);
-                name == target_short_name
-            }
+            matches!(n.node_type, NodeType::Container)
+                && n.short_name
+                    .as_deref()
+                    .is_some_and(|sn| sn == target_short_name)
         };
 
         // 1. Search the DB hierarchy (current container + parent refs)

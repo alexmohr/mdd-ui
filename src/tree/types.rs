@@ -89,6 +89,28 @@ pub enum NodeType {
     Default,
 }
 
+impl NodeType {
+    /// Returns `true` for diagnostic-communication node types that represent a
+    /// service entry (Service, `ParentRefService`, Request, `PosResponse`,
+    /// `NegResponse`). Does **not** include `Job`.
+    pub const fn is_service(self) -> bool {
+        matches!(
+            self,
+            NodeType::Service
+                | NodeType::ParentRefService
+                | NodeType::Request
+                | NodeType::PosResponse
+                | NodeType::NegResponse
+        )
+    }
+
+    /// Returns `true` for nodes that live inside a Diag-Comms section:
+    /// all [`is_service`](Self::is_service) types **plus** `Job`.
+    pub const fn is_diagcomm(self) -> bool {
+        self.is_service() || matches!(self, NodeType::Job)
+    }
+}
+
 /// Diff status for comparison mode.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DiffStatus {
@@ -128,6 +150,14 @@ pub struct TreeNode {
     /// database hierarchy. Used by the navigation system to walk the DB
     /// inheritance chain instead of scanning the tree.
     pub parent_ref_names: Vec<String>,
+    /// Canonical short name for `Container` nodes, stored separately so that
+    /// identity comparisons do not need to parse the display `text` (which
+    /// may carry decorations like `" [base]"`).  `None` for non-container nodes.
+    pub short_name: Option<String>,
+    /// Index into `all_nodes` of this node's direct parent, computed at build
+    /// time. `None` for root (depth-0) nodes.  Enables O(1) parent lookups
+    /// instead of O(n) backward scans.
+    pub parent_idx: Option<usize>,
     /// Diff annotation for comparison mode. `None` in browse mode.
     pub diff_status: Option<DiffStatus>,
 }
@@ -204,7 +234,14 @@ pub enum ChildElementType {
 
 impl fmt::Display for ChildElementType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
+        f.write_str(self.as_str())
+    }
+}
+
+impl ChildElementType {
+    /// Return the display name as a static string without allocating.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
             ChildElementType::ComParamRefs => "ComParam Refs",
             ChildElementType::DiagComms => "Diag-Comms",
             ChildElementType::FunctionalClasses => "Functional Classes",
@@ -213,14 +250,12 @@ impl fmt::Display for ChildElementType {
             ChildElementType::Requests => "Requests",
             ChildElementType::SDGs => "SDGs",
             ChildElementType::StateCharts => "State Charts",
-        })
+        }
     }
-}
 
-impl ChildElementType {
     /// Check if a node text starts with this child element type's display name
     pub fn matches_node_text(&self, text: &str) -> bool {
-        text.starts_with(&self.to_string())
+        text.starts_with(self.as_str())
     }
 }
 
@@ -459,7 +494,128 @@ impl DetailRow {
     }
 }
 
+/// Map a `ParamType` value from the database crate to a static display label.
+///
+/// Centralised here so that every call-site (tree building, snapshot
+/// extraction, etc.) uses the same mapping.
+pub fn param_type_label(pt: &cda_database::datatypes::ParamType) -> &'static str {
+    use cda_database::datatypes::ParamType;
+    match pt {
+        ParamType::CodedConst => "CodedConst",
+        ParamType::Dynamic => "Dynamic",
+        ParamType::LengthKey => "LengthKey",
+        ParamType::MatchingRequestParam => "MatchingRequestParam",
+        ParamType::NrcConst => "NrcConst",
+        ParamType::PhysConst => "PhysConst",
+        ParamType::Reserved => "Reserved",
+        ParamType::System => "System",
+        ParamType::TableEntry => "TableEntry",
+        ParamType::TableKey => "TableKey",
+        ParamType::TableStruct => "TableStruct",
+        ParamType::Value => "Value",
+    }
+}
+
 /// Helper to create a plain text detail section
 pub fn lines_to_single_section(title: &str, lines: Vec<String>) -> DetailSectionData {
     DetailSectionData::new(title.to_owned(), DetailContent::PlainText(lines), false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---------------------------------------------------------------
+    // NodeType::is_service / is_diagcomm
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn is_service_includes_correct_variants() {
+        assert!(NodeType::Service.is_service());
+        assert!(NodeType::ParentRefService.is_service());
+        assert!(NodeType::Request.is_service());
+        assert!(NodeType::PosResponse.is_service());
+        assert!(NodeType::NegResponse.is_service());
+    }
+
+    #[test]
+    fn is_service_excludes_job_and_others() {
+        assert!(!NodeType::Job.is_service());
+        assert!(!NodeType::Container.is_service());
+        assert!(!NodeType::SectionHeader.is_service());
+        assert!(!NodeType::Dop.is_service());
+        assert!(!NodeType::Default.is_service());
+    }
+
+    #[test]
+    fn is_diagcomm_includes_service_plus_job() {
+        assert!(NodeType::Service.is_diagcomm());
+        assert!(NodeType::Job.is_diagcomm());
+        assert!(NodeType::ParentRefService.is_diagcomm());
+    }
+
+    #[test]
+    fn is_diagcomm_excludes_non_diagcomm() {
+        assert!(!NodeType::Container.is_diagcomm());
+        assert!(!NodeType::Dop.is_diagcomm());
+        assert!(!NodeType::Default.is_diagcomm());
+    }
+
+    // ---------------------------------------------------------------
+    // ChildElementType::as_str / matches_node_text
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn as_str_matches_display() {
+        for elem in [
+            ChildElementType::ComParamRefs,
+            ChildElementType::DiagComms,
+            ChildElementType::FunctionalClasses,
+            ChildElementType::NegResponses,
+            ChildElementType::PosResponses,
+            ChildElementType::Requests,
+            ChildElementType::SDGs,
+            ChildElementType::StateCharts,
+        ] {
+            assert_eq!(elem.as_str(), elem.to_string());
+        }
+    }
+
+    #[test]
+    fn matches_node_text_positive() {
+        assert!(ChildElementType::DiagComms.matches_node_text("Diag-Comms (5 services)"));
+        assert!(ChildElementType::Requests.matches_node_text("Requests"));
+    }
+
+    #[test]
+    fn matches_node_text_negative() {
+        assert!(!ChildElementType::DiagComms.matches_node_text("Requests (3)"));
+        assert!(!ChildElementType::Requests.matches_node_text("Pos-Responses"));
+    }
+
+    // ---------------------------------------------------------------
+    // param_type_label
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn param_type_label_covers_all_variants() {
+        use cda_database::datatypes::ParamType;
+        let all = [
+            (ParamType::CodedConst, "CodedConst"),
+            (ParamType::Dynamic, "Dynamic"),
+            (ParamType::LengthKey, "LengthKey"),
+            (ParamType::MatchingRequestParam, "MatchingRequestParam"),
+            (ParamType::NrcConst, "NrcConst"),
+            (ParamType::PhysConst, "PhysConst"),
+            (ParamType::Reserved, "Reserved"),
+            (ParamType::System, "System"),
+            (ParamType::TableEntry, "TableEntry"),
+            (ParamType::TableKey, "TableKey"),
+            (ParamType::TableStruct, "TableStruct"),
+            (ParamType::Value, "Value"),
+        ];
+        for (pt, expected) in all {
+            assert_eq!(param_type_label(&pt), expected);
+        }
+    }
 }

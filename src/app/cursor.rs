@@ -4,7 +4,6 @@
  */
 
 use super::{App, FocusState};
-use crate::tree::NodeType;
 
 impl App {
     /// Reset detail pane state when changing nodes
@@ -18,12 +17,7 @@ impl App {
             .visible
             .get(self.tree.cursor)
             .and_then(|&node_idx| self.tree.all_nodes.get(node_idx))
-            .is_some_and(|node| {
-                matches!(
-                    node.node_type,
-                    NodeType::Service | NodeType::ParentRefService | NodeType::Job
-                )
-            });
+            .is_some_and(|node| node.node_type.is_diagcomm());
 
         // Restore tab selection based on section type
         if is_diagcomm {

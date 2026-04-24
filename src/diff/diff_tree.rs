@@ -274,6 +274,11 @@ fn mark_subtree(node: &HierNode, status: DiffStatus) -> MergedNode {
 /// match even when cosmetic parts of the text differ (e.g. service IDs change,
 /// item counts change).
 fn match_key(node: &TreeNode) -> String {
+    // Container nodes carry a canonical short_name — use it directly.
+    if let Some(ref sn) = node.short_name {
+        return sn.clone();
+    }
+
     let text = node.text.strip_suffix(" [base]").unwrap_or(&node.text);
 
     // Service nodes: "[Service] 0x2E01 - WriteDID" → "WriteDID"
@@ -961,6 +966,8 @@ mod tests {
             service_list_type: None,
             param_id: None,
             parent_ref_names: Vec::new(),
+            short_name: None,
+            parent_idx: None,
             diff_status: None,
         }
     }
@@ -981,6 +988,8 @@ mod tests {
             service_list_type: None,
             param_id: None,
             parent_ref_names: Vec::new(),
+            short_name: None,
+            parent_idx: None,
             diff_status: None,
         }
     }

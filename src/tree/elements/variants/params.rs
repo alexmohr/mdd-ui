@@ -12,7 +12,7 @@ use super::{
 };
 use crate::tree::types::{
     BIT_POSITION_UNSET, CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint,
-    DetailContent, DetailRow, DetailSectionData, DetailSectionType,
+    DetailContent, DetailRow, DetailSectionData, DetailSectionType, param_type_label,
 };
 
 /// Build a key-value row for a DOP reference that is navigable via Enter.
@@ -37,25 +37,6 @@ fn dop_kv_row(dop_name: &str) -> DetailRow {
         ],
         0,
     )
-}
-
-/// Format a `ParamType` value as a static label.
-fn param_type_label(pt: &cda_database::datatypes::ParamType) -> &'static str {
-    use cda_database::datatypes::ParamType;
-    match pt {
-        ParamType::CodedConst => "CodedConst",
-        ParamType::Dynamic => "Dynamic",
-        ParamType::LengthKey => "LengthKey",
-        ParamType::MatchingRequestParam => "MatchingRequestParam",
-        ParamType::NrcConst => "NrcConst",
-        ParamType::PhysConst => "PhysConst",
-        ParamType::Reserved => "Reserved",
-        ParamType::System => "System",
-        ParamType::TableEntry => "TableEntry",
-        ParamType::TableKey => "TableKey",
-        ParamType::TableStruct => "TableStruct",
-        ParamType::Value => "Value",
-    }
 }
 
 /// Append detail rows for a `DiagCodedType` flatbuf value.  Implemented as a

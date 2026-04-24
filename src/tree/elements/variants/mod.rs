@@ -152,20 +152,22 @@ pub fn add_variants(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
 
         for (vi, variant) in variants.iter().enumerate() {
             let vw = VariantWrap(variant);
-            let mut name = vw
+            let short_name = vw
                 .diag_layer()
                 .and_then(|l| l.short_name().map(str::to_owned))
                 .unwrap_or_else(|| format!("variant_{vi}"));
             let is_base = vw.is_base_variant();
 
             // Add [base] suffix for base variants
-            if is_base {
-                name.push_str(" [base]");
-            }
+            let display_name = if is_base {
+                format!("{short_name} [base]")
+            } else {
+                short_name.clone()
+            };
 
             let mut detail_sections = vec![];
 
-            detail_sections.extend(build_variant_summary_section(&vw, &name));
+            detail_sections.extend(build_variant_summary_section(&vw, &display_name));
 
             // Add parent refs section if present
             if let Some(parent_refs_section) = build_parent_refs_detail_section(
@@ -181,7 +183,7 @@ pub fn add_variants(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                     .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
             );
 
-            b.push_container(1, name.clone(), detail_sections, parent_ref_names);
+            b.push_container(1, short_name, display_name, detail_sections, parent_ref_names);
 
             // Add diag layer content directly under variant (no section header)
             if let Some(dl) = vw.diag_layer() {
@@ -242,7 +244,7 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                         .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
                 );
 
-                b.push_container(1, name.to_string(), detail_sections, parent_ref_names);
+                b.push_container(1, name.to_string(), name.to_string(), detail_sections, parent_ref_names);
 
                 // Pass parent refs from functional group for inherited elements
                 let parent_refs_iter = fg
@@ -345,7 +347,7 @@ fn add_layer_section(
         let detail_sections = build_layer_summary_section(layer, name);
 
         // ECU Shared Data / Protocols are at the top of the hierarchy — no parent refs
-        b.push_container(1, name.to_string(), detail_sections, Vec::new());
+        b.push_container(1, name.to_string(), name.to_string(), detail_sections, Vec::new());
 
         b.add_diag_layer_structured(
             layer,
@@ -420,7 +422,7 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
 
         // Protocols are at the top of the hierarchy — their parent refs are handled
         // by the layers that reference them (variants, functional groups)
-        b.push_container(1, name.to_string(), detail_sections, Vec::new());
+        b.push_container(1, name.to_string(), name.to_string(), detail_sections, Vec::new());
 
         b.add_diag_layer_structured(
             layer,

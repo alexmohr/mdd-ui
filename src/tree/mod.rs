@@ -15,7 +15,7 @@ pub use types::{
     CellJumpTarget, CellJumpTargetType, CellType, ChildElementType, ColumnConstraint,
     DetailContent, DetailRow, DetailRowType, DetailSectionData, DetailSectionType, DiffStatus,
     NodeTextPrefix, NodeType, RowMetadata, SectionType, ServiceListType, TreeNode,
-    lines_to_single_section,
+    lines_to_single_section, param_type_label,
 };
 
 use crate::database::{extract_data, get_ecu_summary};

@@ -233,14 +233,7 @@ impl App {
                     && self
                         .is_under_section_type(node_idx, crate::tree::SectionType::EcuSharedData))
             }
-            SearchScope::Services => matches!(
-                node.node_type,
-                NodeType::Service
-                    | NodeType::ParentRefService
-                    | NodeType::Request
-                    | NodeType::PosResponse
-                    | NodeType::NegResponse
-            ),
+            SearchScope::Services => node.node_type.is_service(),
             SearchScope::DiagComms => {
                 Self::is_service_list_type(node, crate::tree::ServiceListType::DiagComms)
                     || matches!(
