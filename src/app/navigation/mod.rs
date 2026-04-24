@@ -137,19 +137,19 @@ impl App {
                     None
                 };
 
-            let focused_col = self.get_focused_column(&selected_row.cell_types);
+            let focused_col = self.get_focused_column(&selected_row.cells);
 
             let nav_col = if ctx.use_row_selection
                 && selected_row
-                    .cell_jump_targets
+                    .cells
                     .get(focused_col)
-                    .and_then(|t| t.as_ref())
+                    .and_then(|c| c.jump_target.as_ref())
                     .is_none()
             {
                 selected_row
-                    .cell_jump_targets
+                    .cells
                     .iter()
-                    .position(Option::is_some)
+                    .position(|c| c.jump_target.is_some())
                     .unwrap_or(focused_col)
             } else {
                 focused_col
@@ -158,12 +158,11 @@ impl App {
             let cell_value = selected_row
                 .cells
                 .get(nav_col)
-                .map_or_else(Default::default, Clone::clone);
+                .map_or_else(String::default, |c| c.text.clone());
             let jump_target = selected_row
-                .cell_jump_targets
+                .cells
                 .get(nav_col)
-                .cloned()
-                .flatten();
+                .and_then(|c| c.jump_target.clone());
 
             (node_idx, node_depth, element_type, cell_value, jump_target)
         };

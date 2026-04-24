@@ -5,7 +5,7 @@
 
 use super::kv_row;
 use crate::tree::types::{
-    CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
+    CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent, DetailRow,
     DetailSectionData, DetailSectionType,
 };
 
@@ -22,15 +22,7 @@ pub(super) fn build_mux_dop_tabs(
 
     let mut general_rows = Vec::new();
 
-    general_rows.push(DetailRow {
-        cells: vec!["Switch Key".to_owned(), String::new()],
-        cell_types: vec![CellType::Text, CellType::Text],
-        cell_jump_targets: vec![None, None],
-        indent: 0,
-        row_type: DetailRowType::Header,
-        metadata: None,
-        diff_status: None,
-    });
+    general_rows.push(DetailRow::header(vec![DetailCell::text("Switch Key"), DetailCell::text("")]));
 
     if let Some(switch_key) = mux_dop.switch_key() {
         if let Some(dop) = switch_key.dop() {
@@ -53,25 +45,14 @@ pub(super) fn build_mux_dop_tabs(
         }
     }
 
-    general_rows.push(DetailRow {
-        cells: vec!["Default Case".to_owned(), String::new()],
-        cell_types: vec![CellType::Text, CellType::Text],
-        cell_jump_targets: vec![None, None],
-        indent: 0,
-        row_type: DetailRowType::Header,
-        metadata: None,
-        diff_status: None,
-    });
+    general_rows.push(DetailRow::header(vec![DetailCell::text("Default Case"), DetailCell::text("")]));
 
     if let Some(default_case) = mux_dop.default_case() {
         let dc_name = default_case.short_name().unwrap_or("-").to_owned();
         general_rows.push(kv_row("Short Name", dc_name, CellType::Text, 1));
     }
 
-    let general_header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let general_header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     sections.push(
         DetailSectionData::new(
@@ -103,22 +84,12 @@ fn build_cases_section(mux_dop: &cda_database::datatypes::MuxDop<'_>) -> DetailS
         };
     };
 
-    let cases_header = DetailRow {
-        cells: vec![
-            "Short Name".to_owned(),
-            "Struct".to_owned(),
-            "Lower Limit".to_owned(),
-            "Upper Limit".to_owned(),
-        ],
-        cell_types: vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::NumericValue,
-            CellType::NumericValue,
-        ],
-        indent: 0,
-        ..Default::default()
-    };
+    let cases_header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("Struct"),
+        DetailCell::new("Lower Limit", CellType::NumericValue),
+        DetailCell::new("Upper Limit", CellType::NumericValue),
+    ]);
 
     let rows: Vec<DetailRow> = cases
         .iter()
@@ -142,23 +113,25 @@ fn build_cases_section(mux_dop: &cda_database::datatypes::MuxDop<'_>) -> DetailS
             });
             let struct_display = struct_name.clone().unwrap_or_else(|| "-".to_owned());
 
-            DetailRow {
-                cells: vec![name, struct_display, lower, upper],
-                cell_types: vec![
-                    CellType::Text,
-                    if struct_name.is_some() {
-                        CellType::DopReference
-                    } else {
-                        CellType::Text
-                    },
-                    CellType::NumericValue,
-                    CellType::NumericValue,
-                ],
-                cell_jump_targets: vec![None, dop_jump, None, None],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
+            {
+                let struct_cell_type = if struct_name.is_some() {
+                    CellType::DopReference
+                } else {
+                    CellType::Text
+                };
+                let mut struct_cell = DetailCell::new(struct_display, struct_cell_type);
+                if let Some(jump) = dop_jump {
+                    struct_cell = struct_cell.with_jump(jump);
+                }
+                DetailRow::normal(
+                    vec![
+                        DetailCell::text(name),
+                        struct_cell,
+                        DetailCell::new(lower, CellType::NumericValue),
+                        DetailCell::new(upper, CellType::NumericValue),
+                    ],
+                    0,
+                )
             }
         })
         .collect();

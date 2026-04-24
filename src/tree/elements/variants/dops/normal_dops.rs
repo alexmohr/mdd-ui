@@ -5,29 +5,20 @@
 
 use super::{ParsedDopName, push_types_section};
 use crate::tree::types::{
-    CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType, DetailSectionData,
+    CellType, ColumnConstraint, DetailCell, DetailContent, DetailRow, DetailSectionData,
     DetailSectionType,
 };
 
 fn build_constraints_section(
     normal_dop: &cda_database::datatypes::NormalDop<'_>,
 ) -> DetailSectionData {
-    let header = DetailRow::header(
-        vec![
-            "Lower Type".to_owned(),
-            "Lower Limit".to_owned(),
-            "Upper Limit".to_owned(),
-            "Upper Type".to_owned(),
-            "Validity".to_owned(),
-        ],
-        vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-    );
+    let header = DetailRow::header(vec![
+        DetailCell::text("Lower Type"),
+        DetailCell::text("Lower Limit"),
+        DetailCell::text("Upper Limit"),
+        DetailCell::text("Upper Type"),
+        DetailCell::text("Validity"),
+    ]);
 
     let mut rows = Vec::new();
 
@@ -51,13 +42,12 @@ fn build_constraints_section(
             .to_owned();
 
         rows.push(DetailRow::normal(
-            vec![lower_type, lower_val, upper_val, upper_type, "-".to_owned()],
             vec![
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
+                DetailCell::text(lower_type),
+                DetailCell::text(lower_val),
+                DetailCell::text(upper_val),
+                DetailCell::text(upper_type),
+                DetailCell::text("-"),
             ],
             0,
         ));
@@ -88,13 +78,12 @@ fn build_constraints_section(
                     let validity = format!("{:?}", sc.validity());
 
                     DetailRow::normal(
-                        vec![lower_type, lower_val, upper_val, upper_type, validity],
                         vec![
-                            CellType::Text,
-                            CellType::Text,
-                            CellType::Text,
-                            CellType::Text,
-                            CellType::Text,
+                            DetailCell::text(lower_type),
+                            DetailCell::text(lower_val),
+                            DetailCell::text(upper_val),
+                            DetailCell::text(upper_type),
+                            DetailCell::text(validity),
                         ],
                         0,
                     )
@@ -129,20 +118,12 @@ fn build_compu_direction_section(
     category: Option<String>,
     rows: Vec<DetailRow>,
 ) -> DetailSectionData {
-    let header = DetailRow::header(
-        vec![
-            "Lower Limit".to_owned(),
-            "Upper Limit".to_owned(),
-            "Compu Inverse Value".to_owned(),
-            "Compu Const".to_owned(),
-        ],
-        vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-    );
+    let header = DetailRow::header(vec![
+        DetailCell::text("Lower Limit"),
+        DetailCell::text("Upper Limit"),
+        DetailCell::text("Compu Inverse Value"),
+        DetailCell::text("Compu Const"),
+    ]);
 
     let mut subsections = Vec::new();
 
@@ -217,12 +198,11 @@ fn build_compu_internal_to_phys_section(
                 )
             });
             DetailRow::normal(
-                vec![lower, upper, inverse, consts],
                 vec![
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
+                    DetailCell::text(lower),
+                    DetailCell::text(upper),
+                    DetailCell::text(inverse),
+                    DetailCell::text(consts),
                 ],
                 0,
             )
@@ -268,12 +248,11 @@ fn build_compu_phys_to_internal_section(
                     )
                 });
                 DetailRow::normal(
-                    vec![lower, upper, inverse, consts],
                     vec![
-                        CellType::Text,
-                        CellType::Text,
-                        CellType::Text,
-                        CellType::Text,
+                        DetailCell::text(lower),
+                        DetailCell::text(upper),
+                        DetailCell::text(inverse),
+                        DetailCell::text(consts),
                     ],
                     0,
                 )
@@ -293,107 +272,58 @@ pub(super) fn build_normal_dop_tabs(
     sections: &mut Vec<DetailSectionData>,
 ) {
     if let Ok(coded_type) = normal_dop.diag_coded_type() {
-        types_rows.push(DetailRow {
-            cells: vec![
-                "Diag Coded Type".to_owned(),
-                format!("{:?}", coded_type.base_datatype()),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text],
-            cell_jump_targets: vec![None; 2],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        });
+        types_rows.push(DetailRow::normal(
+            vec![DetailCell::text("Diag Coded Type"), DetailCell::text(format!("{:?}", coded_type.base_datatype()))],
+            0,
+        ));
 
         if let Some(bit_len) = coded_type.bit_len() {
-            types_rows.push(DetailRow {
-                cells: vec!["Bit Length".to_owned(), bit_len.to_string()],
-                cell_types: vec![CellType::Text, CellType::NumericValue],
-                cell_jump_targets: vec![None; 2],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-            });
+            types_rows.push(DetailRow::normal(
+                vec![DetailCell::text("Bit Length"), DetailCell::new(bit_len.to_string(), CellType::NumericValue)],
+                0,
+            ));
         }
     }
 
     if let Some(phys_type) = normal_dop.physical_type() {
-        types_rows.push(DetailRow {
-            cells: vec![
-                "Physical Type".to_owned(),
-                format!("{:?}", phys_type.base_data_type()),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text],
-            cell_jump_targets: vec![None; 2],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        });
+        types_rows.push(DetailRow::normal(
+            vec![DetailCell::text("Physical Type"), DetailCell::text(format!("{:?}", phys_type.base_data_type()))],
+            0,
+        ));
 
         if let Some(precision) = phys_type.precision() {
-            types_rows.push(DetailRow {
-                cells: vec!["Precision".to_owned(), precision.to_string()],
-                cell_types: vec![CellType::Text, CellType::NumericValue],
-                cell_jump_targets: vec![None; 2],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-            });
+            types_rows.push(DetailRow::normal(
+                vec![DetailCell::text("Precision"), DetailCell::new(precision.to_string(), CellType::NumericValue)],
+                0,
+            ));
         }
 
-        types_rows.push(DetailRow {
-            cells: vec![
-                "Display Radix".to_owned(),
-                format!("{:?}", phys_type.display_radix()),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text],
-            cell_jump_targets: vec![None; 2],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        });
+        types_rows.push(DetailRow::normal(
+            vec![DetailCell::text("Display Radix"), DetailCell::text(format!("{:?}", phys_type.display_radix()))],
+            0,
+        ));
     }
 
     if let Some(unit) = normal_dop.unit_ref() {
         if let Some(short_name) = unit.short_name() {
-            types_rows.push(DetailRow {
-                cells: vec!["Unit".to_owned(), short_name.to_owned()],
-                cell_types: vec![CellType::Text, CellType::Text],
-                cell_jump_targets: vec![None; 2],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-            });
+            types_rows.push(DetailRow::normal(
+                vec![DetailCell::text("Unit"), DetailCell::text(short_name)],
+                0,
+            ));
         }
         if let Some(display_name) = unit.display_name() {
-            types_rows.push(DetailRow {
-                cells: vec!["Unit Display".to_owned(), display_name.to_owned()],
-                cell_types: vec![CellType::Text, CellType::Text],
-                cell_jump_targets: vec![None; 2],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-            });
+            types_rows.push(DetailRow::normal(
+                vec![DetailCell::text("Unit Display"), DetailCell::text(display_name)],
+                0,
+            ));
         }
     }
 
     if let Some(ref data_type) = parsed_name.data_type {
-        types_rows.push(DetailRow {
-            cells: vec!["Data Type (from name)".to_owned(), data_type.clone()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            cell_jump_targets: vec![None; 2],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        });
+        types_rows.push(DetailRow::normal(
+            vec![DetailCell::text("Data Type (from name)"), DetailCell::text(data_type.clone())],
+            0,
+        ));
     }
 
     push_types_section(std::mem::take(types_rows), sections);

@@ -104,8 +104,8 @@ impl App {
     }
 
     pub(crate) fn compare_cells(a: &DetailRow, b: &DetailRow, col: usize) -> std::cmp::Ordering {
-        let a_cell = a.cells.get(col).map_or("", String::as_str);
-        let b_cell = b.cells.get(col).map_or("", String::as_str);
+        let a_cell = a.cell_text(col);
+        let b_cell = b.cell_text(col);
 
         // Try integer comparison first to avoid f64 precision loss for large integers
         // (e.g. CAN IDs, large hex addresses that exceed 2^53).
@@ -451,9 +451,9 @@ impl App {
                         });
 
                 let text = if sort_indicator.is_empty() {
-                    format!("\n{c}")
+                    format!("\n{}", c.text)
                 } else {
-                    format!("{sort_indicator}\n{c}")
+                    format!("{sort_indicator}\n{}", c.text)
                 };
 
                 let style = Style::default()
@@ -506,23 +506,16 @@ impl App {
                     .cells
                     .iter()
                     .enumerate()
-                    .map(|(col_idx, cell_text)| {
+                    .map(|(col_idx, cell)| {
                         let text = if col_idx == 0 {
-                            format!("{indent_str}{cell_text}")
+                            format!("{indent_str}{}", cell.text)
                         } else {
-                            cell_text.clone()
+                            cell.text.clone()
                         };
 
-                        let cell_type = row_data
-                            .cell_types
-                            .get(col_idx)
-                            .copied()
-                            .unwrap_or(CellType::Text);
+                        let cell_type = cell.cell_type;
 
-                        let has_jump = row_data
-                            .cell_jump_targets
-                            .get(col_idx)
-                            .is_some_and(Option::is_some)
+                        let has_jump = cell.jump_target.is_some()
                             || is_child_element;
 
                         let highlight = if is_selected_row && col_idx == focused_col {

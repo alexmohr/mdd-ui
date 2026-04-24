@@ -5,7 +5,9 @@
 
 use crate::{
     app::{App, FocusState, SCROLL_CONTEXT_LINES},
-    tree::{CellJumpTarget, CellJumpTargetType, CellType, NodeTextPrefix, ServiceListType},
+    tree::{
+        CellJumpTarget, CellJumpTargetType, CellType, DetailCell, NodeTextPrefix, ServiceListType,
+    },
 };
 
 impl App {
@@ -21,20 +23,19 @@ impl App {
             let Some(selected_row) = ctx.selected_row() else {
                 return;
             };
-            let focused_col = self.get_focused_column(&selected_row.cell_types);
+            let focused_col = self.get_focused_column(&selected_row.cells);
             let cell_type = selected_row
-                .cell_types
+                .cells
                 .get(focused_col)
-                .map_or(CellType::Text, |&ct| ct);
+                .map_or(CellType::Text, |c| c.cell_type);
             let cell_value = selected_row
                 .cells
                 .get(focused_col)
-                .map_or_else(Default::default, Clone::clone);
+                .map_or_else(String::default, |c| c.text.clone());
             let jump_target = selected_row
-                .cell_jump_targets
+                .cells
                 .get(focused_col)
-                .cloned()
-                .flatten();
+                .and_then(|c| c.jump_target.clone());
             let section_type = ctx.section.section_type;
             let service_name = ctx
                 .node
@@ -149,10 +150,10 @@ impl App {
     }
 
     /// Determine which column is focused, clamped to the available cell count
-    pub(super) fn get_focused_column(&self, cell_types: &[CellType]) -> usize {
+    pub(super) fn get_focused_column(&self, cells: &[DetailCell]) -> usize {
         self.table
             .focused_column
-            .min(cell_types.len().saturating_sub(1))
+            .min(cells.len().saturating_sub(1))
     }
 
     /// Navigate to a DOP node by name.
@@ -226,16 +227,15 @@ impl App {
             };
 
             let dop_ref = selected_row
-                .cell_types
+                .cells
                 .iter()
-                .zip(selected_row.cells.iter())
-                .find(|(ct, _)| **ct == CellType::DopReference)
-                .map(|(_, cell)| cell.clone());
+                .find(|c| c.cell_type == CellType::DopReference)
+                .map(|c| c.text.clone());
 
             let target_name = selected_row
                 .cells
                 .first()
-                .map_or_else(Default::default, Clone::clone);
+                .map_or_else(String::default, |c| c.text.clone());
 
             (ctx.node_idx, ctx.node.depth, dop_ref, target_name)
         };

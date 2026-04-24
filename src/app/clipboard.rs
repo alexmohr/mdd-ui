@@ -76,12 +76,12 @@ fn table_to_markdown(header: &DetailRow, rows: &[DetailRow]) -> String {
 
     // Calculate column widths for alignment
     let col_count = header.cells.len();
-    let mut widths: Vec<usize> = header.cells.iter().map(String::len).collect();
+    let mut widths: Vec<usize> = header.cells.iter().map(|c| c.text.len()).collect();
 
     for row in rows {
         for (i, cell) in row.cells.iter().enumerate() {
             if let Some(current_width) = widths.get_mut(i) {
-                *current_width = (*current_width).max(cell.len());
+                *current_width = (*current_width).max(cell.text.len());
             }
         }
     }
@@ -95,7 +95,8 @@ fn table_to_markdown(header: &DetailRow, rows: &[DetailRow]) -> String {
     result.push('|');
     for (i, cell) in header.cells.iter().enumerate() {
         let width = widths.get(i).copied().unwrap_or(3);
-        let _ = write!(result, " {cell:<width$} |");
+        let text = &cell.text;
+        let _ = write!(result, " {text:<width$} |");
     }
     result.push('\n');
 
@@ -110,7 +111,7 @@ fn table_to_markdown(header: &DetailRow, rows: &[DetailRow]) -> String {
     for row in rows {
         result.push('|');
         for i in 0..col_count {
-            let cell = row.cells.get(i).map_or("", String::as_str);
+            let cell = row.cells.get(i).map_or("", |c| c.text.as_str());
             let width = widths.get(i).copied().unwrap_or(3);
             let _ = write!(result, " {cell:<width$} |");
         }

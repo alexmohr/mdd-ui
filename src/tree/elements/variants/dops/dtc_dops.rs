@@ -9,7 +9,7 @@ use super::{DopInfo, kv_row, push_types_section};
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType, DetailSectionData,
+        CellType, ColumnConstraint, DetailCell, DetailContent, DetailRow, DetailSectionData,
         DetailSectionType, NodeType,
     },
 };
@@ -17,12 +17,7 @@ use crate::tree::{
 /// Build sections for the DTC-DOPS category node.
 /// Overview with only SHORT-NAME column.
 pub(super) fn build_dtc_dops_category_sections(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData> {
-    let header = DetailRow {
-        cells: vec!["SHORT-NAME".to_owned()],
-        cell_types: vec![CellType::Text],
-        indent: 0,
-        ..Default::default()
-    };
+    let header = DetailRow::header(vec![DetailCell::text("SHORT-NAME")]);
 
     let rows: Vec<DetailRow> = dops
         .iter()
@@ -34,15 +29,7 @@ pub(super) fn build_dtc_dops_category_sections(dops: &[DopInfo<'_>]) -> Vec<Deta
             } else {
                 display
             };
-            DetailRow {
-                cells: vec![name],
-                cell_types: vec![CellType::Text],
-                cell_jump_targets: vec![None; 1],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-            }
+            DetailRow::normal(vec![DetailCell::text(name)], 0)
         })
         .collect();
 
@@ -107,15 +94,7 @@ macro_rules! sdg_entry_stats {
 macro_rules! emit_sdg_header {
     ($rows:expr, $sdg:expr, $caption:expr, $has_named:expr, $base_indent:expr) => {{
         if $has_named {
-            $rows.push(DetailRow {
-                cells: vec![$caption.clone(), String::new()],
-                cell_types: vec![CellType::Text, CellType::Text],
-                cell_jump_targets: vec![None; 2],
-                indent: $base_indent,
-                row_type: DetailRowType::Header,
-                metadata: None,
-                diff_status: None,
-            });
+            $rows.push(DetailRow::header(vec![DetailCell::text($caption.clone()), DetailCell::text("")]));
             if let Some(si) = $sdg.si() {
                 $rows.push(kv_row(
                     "SI",
@@ -201,16 +180,14 @@ pub(super) fn add_dtc_dop_children(b: &mut TreeBuilder, dop_info: &DopInfo<'_>, 
 
         let mut rows: Vec<DetailRow> = vec![
             DetailRow::normal(
-                vec!["Short Name".to_owned(), short_name],
-                vec![CellType::Text, CellType::Text],
+                vec![DetailCell::text("Short Name"), DetailCell::text(short_name)],
                 0,
             ),
             DetailRow::normal(
                 vec![
-                    "Trouble Code (numeric)".to_owned(),
-                    format!("0x{:06X} ({})", dtc.trouble_code(), dtc.trouble_code()),
+                    DetailCell::text("Trouble Code (numeric)"),
+                    DetailCell::text(format!("0x{:06X} ({})", dtc.trouble_code(), dtc.trouble_code())),
                 ],
-                vec![CellType::Text, CellType::Text],
                 0,
             ),
         ];
@@ -244,10 +221,7 @@ pub(super) fn add_dtc_dop_children(b: &mut TreeBuilder, dop_info: &DopInfo<'_>, 
             render_as_header: false,
             section_type: DetailSectionType::Overview,
             content: DetailContent::Table {
-                header: DetailRow::header(
-                    vec!["Property".to_owned(), "Value".to_owned()],
-                    vec![CellType::Text, CellType::Text],
-                ),
+                header: DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]),
                 rows,
                 constraints: vec![
                     ColumnConstraint::Percentage(30),
@@ -268,30 +242,17 @@ pub(super) fn build_dtc_dop_tabs(
     sections: &mut Vec<DetailSectionData>,
 ) {
     if let Ok(coded_type) = dtc_dop.diag_coded_type() {
-        types_rows.push(DetailRow {
-            cells: vec![
-                "Diag Coded Type".to_owned(),
-                format!("{:?}", coded_type.base_datatype()),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text],
-            cell_jump_targets: vec![None; 2],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        });
+        types_rows.push(DetailRow::normal(
+            vec![DetailCell::text("Diag Coded Type"), DetailCell::text(format!("{:?}", coded_type.base_datatype()))],
+            0,
+        ));
     }
 
     if let Some(dtcs) = dtc_dop.dtcs() {
-        types_rows.push(DetailRow {
-            cells: vec!["DTC Count".to_owned(), dtcs.len().to_string()],
-            cell_types: vec![CellType::Text, CellType::NumericValue],
-            cell_jump_targets: vec![None; 2],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        });
+        types_rows.push(DetailRow::normal(
+            vec![DetailCell::text("DTC Count"), DetailCell::new(dtcs.len().to_string(), CellType::NumericValue)],
+            0,
+        ));
     }
 
     push_types_section(std::mem::take(types_rows), sections);
@@ -301,16 +262,11 @@ pub(super) fn build_dtc_dop_tabs(
             .compu_method()
             .map(|cm| format!("{:?}", cm.category()));
 
-        let dtcs_header = DetailRow {
-            cells: vec![
-                "Short Name".to_owned(),
-                "Trouble Code".to_owned(),
-                "Text".to_owned(),
-            ],
-            cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-            indent: 0,
-            ..Default::default()
-        };
+        let dtcs_header = DetailRow::header(vec![
+            DetailCell::text("Short Name"),
+            DetailCell::text("Trouble Code"),
+            DetailCell::text("Text"),
+        ]);
 
         let dtcs_rows: Vec<DetailRow> = dtcs
             .iter()
@@ -324,15 +280,10 @@ pub(super) fn build_dtc_dop_tabs(
                 };
                 let text = dtc.text().and_then(|t| t.value()).unwrap_or("").to_owned();
 
-                DetailRow {
-                    cells: vec![short_name, code_str, text],
-                    cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-                    cell_jump_targets: vec![None; 3],
-                    indent: 0,
-                    row_type: DetailRowType::Normal,
-                    metadata: None,
-                    diff_status: None,
-                }
+                DetailRow::normal(
+                    vec![DetailCell::text(short_name), DetailCell::text(code_str), DetailCell::text(text)],
+                    0,
+                )
             })
             .collect();
 

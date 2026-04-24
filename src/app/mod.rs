@@ -615,7 +615,7 @@ impl App {
         let match_idx = rows.iter().position(|row| {
             row.cells
                 .get(self.table.focused_column)
-                .is_some_and(|cell| cell.to_lowercase().starts_with(&buffer_lower))
+                .is_some_and(|cell| cell.text.to_lowercase().starts_with(&buffer_lower))
         });
 
         if let Some(i) = match_idx {

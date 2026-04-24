@@ -399,15 +399,44 @@ impl CellJumpTarget {
     }
 }
 
+/// A single cell in a detail table row.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DetailCell {
+    /// Display text of the cell.
+    pub text: String,
+    /// Content type of the cell (controls styling).
+    pub cell_type: CellType,
+    /// Jump target for navigation. `None` means not navigable.
+    pub jump_target: Option<CellJumpTarget>,
+}
+
+impl DetailCell {
+    /// Create a cell with the given text and type, no jump target.
+    pub fn new(text: impl Into<String>, cell_type: CellType) -> Self {
+        Self {
+            text: text.into(),
+            cell_type,
+            jump_target: None,
+        }
+    }
+
+    /// Create a plain text cell.
+    pub fn text(text: impl Into<String>) -> Self {
+        Self::new(text, CellType::Text)
+    }
+
+    /// Attach a jump target to this cell (builder pattern).
+    pub fn with_jump(mut self, target: CellJumpTarget) -> Self {
+        self.jump_target = Some(target);
+        self
+    }
+}
+
 /// A row in a detail table.
 #[derive(Clone, Debug, Default)]
 pub struct DetailRow {
-    /// Column values for this row.
-    pub cells: Vec<String>,
-    /// Content type of each cell (controls styling).
-    pub cell_types: Vec<CellType>,
-    /// Per-cell jump targets. Same length as `cells`; `None` means not navigable.
-    pub cell_jump_targets: Vec<Option<CellJumpTarget>>,
+    /// Column cells for this row.
+    pub cells: Vec<DetailCell>,
     /// Indentation level for nested display.
     pub indent: usize,
     /// Semantic type of this row for interaction handling.
@@ -513,13 +542,10 @@ impl DetailSectionData {
 }
 
 impl DetailRow {
-    /// Create a normal data row
-    pub fn normal(cells: Vec<String>, cell_types: Vec<CellType>, indent: usize) -> Self {
-        let jump_targets = vec![None; cells.len()];
+    /// Create a normal data row from pre-built cells.
+    pub fn normal(cells: Vec<DetailCell>, indent: usize) -> Self {
         Self {
             cells,
-            cell_types,
-            cell_jump_targets: jump_targets,
             indent,
             row_type: DetailRowType::Normal,
             metadata: None,
@@ -527,31 +553,10 @@ impl DetailRow {
         }
     }
 
-    /// Create a normal data row with per-cell jump targets
-    pub fn with_jump_targets(
-        cells: Vec<String>,
-        cell_types: Vec<CellType>,
-        cell_jump_targets: Vec<Option<CellJumpTarget>>,
-        indent: usize,
-    ) -> Self {
+    /// Create a table header row from pre-built cells.
+    pub fn header(cells: Vec<DetailCell>) -> Self {
         Self {
             cells,
-            cell_types,
-            cell_jump_targets,
-            indent,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        }
-    }
-
-    /// Create a table header row
-    pub fn header(cells: Vec<String>, cell_types: Vec<CellType>) -> Self {
-        let jump_targets = vec![None; cells.len()];
-        Self {
-            cells,
-            cell_types,
-            cell_jump_targets: jump_targets,
             indent: 0,
             row_type: DetailRowType::Header,
             metadata: None,
@@ -562,17 +567,21 @@ impl DetailRow {
     /// Create an "Inherited From" navigation row
     pub fn inherited_from(layer_name: String) -> Self {
         Self {
-            cells: vec!["Inherited From".to_owned(), layer_name.clone()],
-            cell_types: vec![CellType::Text, CellType::ParameterName],
-            cell_jump_targets: vec![
-                None,
-                Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+            cells: vec![
+                DetailCell::text("Inherited From"),
+                DetailCell::new(layer_name.clone(), CellType::ParameterName)
+                    .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
             ],
             indent: 0,
             row_type: DetailRowType::InheritedFrom,
             metadata: Some(RowMetadata::InheritedFrom { layer_name }),
             diff_status: None,
         }
+    }
+
+    /// Convenience: get the text of cell at `idx`, or `""` if out of bounds.
+    pub fn cell_text(&self, idx: usize) -> &str {
+        self.cells.get(idx).map_or("", |c| c.text.as_str())
     }
 }
 

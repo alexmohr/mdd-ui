@@ -25,10 +25,10 @@ impl App {
             let Some(selected_row) = ctx.selected_row() else {
                 return;
             };
-            let Some(name) = selected_row.cells.first().cloned() else {
+            let Some(name_cell) = selected_row.cells.first() else {
                 return;
             };
-            name
+            name_cell.text.clone()
         };
         self.navigate_to_container_by_name(&target);
     }

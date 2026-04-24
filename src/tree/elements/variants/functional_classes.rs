@@ -9,8 +9,8 @@ use super::format_service_id;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
-        DetailSectionData, DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent,
+        DetailRow, DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -114,17 +114,16 @@ pub fn add_functional_classes<'a>(
 
 /// Build a table section for the Functional Classes header showing all class definitions
 fn build_functional_classes_table_section(items: &[String]) -> DetailSectionData {
-    let header = DetailRow::header(vec!["Short Name".to_owned()], vec![CellType::Text]);
+    let header = DetailRow::header(vec![DetailCell::text("Short Name")]);
 
     let rows: Vec<_> = items
         .iter()
         .map(|name| {
-            DetailRow::with_jump_targets(
-                vec![name.clone()],
-                vec![CellType::ParameterName],
-                vec![Some(CellJumpTarget::new(
-                    CellJumpTargetType::TreeNodeByName,
-                ))],
+            DetailRow::normal(
+                vec![
+                    DetailCell::new(name.clone(), CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                ],
                 0,
             )
         })
@@ -244,60 +243,32 @@ fn build_service_row(service: &DiagService<'_>, layer_name: &str) -> Option<Deta
     let semantic = dc.semantic().unwrap_or("-").to_owned();
     let addressing = format!("{:?}", service.addressing());
 
-    Some(DetailRow::with_jump_targets(
+    Some(DetailRow::normal(
         vec![
-            short_name,
-            service_type,
-            sid_rq,
-            semantic,
-            addressing,
-            layer_name.to_owned(),
-        ],
-        vec![
-            CellType::ParameterName,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::ParameterName,
-        ],
-        vec![
-            Some(CellJumpTarget::new(CellJumpTargetType::ServiceOrJobByName)),
-            None,
-            None,
-            None,
-            None,
-            Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+            DetailCell::new(short_name, CellType::ParameterName)
+                .with_jump(CellJumpTarget::new(CellJumpTargetType::ServiceOrJobByName)),
+            DetailCell::text(service_type),
+            DetailCell::text(sid_rq),
+            DetailCell::text(semantic),
+            DetailCell::text(addressing),
+            DetailCell::new(layer_name, CellType::ParameterName)
+                .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
         ],
         0,
     ))
 }
 
 fn build_job_row(job_name: &str, layer_name: &str) -> DetailRow {
-    DetailRow::with_jump_targets(
+    DetailRow::normal(
         vec![
-            job_name.to_owned(),
-            "Job".to_owned(),
-            "-".to_owned(),
-            "-".to_owned(),
-            "-".to_owned(),
-            layer_name.to_owned(),
-        ],
-        vec![
-            CellType::ParameterName,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::ParameterName,
-        ],
-        vec![
-            Some(CellJumpTarget::new(CellJumpTargetType::ServiceOrJobByName)),
-            None,
-            None,
-            None,
-            None,
-            Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+            DetailCell::new(job_name, CellType::ParameterName)
+                .with_jump(CellJumpTarget::new(CellJumpTargetType::ServiceOrJobByName)),
+            DetailCell::text("Job"),
+            DetailCell::text("-"),
+            DetailCell::text("-"),
+            DetailCell::text("-"),
+            DetailCell::new(layer_name, CellType::ParameterName)
+                .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
         ],
         0,
     )
@@ -319,24 +290,14 @@ fn build_functional_class_detail(
     });
 
     // Build services table
-    let header = DetailRow::header(
-        vec![
-            "Short Name".to_owned(),
-            "Type".to_owned(),
-            "SID_RQ".to_owned(),
-            "Semantic".to_owned(),
-            "Addressing".to_owned(),
-            "Layer".to_owned(),
-        ],
-        vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-    );
+    let header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("Type"),
+        DetailCell::text("SID_RQ"),
+        DetailCell::text("Semantic"),
+        DetailCell::text("Addressing"),
+        DetailCell::text("Layer"),
+    ]);
 
     let mut rows = Vec::new();
 
@@ -360,20 +321,12 @@ fn build_functional_class_detail(
     if total_count == 0 {
         rows.push(DetailRow::normal(
             vec![
-                "No services or jobs in this functional class".to_owned(),
-                "-".to_owned(),
-                "-".to_owned(),
-                "-".to_owned(),
-                "-".to_owned(),
-                "-".to_owned(),
-            ],
-            vec![
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
+                DetailCell::text("No services or jobs in this functional class"),
+                DetailCell::text("-"),
+                DetailCell::text("-"),
+                DetailCell::text("-"),
+                DetailCell::text("-"),
+                DetailCell::text("-"),
             ],
             0,
         ));

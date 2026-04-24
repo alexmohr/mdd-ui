@@ -8,8 +8,8 @@ use cda_database::datatypes::DiagLayer;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DetailSectionType,
-        NodeType,
+        ColumnConstraint, DetailCell, DetailContent, DetailRow, DetailSectionData,
+        DetailSectionType, NodeType,
     },
 };
 
@@ -94,17 +94,13 @@ pub fn add_sdgs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
 
 /// Build a table section showing all SDGs in the list view
 fn build_sdgs_table_section(sdg_data_list: &[SdgData]) -> DetailSectionData {
-    let header = DetailRow::header(
-        vec!["Short Name".to_owned(), "SI".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("SI")]);
 
     let rows: Vec<_> = sdg_data_list
         .iter()
         .map(|sdg_data| {
             DetailRow::normal(
-                vec![sdg_data.caption.clone(), sdg_data.si.clone()],
-                vec![CellType::Text, CellType::Text],
+                vec![DetailCell::text(sdg_data.caption.clone()), DetailCell::text(sdg_data.si.clone())],
                 0,
             )
         })
@@ -151,20 +147,15 @@ fn build_sdg_detail_sections(sdg_data: &SdgData) -> Vec<DetailSectionData> {
 
 /// Build overview section for SDG
 fn build_sdg_overview_section(sdg_data: &SdgData) -> DetailSectionData {
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     let rows = vec![
         DetailRow::normal(
-            vec!["Short Name".to_owned(), sdg_data.caption.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Short Name"), DetailCell::text(sdg_data.caption.clone())],
             0,
         ),
         DetailRow::normal(
-            vec!["SI".to_owned(), sdg_data.si.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("SI"), DetailCell::text(sdg_data.si.clone())],
             0,
         ),
     ];
@@ -187,17 +178,13 @@ fn build_sdg_overview_section(sdg_data: &SdgData) -> DetailSectionData {
 
 /// Build table section showing SD elements with Name | Value columns
 fn build_sd_elements_table_section(sd_elements: &[SdElement]) -> DetailSectionData {
-    let header = DetailRow::header(
-        vec!["Name".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Name"), DetailCell::text("Value")]);
 
     let rows: Vec<_> = sd_elements
         .iter()
         .map(|sd| {
             DetailRow::normal(
-                vec![sd.short_name.clone(), sd.value.clone()],
-                vec![CellType::Text, CellType::Text],
+                vec![DetailCell::text(sd.short_name.clone()), DetailCell::text(sd.value.clone())],
                 sd.depth,
             )
         })

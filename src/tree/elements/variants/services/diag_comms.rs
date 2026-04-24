@@ -13,8 +13,8 @@ use crate::tree::{
     builder::TreeBuilder,
     elements::variants::format_service_display_name,
     types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DetailSectionType,
-        NodeTextPrefix, NodeType,
+        ColumnConstraint, DetailCell, DetailContent, DetailRow, DetailSectionData,
+        DetailSectionType, NodeTextPrefix, NodeType,
     },
 };
 
@@ -162,24 +162,19 @@ fn add_single_ecu_jobs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize)
             section_type: DetailSectionType::Header,
         });
 
-        let header = DetailRow::header(
-            vec!["Property".to_owned(), "Value".to_owned()],
-            vec![CellType::Text, CellType::Text],
-        );
+        let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
         let mut rows = Vec::new();
 
         rows.extend(dc.short_name().map(|sn| {
             DetailRow::normal(
-                vec!["Job".to_owned(), sn.to_owned()],
-                vec![CellType::Text, CellType::Text],
+                vec![DetailCell::text("Job"), DetailCell::text(sn)],
                 0,
             )
         }));
         rows.extend(dc.semantic().map(|semantic| {
             DetailRow::normal(
-                vec!["Semantic".to_owned(), semantic.to_owned()],
-                vec![CellType::Text, CellType::Text],
+                vec![DetailCell::text("Semantic"), DetailCell::text(semantic)],
                 0,
             )
         }));

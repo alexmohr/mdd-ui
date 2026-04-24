@@ -17,8 +17,8 @@ use cda_database::datatypes::{DiagLayer, DiagService, Parameter};
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
-        DetailRowType, DetailSectionData, DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell,
+        DetailContent, DetailRow, DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -668,27 +668,18 @@ fn collect_dops_from_service<'a>(
 fn build_dops_overview_table(
     categories: &[(DopCategory, &[DopInfo<'_>])],
 ) -> Vec<DetailSectionData> {
-    let header = DetailRow {
-        cells: vec!["Category".to_owned(), "Count".to_owned()],
-        cell_types: vec![CellType::Text, CellType::NumericValue],
-        indent: 0,
-        ..Default::default()
-    };
+    let header = DetailRow::header(vec![DetailCell::text("Category"), DetailCell::new("Count", CellType::NumericValue)]);
 
     let rows: Vec<DetailRow> = categories
         .iter()
-        .map(|(cat, dops)| DetailRow {
-            cells: vec![cat.label().to_owned(), dops.len().to_string()],
-            cell_types: vec![CellType::ParameterName, CellType::NumericValue],
-            cell_jump_targets: vec![
-                Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
-                None,
+        .map(|(cat, dops)| DetailRow::normal(
+            vec![
+                DetailCell::new(cat.label(), CellType::ParameterName)
+                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                DetailCell::new(dops.len().to_string(), CellType::NumericValue),
             ],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        })
+            0,
+        ))
         .collect();
 
     vec![DetailSectionData {
@@ -710,12 +701,7 @@ fn build_dops_overview_table(
 /// Build overview table with only SHORT-NAME column.
 /// Used for `Structures`, `StaticFields`, `DynamicLengthFields`, `EndOfPduFields`, `MuxDops`.
 fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData> {
-    let header = DetailRow {
-        cells: vec!["SHORT-NAME".to_owned()],
-        cell_types: vec![CellType::Text],
-        indent: 0,
-        ..Default::default()
-    };
+    let header = DetailRow::header(vec![DetailCell::text("SHORT-NAME")]);
 
     let rows: Vec<DetailRow> = dops
         .iter()
@@ -727,17 +713,13 @@ fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData
             } else {
                 display
             };
-            DetailRow {
-                cells: vec![name],
-                cell_types: vec![CellType::ParameterName],
-                cell_jump_targets: vec![Some(CellJumpTarget::new(
-                    CellJumpTargetType::TreeNodeByName,
-                ))],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-            }
+            DetailRow::normal(
+                vec![
+                    DetailCell::new(name, CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                ],
+                0,
+            )
         })
         .collect();
 
@@ -759,32 +741,20 @@ fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData
 /// Convenience: build a key/value detail row.
 fn kv_row(key: &str, value: String, value_type: CellType, indent: usize) -> DetailRow {
     DetailRow::normal(
-        vec![key.to_owned(), value],
-        vec![CellType::Text, value_type],
+        vec![DetailCell::text(key), DetailCell::new(value, value_type)],
         indent,
     )
 }
 
 /// Build overview table for a semantic DOP category
 fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData> {
-    let header = DetailRow {
-        cells: vec![
-            "SHORT-NAME".to_owned(),
-            "CATEGORY".to_owned(),
-            "Internal".to_owned(),
-            "Physical".to_owned(),
-            "DESC ID".to_owned(),
-        ],
-        cell_types: vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-        indent: 0,
-        ..Default::default()
-    };
+    let header = DetailRow::header(vec![
+        DetailCell::text("SHORT-NAME"),
+        DetailCell::text("CATEGORY"),
+        DetailCell::text("Internal"),
+        DetailCell::text("Physical"),
+        DetailCell::text("DESC ID"),
+    ]);
 
     let rows: Vec<DetailRow> = dops
         .iter()
@@ -796,33 +766,17 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
             } else {
                 display
             };
-            DetailRow {
-                cells: vec![
-                    name,
-                    dop_info.category.as_deref().unwrap_or("").to_owned(),
-                    dop_info.internal_unit.as_deref().unwrap_or("").to_owned(),
-                    dop_info.phys_unit.as_deref().unwrap_or("").to_owned(),
-                    dop_info.desc_id.as_deref().unwrap_or("").to_owned(),
+            DetailRow::normal(
+                vec![
+                    DetailCell::new(name, CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::text(dop_info.category.as_deref().unwrap_or("")),
+                    DetailCell::text(dop_info.internal_unit.as_deref().unwrap_or("")),
+                    DetailCell::text(dop_info.phys_unit.as_deref().unwrap_or("")),
+                    DetailCell::text(dop_info.desc_id.as_deref().unwrap_or("")),
                 ],
-                cell_types: vec![
-                    CellType::ParameterName,
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
-                ],
-                cell_jump_targets: vec![
-                    Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
-                    None,
-                    None,
-                    None,
-                    None,
-                ],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-            }
+                0,
+            )
         })
         .collect();
 
@@ -848,12 +802,7 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
 /// Helper to push a "Types" tab section from accumulated rows
 fn push_types_section(types_rows: Vec<DetailRow>, sections: &mut Vec<DetailSectionData>) {
     if !types_rows.is_empty() {
-        let header = DetailRow {
-            cells: vec!["Property".to_owned(), "Value".to_owned()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            indent: 0,
-            ..Default::default()
-        };
+        let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
         sections.insert(
             0,
             DetailSectionData {
@@ -883,46 +832,26 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
     let parsed_name = parse_dop_name(&dop_info.name);
 
     let mut types_rows = Vec::new();
-    types_rows.push(DetailRow {
-        cells: vec!["Short Name".to_owned(), dop_info.name.clone()],
-        cell_types: vec![CellType::Text, CellType::Text],
-        cell_jump_targets: vec![None; 2],
-        indent: 0,
-        row_type: DetailRowType::Normal,
-        metadata: None,
-        diff_status: None,
-    });
-    types_rows.push(DetailRow {
-        cells: vec!["DOP Variant".to_owned(), dop_info.dop_type.clone()],
-        cell_types: vec![CellType::Text, CellType::Text],
-        cell_jump_targets: vec![None; 2],
-        indent: 0,
-        row_type: DetailRowType::Normal,
-        metadata: None,
-        diff_status: None,
-    });
+    types_rows.push(DetailRow::normal(
+        vec![DetailCell::text("Short Name"), DetailCell::text(dop_info.name.clone())],
+        0,
+    ));
+    types_rows.push(DetailRow::normal(
+        vec![DetailCell::text("DOP Variant"), DetailCell::text(dop_info.dop_type.clone())],
+        0,
+    ));
 
     if let Some(ref compu) = parsed_name.compu_category {
-        types_rows.push(DetailRow {
-            cells: vec!["Compu Category (from name)".to_owned(), compu.clone()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            cell_jump_targets: vec![None; 2],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        });
+        types_rows.push(DetailRow::normal(
+            vec![DetailCell::text("Compu Category (from name)"), DetailCell::text(compu.clone())],
+            0,
+        ));
     }
     if let Some(ref unit) = parsed_name.unit {
-        types_rows.push(DetailRow {
-            cells: vec!["Unit (from name)".to_owned(), unit.clone()],
-            cell_types: vec![CellType::Text, CellType::Text],
-            cell_jump_targets: vec![None; 2],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        });
+        types_rows.push(DetailRow::normal(
+            vec![DetailCell::text("Unit (from name)"), DetailCell::text(unit.clone())],
+            0,
+        ));
     }
 
     if let Ok(variant) = dop_info.dop.variant() {

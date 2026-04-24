@@ -84,7 +84,7 @@ impl App {
         match &selected_row.metadata {
             Some(RowMetadata::InheritedFrom { layer_name }) => Some(layer_name.clone()),
             None | Some(RowMetadata::ChildElement { .. } | RowMetadata::ParameterRow { .. }) => {
-                selected_row.cells.get(1).cloned()
+                selected_row.cells.get(1).map(|c| c.text.clone())
             }
         }
     }
@@ -132,10 +132,10 @@ impl App {
             let Some(selected_row) = ctx.selected_row() else {
                 return;
             };
-            let Some(name) = selected_row.cells.first().cloned() else {
+            let Some(name_cell) = selected_row.cells.first() else {
                 return;
             };
-            name
+            name_cell.text.clone()
         };
         self.navigate_to_container_by_name(&target);
     }
@@ -168,9 +168,10 @@ impl App {
             let Some(selected_row) = ctx.selected_row() else {
                 return;
             };
-            let Some(name) = selected_row.cells.first().cloned() else {
+            let Some(name_cell) = selected_row.cells.first() else {
                 return;
             };
+            let name = name_cell.text.clone();
             if name.is_empty() {
                 return;
             }

@@ -258,11 +258,11 @@ impl App {
         let byte_col = header
             .cells
             .iter()
-            .position(|c| c == "Byte" || c == "Byte Pos");
+            .position(|c| c.text == "Byte" || c.text == "Byte Pos");
         let bit_col = header
             .cells
             .iter()
-            .position(|c| c == "Bit" || c == "Bit Pos");
+            .position(|c| c.text == "Bit" || c.text == "Bit Pos");
 
         match (byte_col, bit_col) {
             (Some(byte), Some(bit)) => Some(TableSortState {
