@@ -253,7 +253,15 @@ impl App {
                 services.sort_by_key(|n| extract_service_id(&n.text));
             } else {
                 services.sort_by(|a, b| {
-                    extract_service_name(&a.text).cmp(extract_service_name(&b.text))
+                    let a_name = a
+                        .service_short_name
+                        .as_deref()
+                        .unwrap_or_else(|| extract_service_name(&a.text));
+                    let b_name = b
+                        .service_short_name
+                        .as_deref()
+                        .unwrap_or_else(|| extract_service_name(&b.text));
+                    a_name.cmp(b_name)
                 });
             }
 

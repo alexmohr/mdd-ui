@@ -86,15 +86,21 @@ pub fn add_diag_comms<'a>(
             let Some(display_name) = format_service_display_name(ds) else {
                 continue;
             };
+            let short_name = ds
+                .diag_comm()
+                .and_then(|dc| dc.short_name())
+                .unwrap_or("?")
+                .to_owned();
             let sections = build_diag_comm_details_with_parent(ds, None);
 
-            b.push_details_structured(
+            b.push_service_node(
                 depth.saturating_add(1),
                 format!("{}{display_name}", NodeTextPrefix::Service.as_str()),
                 false,
                 false,
                 sections,
                 NodeType::Service,
+                short_name,
             );
         }
 
@@ -102,16 +108,22 @@ pub fn add_diag_comms<'a>(
             let Some(display_name) = format_service_display_name(ds) else {
                 continue;
             };
+            let short_name = ds
+                .diag_comm()
+                .and_then(|dc| dc.short_name())
+                .unwrap_or("?")
+                .to_owned();
             let sections =
                 build_diag_comm_details_with_parent(ds, Some(source_layer_name.as_str()));
 
-            b.push_details_structured(
+            b.push_service_node(
                 depth.saturating_add(1),
                 format!("{}{display_name}", NodeTextPrefix::Service.as_str()),
                 false,
                 false,
                 sections,
                 NodeType::ParentRefService,
+                short_name,
             );
         }
 
@@ -193,13 +205,14 @@ fn add_single_ecu_jobs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize)
             DiagComm(dc),
         )));
 
-        b.push_details_structured(
+        b.push_service_node(
             depth.saturating_add(1),
             format!("{}{short_name}", NodeTextPrefix::Job.as_str()),
             false,
             false,
             sections,
             NodeType::Job,
+            short_name.to_owned(),
         );
     }
 }

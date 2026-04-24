@@ -81,6 +81,11 @@ pub fn add_requests_section<'a>(
                 continue;
             };
 
+            let short_name = ds
+                .diag_comm()
+                .and_then(|dc| dc.short_name())
+                .unwrap_or("?")
+                .to_owned();
             let sections = build_request_view_sections(ds, source_layer);
 
             let has_params = ds
@@ -88,13 +93,14 @@ pub fn add_requests_section<'a>(
                 .and_then(|req| req.params())
                 .is_some_and(|p| !p.is_empty());
 
-            b.push_details_structured(
+            b.push_service_node(
                 depth.saturating_add(1),
                 display_name.clone(),
                 false,
                 has_params,
                 sections,
                 NodeType::Request,
+                short_name,
             );
 
             ds.request()
