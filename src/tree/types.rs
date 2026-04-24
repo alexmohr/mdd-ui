@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use std::{fmt, rc::Rc};
+use std::{fmt, sync::Arc};
 
 /// Sentinel value for an unset bit position in the database.
 pub(crate) const BIT_POSITION_UNSET: u32 = 255;
@@ -115,7 +115,7 @@ pub struct TreeNode {
     /// Whether this node has child nodes that can be expanded.
     pub has_children: bool,
     /// Detail sections displayed when this node is selected.
-    pub detail_sections: Rc<[DetailSectionData]>,
+    pub detail_sections: Arc<[DetailSectionData]>,
     /// Classification of this node for styling and interaction.
     pub node_type: NodeType,
     /// If this is a `SectionHeader` at depth 0, specifies which top-level section it represents

@@ -8,7 +8,7 @@
 //! request/response parameters, com-params, etc.) so the diff view shows the
 //! same rich information as browse mode, plus colour-coded change indicators.
 
-use std::{collections::HashSet, rc::Rc};
+use std::{collections::HashSet, sync::Arc};
 
 use cda_database::datatypes::DiagnosticDatabase;
 
@@ -214,7 +214,7 @@ fn merge_children(old_children: &[HierNode], new_children: &[HierNode]) -> Vec<M
                 if !inserted {
                     sections.insert(0, changes);
                 }
-                node.detail_sections = Rc::from(sections);
+                node.detail_sections = Arc::from(sections);
             }
 
             // Annotate individual table rows in matching sections with
@@ -402,7 +402,7 @@ fn annotate_section_rows(old: &TreeNode, new: &mut TreeNode) {
     // closest matching tab. For simplicity we do not create new tabs for
     // removed sections — the "Changes" summary already notes them.
 
-    new.detail_sections = Rc::from(new_sections);
+    new.detail_sections = Arc::from(new_sections);
 }
 
 /// Set `diff_status` on every row in a `DetailContent`.
@@ -936,7 +936,7 @@ fn add_summary_to_general(
     // Prepend the diff overview to the General node's existing sections
     let mut sections: Vec<DetailSectionData> = vec![diff_overview];
     sections.extend(general.node.detail_sections.iter().cloned());
-    general.node.detail_sections = Rc::from(sections);
+    general.node.detail_sections = Arc::from(sections);
 
     nodes
 }
@@ -955,7 +955,7 @@ mod tests {
             text: text.to_owned(),
             expanded: false,
             has_children,
-            detail_sections: Rc::from([]),
+            detail_sections: Arc::from([]),
             node_type: NodeType::Default,
             section_type: None,
             service_list_type: None,
@@ -975,7 +975,7 @@ mod tests {
             text: text.to_owned(),
             expanded: false,
             has_children: false,
-            detail_sections: Rc::from(sections),
+            detail_sections: Arc::from(sections),
             node_type: NodeType::Default,
             section_type: None,
             service_list_type: None,

@@ -6,6 +6,8 @@
 mod app;
 mod database;
 mod diff;
+#[cfg(feature = "mcp")]
+mod mcp;
 mod tree;
 
 use anyhow::{Context, Result, bail};
@@ -51,6 +53,9 @@ enum Command {
         #[arg(short, long)]
         output: Option<String>,
     },
+    /// Start an MCP (Model Context Protocol) server over stdio
+    #[cfg(feature = "mcp")]
+    Mcp,
 }
 
 /// Restores the terminal to its original state.
@@ -74,6 +79,8 @@ fn main() -> Result<()> {
             new_file,
             output,
         }) => run_export_diff(&old_file, &new_file, output.as_deref()),
+        #[cfg(feature = "mcp")]
+        Some(Command::Mcp) => mcp::run_mcp(),
         None => {
             let Some(mdd_file) = cli.mdd_file else {
                 bail!("No MDD file specified. Usage: mdd-ui <MDD_FILE> [--theme <THEME_FILE>]");
