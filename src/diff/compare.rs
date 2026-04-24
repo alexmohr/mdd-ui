@@ -166,7 +166,7 @@ fn simple_diff(name: String, status: DiffStatus) -> ElementDiff {
     }
 }
 
-/// Create a category `ElementDiff` (e.g., Services, SingleEcuJobs, StateCharts).
+/// Create a category `ElementDiff` (e.g., Services, `SingleEcuJobs`, `StateCharts`).
 /// The status is Modified if any child has changes, otherwise Unchanged.
 fn create_category_diff(name: &str, children: Vec<ElementDiff>) -> ElementDiff {
     let has_changes = children.iter().any(|d| d.status != DiffStatus::Unchanged);

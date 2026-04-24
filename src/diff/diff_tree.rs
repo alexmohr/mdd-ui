@@ -986,6 +986,7 @@ fn add_summary_to_general(
 mod tests {
     use super::*;
 
+    #[allow(clippy::default_trait_access)]
     fn make_node(text: &str, depth: usize, has_children: bool) -> TreeNode {
         TreeNode {
             depth,
@@ -1000,6 +1001,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::default_trait_access)]
     fn make_node_with_sections(
         text: &str,
         depth: usize,
@@ -1029,11 +1031,14 @@ mod tests {
 
         let hier = flat_to_hier(&nodes);
         assert_eq!(hier.len(), 2);
-        let a = hier.get(0).expect("first element");
+        let a = hier.first().expect("first element");
         let b = hier.get(1).expect("second element");
         assert_eq!(a.tree_node.text, "A");
         assert_eq!(a.children.len(), 2);
-        assert_eq!(a.children.get(0).expect("first child").tree_node.text, "A1");
+        assert_eq!(
+            a.children.first().expect("first child").tree_node.text,
+            "A1"
+        );
         assert_eq!(
             a.children.get(1).expect("second child").tree_node.text,
             "A2"
@@ -1053,10 +1058,10 @@ mod tests {
 
         let hier = flat_to_hier(&nodes);
         assert_eq!(hier.len(), 1);
-        let root = hier.get(0).expect("root");
-        let l1 = root.children.get(0).expect("l1");
-        let l2 = l1.children.get(0).expect("l2");
-        let l3 = l2.children.get(0).expect("l3");
+        let root = hier.first().expect("root");
+        let l1 = root.children.first().expect("l1");
+        let l2 = l1.children.first().expect("l2");
+        let l3 = l2.children.first().expect("l3");
         assert_eq!(root.children.len(), 1);
         assert_eq!(l1.children.len(), 1);
         assert_eq!(l2.children.len(), 1);
@@ -1076,7 +1081,7 @@ mod tests {
         let merged = merge_children(&hier_old, &hier_new);
 
         assert_eq!(merged.len(), 1);
-        let first = merged.get(0).expect("first merged");
+        let first = merged.first().expect("first merged");
         assert_eq!(first.node.diff_status, Some(DiffStatus::Unchanged));
         assert!(
             first
@@ -1099,13 +1104,13 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
-        let section = merged.get(0).expect("first merged");
+        let section = merged.first().expect("first merged");
         assert_eq!(section.node.diff_status, Some(DiffStatus::Modified));
         assert_eq!(section.children.len(), 2);
         assert_eq!(
             section
                 .children
-                .get(0)
+                .first()
                 .expect("first child")
                 .node
                 .diff_status,
@@ -1135,14 +1140,14 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
-        let section = merged.get(0).expect("first merged");
+        let section = merged.first().expect("first merged");
         assert_eq!(section.node.diff_status, Some(DiffStatus::Modified));
         // Child1 (Unchanged) + Child2 (Removed, appended at end)
         assert_eq!(section.children.len(), 2);
         assert_eq!(
             section
                 .children
-                .get(0)
+                .first()
                 .expect("first child")
                 .node
                 .diff_status,
@@ -1180,7 +1185,7 @@ mod tests {
         let merged = merge_children(&hier_old, &hier_new);
 
         assert_eq!(
-            merged.get(0).expect("first merged").node.diff_status,
+            merged.first().expect("first merged").node.diff_status,
             Some(DiffStatus::Modified)
         );
     }
@@ -1205,12 +1210,12 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
-        let parent = merged.get(0).expect("first merged");
+        let parent = merged.first().expect("first merged");
         assert_eq!(parent.node.diff_status, Some(DiffStatus::Modified));
         assert_eq!(
             parent
                 .children
-                .get(0)
+                .first()
                 .expect("first child")
                 .node
                 .diff_status,
@@ -1320,7 +1325,7 @@ mod tests {
 
         let flat = flatten_merged(&merged, 0);
         assert_eq!(flat.len(), 3);
-        let f0 = flat.get(0).expect("first flat");
+        let f0 = flat.first().expect("first flat");
         let f1 = flat.get(1).expect("second flat");
         let f2 = flat.get(2).expect("third flat");
         assert_eq!(f0.depth, 0);
@@ -1369,13 +1374,13 @@ mod tests {
         };
 
         let merged = mark_subtree(&hier, DiffStatus::Added);
-        let c0 = merged.children.get(0).expect("first child");
+        let c0 = merged.children.first().expect("first child");
         let c1 = merged.children.get(1).expect("second child");
         assert_eq!(merged.node.diff_status, Some(DiffStatus::Added));
         assert_eq!(c0.node.diff_status, Some(DiffStatus::Added));
         assert_eq!(
             c0.children
-                .get(0)
+                .first()
                 .expect("first grandchild")
                 .node
                 .diff_status,
@@ -1413,9 +1418,9 @@ mod tests {
         let hier_new = flat_to_hier(&new_tree);
         let merged = merge_children(&hier_old, &hier_new);
 
-        let root = merged.get(0).expect("root");
-        let mid = root.children.get(0).expect("mid");
-        let leaf = mid.children.get(0).expect("leaf");
+        let root = merged.first().expect("root");
+        let mid = root.children.first().expect("mid");
+        let leaf = mid.children.first().expect("leaf");
         // Leaf: own content changed → Modified
         assert_eq!(leaf.node.diff_status, Some(DiffStatus::Modified));
         // Mid: direct child (Leaf) has own_changed → Modified
@@ -1443,14 +1448,14 @@ mod tests {
 
         // Both service containers match by name "Diag-Comms"
         assert_eq!(merged.len(), 1);
-        let diag_comms = merged.get(0).expect("first merged");
+        let diag_comms = merged.first().expect("first merged");
         assert_eq!(diag_comms.children.len(), 2);
 
         // ReadDID is Unchanged (same text)
         assert_eq!(
             diag_comms
                 .children
-                .get(0)
+                .first()
                 .expect("first child")
                 .node
                 .diff_status,
