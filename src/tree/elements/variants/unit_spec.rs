@@ -8,8 +8,8 @@ use cda_database::datatypes::DiagLayer;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DetailSectionType,
-        NodeType,
+        CellType, ColumnConstraint, DetailCell, DetailContent, DetailRow, DetailSectionData,
+        DetailSectionType, NodeType,
     },
 };
 
@@ -140,36 +140,22 @@ fn build_unit_spec_overview(
     units: &[UnitData],
     unit_groups: &[UnitGroupData],
 ) -> Vec<DetailSectionData> {
-    let units_header = DetailRow::header(
-        vec![
-            "Short Name".to_owned(),
-            "Display".to_owned(),
-            "Factor".to_owned(),
-            "Offset".to_owned(),
-        ],
-        vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::NumericValue,
-            CellType::NumericValue,
-        ],
-    );
+    let units_header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("Display"),
+        DetailCell::new("Factor", CellType::NumericValue),
+        DetailCell::new("Offset", CellType::NumericValue),
+    ]);
 
     let unit_rows: Vec<DetailRow> = units
         .iter()
         .map(|u| {
             DetailRow::normal(
                 vec![
-                    u.short_name.clone(),
-                    u.display_name.clone(),
-                    u.factor.clone(),
-                    u.offset.clone(),
-                ],
-                vec![
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::NumericValue,
-                    CellType::NumericValue,
+                    DetailCell::text(u.short_name.clone()),
+                    DetailCell::text(u.display_name.clone()),
+                    DetailCell::new(u.factor.clone(), CellType::NumericValue),
+                    DetailCell::new(u.offset.clone(), CellType::NumericValue),
                 ],
                 0,
             )
@@ -194,17 +180,19 @@ fn build_unit_spec_overview(
     }];
 
     if !unit_groups.is_empty() {
-        let groups_header = DetailRow::header(
-            vec!["Short Name".to_owned(), "Unit Count".to_owned()],
-            vec![CellType::Text, CellType::NumericValue],
-        );
+        let groups_header = DetailRow::header(vec![
+            DetailCell::text("Short Name"),
+            DetailCell::new("Unit Count", CellType::NumericValue),
+        ]);
 
         let group_rows: Vec<DetailRow> = unit_groups
             .iter()
             .map(|g| {
                 DetailRow::normal(
-                    vec![g.short_name.clone(), g.unit_count.to_string()],
-                    vec![CellType::Text, CellType::NumericValue],
+                    vec![
+                        DetailCell::text(g.short_name.clone()),
+                        DetailCell::new(g.unit_count.to_string(), CellType::NumericValue),
+                    ],
                     0,
                 )
             })
@@ -230,30 +218,23 @@ fn build_unit_spec_overview(
 }
 
 fn build_unit_detail(unit: &UnitData) -> Vec<DetailSectionData> {
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     let rows = vec![
         DetailRow::normal(
-            vec!["Short Name".to_owned(), unit.short_name.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Short Name"), DetailCell::text(unit.short_name.clone())],
             0,
         ),
         DetailRow::normal(
-            vec!["Display Name".to_owned(), unit.display_name.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Display Name"), DetailCell::text(unit.display_name.clone())],
             0,
         ),
         DetailRow::normal(
-            vec!["Factor (SI→Unit)".to_owned(), unit.factor.clone()],
-            vec![CellType::Text, CellType::NumericValue],
+            vec![DetailCell::text("Factor (SI→Unit)"), DetailCell::new(unit.factor.clone(), CellType::NumericValue)],
             0,
         ),
         DetailRow::normal(
-            vec!["Offset (SI→Unit)".to_owned(), unit.offset.clone()],
-            vec![CellType::Text, CellType::NumericValue],
+            vec![DetailCell::text("Offset (SI→Unit)"), DetailCell::new(unit.offset.clone(), CellType::NumericValue)],
             0,
         ),
     ];
@@ -277,20 +258,15 @@ fn build_unit_detail(unit: &UnitData) -> Vec<DetailSectionData> {
 }
 
 fn build_unit_group_detail(group: &UnitGroupData) -> Vec<DetailSectionData> {
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     let rows = vec![
         DetailRow::normal(
-            vec!["Short Name".to_owned(), group.short_name.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Short Name"), DetailCell::text(group.short_name.clone())],
             0,
         ),
         DetailRow::normal(
-            vec!["Unit Count".to_owned(), group.unit_count.to_string()],
-            vec![CellType::Text, CellType::NumericValue],
+            vec![DetailCell::text("Unit Count"), DetailCell::new(group.unit_count.to_string(), CellType::NumericValue)],
             0,
         ),
     ];

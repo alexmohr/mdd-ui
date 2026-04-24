@@ -26,7 +26,7 @@ use crate::tree::{
     builder::TreeBuilder,
     types::{
         CellJumpTarget, CellJumpTargetType, CellType, ChildElementType, ColumnConstraint,
-        DetailContent, DetailRow, DetailRowType, DetailSectionData, DetailSectionType, RowMetadata,
+        DetailCell, DetailContent, DetailRow, DetailRowType, DetailSectionData, DetailSectionType, RowMetadata,
         SectionType,
     },
 };
@@ -438,20 +438,15 @@ fn build_variant_summary_section(vw: &VariantWrap<'_>, name: &str) -> Vec<Detail
     let mut sections = vec![];
 
     // Create info table section
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     let mut info_rows = vec![
         DetailRow::normal(
-            vec!["Variant".to_owned(), name.to_owned()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Variant"), DetailCell::text(name)],
             0,
         ),
         DetailRow::normal(
-            vec!["Base Variant".to_owned(), vw.is_base_variant().to_string()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Base Variant"), DetailCell::text(vw.is_base_variant().to_string())],
             0,
         ),
     ];
@@ -483,14 +478,10 @@ fn build_variant_summary_section(vw: &VariantWrap<'_>, name: &str) -> Vec<Detail
 
 /// Build summary section for a `DiagLayer` (used by functional groups and ECU shared data)
 fn build_layer_summary_section(layer: &DiagLayer<'_>, name: &str) -> Vec<DetailSectionData> {
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     let mut info_rows = vec![DetailRow::normal(
-        vec!["Name".to_owned(), name.to_owned()],
-        vec![CellType::Text, CellType::Text],
+        vec![DetailCell::text("Name"), DetailCell::text(name)],
         0,
     )];
 
@@ -518,8 +509,7 @@ fn build_layer_summary_section(layer: &DiagLayer<'_>, name: &str) -> Vec<DetailS
 fn append_layer_info_rows(layer: &DiagLayer<'_>, info_rows: &mut Vec<DetailRow>) {
     if let Some(sn) = layer.short_name() {
         info_rows.push(DetailRow::normal(
-            vec!["Short Name".to_owned(), sn.to_owned()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Short Name"), DetailCell::text(sn)],
             0,
         ));
     }
@@ -527,21 +517,18 @@ fn append_layer_info_rows(layer: &DiagLayer<'_>, info_rows: &mut Vec<DetailRow>)
         let value = ln.value().unwrap_or("-");
         let ti = ln.ti().unwrap_or("-");
         info_rows.push(DetailRow::normal(
-            vec!["Long Name".to_owned(), format!("value: {value}, ti: {ti}")],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Long Name"), DetailCell::text(format!("value: {value}, ti: {ti}"))],
             0,
         ));
     }
 
     if let Some(children_rows) = build_children_rows(layer) {
         info_rows.push(DetailRow::normal(
-            vec![String::new(), String::new()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text(""), DetailCell::text("")],
             0,
         ));
         info_rows.push(DetailRow::normal(
-            vec!["Children".to_owned(), String::new()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Children"), DetailCell::text("")],
             0,
         ));
         info_rows.extend(children_rows);
@@ -642,15 +629,16 @@ fn build_child_row(
     element_type: ChildElementType,
 ) -> Option<DetailRow> {
     let value = value?;
-    Some(DetailRow {
-        cells: vec![label.to_owned(), value],
-        cell_types: vec![CellType::ParameterName, CellType::Text],
-        cell_jump_targets: vec![None; 2],
-        indent: 0,
-        row_type: DetailRowType::ChildElement,
-        metadata: Some(RowMetadata::ChildElement { element_type }),
-        diff_status: None,
-    })
+    let mut row = DetailRow::normal(
+        vec![
+            DetailCell::new(label, CellType::ParameterName),
+            DetailCell::text(value),
+        ],
+        0,
+    );
+    row.row_type = DetailRowType::ChildElement;
+    row.metadata = Some(RowMetadata::ChildElement { element_type });
+    Some(row)
 }
 
 fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionData> {
@@ -659,10 +647,7 @@ fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionD
     }
 
     // Build table header
-    let header = DetailRow::header(
-        vec!["Name".to_owned(), "Is Base".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Name"), DetailCell::text("Is Base")]);
 
     let rows: Vec<_> = variants
         .iter()
@@ -679,12 +664,11 @@ fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionD
                 "No"
             };
 
-            DetailRow::with_jump_targets(
-                vec![name, is_base.to_owned()],
-                vec![CellType::ParameterName, CellType::Text],
+            DetailRow::normal(
                 vec![
-                    Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
-                    None,
+                    DetailCell::new(name, CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                    DetailCell::text(is_base),
                 ],
                 0,
             )
@@ -716,20 +700,18 @@ fn build_names_overview_table(names: &[String], title: &str) -> Vec<DetailSectio
         return vec![];
     }
 
-    let header = DetailRow::header(vec!["Short Name".to_owned()], vec![CellType::Text]);
+    let header = DetailRow::header(vec![DetailCell::text("Short Name")]);
 
     let rows: Vec<DetailRow> = names
         .iter()
-        .map(|name| DetailRow {
-            cells: vec![name.clone()],
-            cell_types: vec![CellType::ParameterName],
-            cell_jump_targets: vec![Some(CellJumpTarget::new(
-                CellJumpTargetType::TreeNodeByName,
-            ))],
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
+        .map(|name| {
+            DetailRow::normal(
+                vec![
+                    DetailCell::new(name.clone(), CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                ],
+                0,
+            )
         })
         .collect();
 

@@ -9,8 +9,8 @@ use super::dops::parse_dop_name;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
-        DetailSectionData, DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent,
+        DetailRow, DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -72,10 +72,7 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
         return vec![];
     };
 
-    let header = DetailRow::header(
-        vec!["Short Name".to_owned(), "Type".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("Type")]);
 
     let mut rows: Vec<DetailRow> = cp_refs
         .iter()
@@ -83,20 +80,19 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
             let cp = cpr.com_param()?;
             let name = cp.short_name().unwrap_or("?").to_owned();
             let cp_type = format!("{:?}", cp.com_param_type());
-            Some(DetailRow::with_jump_targets(
-                vec![name, cp_type],
-                vec![CellType::ParameterName, CellType::Text],
+            Some(DetailRow::normal(
                 vec![
-                    Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
-                    None,
+                    DetailCell::new(name, CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::text(cp_type),
                 ],
                 0,
             ))
         })
         .collect();
     rows.sort_by(|a, b| {
-        let a_name = a.cells.first().map_or("", String::as_str);
-        let b_name = b.cells.first().map_or("", String::as_str);
+        let a_name = a.cell_text(0);
+        let b_name = b.cell_text(0);
         a_name.cmp(b_name)
     });
 
@@ -121,8 +117,7 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
 /// Helper to create a simple key-value row without jump target.
 fn kv_row(key: &str, value: String) -> DetailRow {
     DetailRow::normal(
-        vec![key.to_owned(), value],
-        vec![CellType::Text, CellType::Text],
+        vec![DetailCell::text(key), DetailCell::text(value)],
         0,
     )
 }
@@ -143,14 +138,13 @@ fn dop_row(key: &str, dop_name: &str) -> DetailRow {
     } else {
         display
     };
-    DetailRow::with_jump_targets(
-        vec![key.to_owned(), value],
-        vec![CellType::Text, CellType::DopReference],
+    DetailRow::normal(
         vec![
-            None,
-            Some(CellJumpTarget::new(CellJumpTargetType::Dop {
-                name: nav_name,
-            })),
+            DetailCell::text(key),
+            DetailCell::new(value, CellType::DopReference)
+                .with_jump(CellJumpTarget::new(CellJumpTargetType::Dop {
+                    name: nav_name,
+                })),
         ],
         0,
     )
@@ -245,10 +239,7 @@ fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSect
         return None;
     }
 
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     Some(
         DetailSectionData::new(
@@ -286,8 +277,7 @@ fn build_complex_value_section(layer: &DiagLayer<'_>, idx: usize) -> Option<Deta
                 .and_then(|sv| sv.value().map(format_value_hex_decimal))
                 .unwrap_or_else(|| format!("Complex[{i}]"));
             DetailRow::normal(
-                vec![format!("{i}"), format!("{tag:?}"), value],
-                vec![CellType::Text, CellType::Text, CellType::Text],
+                vec![DetailCell::text(format!("{i}")), DetailCell::text(format!("{tag:?}")), DetailCell::text(value)],
                 0,
             )
         })
@@ -297,10 +287,7 @@ fn build_complex_value_section(layer: &DiagLayer<'_>, idx: usize) -> Option<Deta
         return None;
     }
 
-    let header = DetailRow::header(
-        vec!["#".to_owned(), "Type".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("#"), DetailCell::text("Type"), DetailCell::text("Value")]);
     Some(
         DetailSectionData::new(
             "Complex Value".to_owned(),
@@ -330,22 +317,13 @@ fn build_sub_params_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailS
     let ccp = cp.specific_data_as_complex_com_param()?;
     let sub_params = ccp.com_params()?;
 
-    let header = DetailRow::header(
-        vec![
-            "Short Name".to_owned(),
-            "Type".to_owned(),
-            "Specific Data".to_owned(),
-            "Param Class".to_owned(),
-            "Default Value".to_owned(),
-        ],
-        vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-    );
+    let header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("Type"),
+        DetailCell::text("Specific Data"),
+        DetailCell::text("Param Class"),
+        DetailCell::text("Default Value"),
+    ]);
     let rows: Vec<DetailRow> = sub_params
         .iter()
         .map(|sp| {
@@ -375,18 +353,11 @@ fn build_sub_params_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailS
 
             DetailRow::normal(
                 vec![
-                    name,
-                    sp_type,
-                    specific_data_display,
-                    param_class,
-                    default_val,
-                ],
-                vec![
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
+                    DetailCell::text(name),
+                    DetailCell::text(sp_type),
+                    DetailCell::text(specific_data_display),
+                    DetailCell::text(param_class),
+                    DetailCell::text(default_val),
                 ],
                 0,
             )

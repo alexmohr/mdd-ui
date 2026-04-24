@@ -8,8 +8,8 @@ use cda_database::datatypes::ParentRef;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
-        DetailSectionData, DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent,
+        DetailRow, DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -40,21 +40,17 @@ pub fn build_parent_refs_detail_section<'a>(
         return None;
     }
 
-    let header = DetailRow::header(
-        vec!["Short Name".to_owned(), "Type".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("Type")]);
 
     let rows: Vec<DetailRow> = parent_refs_list
         .iter()
         .map(|pr| {
             let (ref_type, name) = extract_parent_ref_info(pr);
-            DetailRow::with_jump_targets(
-                vec![name, ref_type.to_owned()],
-                vec![CellType::ParameterName, CellType::Text],
+            DetailRow::normal(
                 vec![
-                    Some(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
-                    None,
+                    DetailCell::new(name, CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                    DetailCell::text(ref_type),
                 ],
                 0,
             )
@@ -166,23 +162,17 @@ fn extract_parent_ref_info(parent_ref: &ParentRef<'_>) -> (&'static str, String)
 }
 
 fn build_parent_refs_overview(parent_refs_list: &[ParentRef<'_>]) -> DetailSectionData {
-    let header = DetailRow::header(
-        vec!["Short Name".to_owned(), "Type".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("Type")]);
 
     let rows: Vec<DetailRow> = parent_refs_list
         .iter()
         .map(|pr| {
             let (ref_type, name) = extract_parent_ref_info(pr);
-            DetailRow::with_jump_targets(
-                vec![name, ref_type.to_owned()],
-                vec![CellType::ParameterName, CellType::Text],
+            DetailRow::normal(
                 vec![
-                    Some(crate::tree::CellJumpTarget::new(
-                        CellJumpTargetType::ContainerByName,
-                    )),
-                    None,
+                    DetailCell::new(name, CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                    DetailCell::text(ref_type),
                 ],
                 0,
             )
@@ -213,19 +203,14 @@ fn build_single_parent_ref_detail(
     let mut sections = Vec::new();
 
     // General info
-    let general_header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let general_header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
     let general_rows = vec![
         DetailRow::normal(
-            vec!["Short Name".to_owned(), short_name.to_owned()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Short Name"), DetailCell::text(short_name)],
             0,
         ),
         DetailRow::normal(
-            vec!["Type".to_owned(), ref_type.to_owned()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Type"), DetailCell::text(ref_type)],
             0,
         ),
     ];
@@ -289,7 +274,7 @@ fn build_not_inherited_section(
     rows: Vec<DetailRow>,
     section_type: DetailSectionType,
 ) -> DetailSectionData {
-    let header = DetailRow::header(vec!["Short Name".to_owned()], vec![CellType::Text]);
+    let header = DetailRow::header(vec![DetailCell::text("Short Name")]);
 
     DetailSectionData::new(
         title.to_owned(),
@@ -305,24 +290,24 @@ fn build_not_inherited_section(
 }
 
 fn make_tree_node_row(name: &str) -> DetailRow {
-    DetailRow::with_jump_targets(
-        vec![name.to_owned()],
-        vec![CellType::ParameterName],
-        vec![Some(CellJumpTarget::new(
-            CellJumpTargetType::TreeNodeByName,
-        ))],
+    DetailRow::normal(
+        vec![
+            DetailCell::new(name, CellType::ParameterName)
+                .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+        ],
         0,
     )
 }
 
 fn make_dop_row(name: &str) -> DetailRow {
     let dop_name = name.to_owned();
-    DetailRow::with_jump_targets(
-        vec![dop_name.clone()],
-        vec![CellType::DopReference],
-        vec![Some(CellJumpTarget::new(CellJumpTargetType::Dop {
-            name: dop_name,
-        }))],
+    DetailRow::normal(
+        vec![
+            DetailCell::new(dop_name.clone(), CellType::DopReference)
+                .with_jump(CellJumpTarget::new(CellJumpTargetType::Dop {
+                    name: dop_name,
+                })),
+        ],
         0,
     )
 }

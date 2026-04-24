@@ -14,7 +14,7 @@ pub(super) fn build_end_of_pdu_dop_tabs(
     sections: &mut Vec<DetailSectionData>,
 ) {
     // Remove the DOP Variant row — not needed per requirements
-    types_rows.retain(|row| row.cells.first().map(String::as_str) != Some("DOP Variant"));
+    types_rows.retain(|row| row.cells.first().map(|c| c.text.as_str()) != Some("DOP Variant"));
 
     if let Some(field) = eof_field.field()
         && let Some(basic_struct) = field.basic_structure()

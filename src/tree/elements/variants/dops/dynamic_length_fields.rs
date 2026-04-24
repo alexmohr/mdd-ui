@@ -15,7 +15,7 @@ pub(super) fn build_dynamic_length_field_dop_tabs(
 ) {
     // Remove DOP Variant and Short Name rows — not wanted for dynamic length fields
     types_rows.retain(|row| {
-        let key = row.cells.first().map(std::string::String::as_str);
+        let key = row.cells.first().map(|c| c.text.as_str());
         !matches!(key, Some("DOP Variant" | "Short Name"))
     });
 

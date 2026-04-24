@@ -8,8 +8,8 @@ use cda_database::datatypes::DiagLayer;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
-        DetailRowType, DetailSectionData, DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent,
+        DetailRow, DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -50,16 +50,14 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
                 let name = tr.short_name().unwrap_or("?");
                 let src = tr.source_short_name_ref().unwrap_or("?");
                 let tgt = tr.target_short_name_ref().unwrap_or("?");
-                DetailRow {
-                    row_type: DetailRowType::Normal,
-                    metadata: None,
-                    diff_status: None,
-
-                    cells: vec![name.to_string(), src.to_string(), tgt.to_string()],
-                    cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-                    cell_jump_targets: vec![None; 3],
-                    indent: 0,
-                }
+                DetailRow::normal(
+                    vec![
+                        DetailCell::text(name),
+                        DetailCell::text(src),
+                        DetailCell::text(tgt),
+                    ],
+                    0,
+                )
             })
             .collect();
 
@@ -69,16 +67,7 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
             .flatten()
             .map(|state| {
                 let sn = state.short_name().unwrap_or("?");
-                DetailRow {
-                    row_type: DetailRowType::Normal,
-                    metadata: None,
-                    diff_status: None,
-
-                    cells: vec![sn.to_string()],
-                    cell_types: vec![CellType::Text],
-                    cell_jump_targets: vec![None; 1],
-                    indent: 0,
-                }
+                DetailRow::normal(vec![DetailCell::text(sn)], 0)
             })
             .collect();
 
@@ -105,7 +94,7 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
 }
 
 fn build_transitions_section(mut transitions: Vec<DetailRow>) -> DetailSectionData {
-    transitions.sort_by_cached_key(|row| row.cells.first().map(|s| s.to_lowercase()));
+    transitions.sort_by_cached_key(|row| row.cells.first().map(|c| c.text.to_lowercase()));
 
     DetailSectionData {
         title: "State Transitions".to_string(),
@@ -115,20 +104,11 @@ fn build_transitions_section(mut transitions: Vec<DetailRow>) -> DetailSectionDa
             DetailContent::PlainText(vec!["No state transitions".to_string()])
         } else {
             DetailContent::Table {
-                header: DetailRow {
-                    row_type: DetailRowType::Normal,
-                    metadata: None,
-                    diff_status: None,
-
-                    cells: vec![
-                        "Name".to_string(),
-                        "Source".to_string(),
-                        "Target".to_string(),
-                    ],
-                    cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-                    cell_jump_targets: vec![None; 3],
-                    indent: 0,
-                },
+                header: DetailRow::header(vec![
+                    DetailCell::text("Name"),
+                    DetailCell::text("Source"),
+                    DetailCell::text("Target"),
+                ]),
                 rows: transitions,
                 constraints: vec![
                     ColumnConstraint::Percentage(34),
@@ -142,7 +122,7 @@ fn build_transitions_section(mut transitions: Vec<DetailRow>) -> DetailSectionDa
 }
 
 fn build_states_section(mut states: Vec<DetailRow>) -> DetailSectionData {
-    states.sort_by_cached_key(|row| row.cells.first().map(|s| s.to_lowercase()));
+    states.sort_by_cached_key(|row| row.cells.first().map(|c| c.text.to_lowercase()));
 
     DetailSectionData {
         title: "States".to_string(),
@@ -152,16 +132,7 @@ fn build_states_section(mut states: Vec<DetailRow>) -> DetailSectionData {
             DetailContent::PlainText(vec!["No states".to_string()])
         } else {
             DetailContent::Table {
-                header: DetailRow {
-                    row_type: DetailRowType::Normal,
-                    metadata: None,
-                    diff_status: None,
-
-                    cells: vec!["Name".to_string()],
-                    cell_types: vec![CellType::Text],
-                    cell_jump_targets: vec![None; 1],
-                    indent: 0,
-                },
+                header: DetailRow::header(vec![DetailCell::text("Name")]),
                 rows: states,
                 constraints: vec![ColumnConstraint::Percentage(100)],
                 use_row_selection: false,
@@ -176,14 +147,11 @@ fn build_state_charts_overview_table(layer: &DiagLayer<'_>) -> Vec<DetailSection
         return vec![];
     };
 
-    let header = DetailRow::header(
-        vec![
-            "Name".to_owned(),
-            "States".to_owned(),
-            "Transitions".to_owned(),
-        ],
-        vec![CellType::Text, CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![
+        DetailCell::text("Name"),
+        DetailCell::text("States"),
+        DetailCell::text("Transitions"),
+    ]);
 
     let mut sorted_charts: Vec<_> = charts.iter().collect();
     sorted_charts.sort_by_cached_key(|chart| chart.short_name().unwrap_or("").to_lowercase());
@@ -194,17 +162,12 @@ fn build_state_charts_overview_table(layer: &DiagLayer<'_>) -> Vec<DetailSection
             let name = chart.short_name().unwrap_or("unnamed").to_owned();
             let state_count = chart.states().map_or(0, |s| s.len());
             let transition_count = chart.state_transitions().map_or(0, |t| t.len());
-            DetailRow::with_jump_targets(
-                vec![name, state_count.to_string(), transition_count.to_string()],
+            DetailRow::normal(
                 vec![
-                    CellType::ParameterName,
-                    CellType::NumericValue,
-                    CellType::NumericValue,
-                ],
-                vec![
-                    Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
-                    None,
-                    None,
+                    DetailCell::new(name, CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::new(state_count.to_string(), CellType::NumericValue),
+                    DetailCell::new(transition_count.to_string(), CellType::NumericValue),
                 ],
                 0,
             )

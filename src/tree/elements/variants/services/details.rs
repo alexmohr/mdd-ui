@@ -12,8 +12,8 @@ use crate::tree::{
         responses::{build_neg_responses_sections, build_pos_responses_sections},
     },
     types::{
-        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow,
-        DetailRowType, DetailSectionData, DetailSectionType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent,
+        DetailRow, DetailSectionData, DetailSectionType,
     },
 };
 
@@ -62,28 +62,13 @@ pub(super) fn build_diag_comms_table_section(
     parent_services: &[(DiagService<'_>, String)],
     job_names: &[String],
 ) -> DetailSectionData {
-    let header = DetailRow {
-        row_type: DetailRowType::Normal,
-        metadata: None,
-        diff_status: None,
-
-        cells: vec![
-            "Short Name".to_owned(),
-            "ID".to_owned(),
-            "Funct Class".to_owned(),
-            "Type".to_owned(),
-            "Inherited".to_owned(),
-        ],
-        cell_types: vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-        cell_jump_targets: vec![None; 5],
-        indent: 0,
-    };
+    let header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("ID"),
+        DetailCell::text("Funct Class"),
+        DetailCell::text("Type"),
+        DetailCell::text("Inherited"),
+    ]);
 
     let mut rows = Vec::new();
 
@@ -104,36 +89,17 @@ pub(super) fn build_diag_comms_table_section(
             .unwrap_or("-")
             .to_owned();
 
-        Some(DetailRow {
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-
-            cells: vec![
-                name,
-                id,
-                funct_class,
-                "Service".to_owned(),
-                inherited.to_owned(),
+        Some(DetailRow::normal(
+            vec![
+                DetailCell::new(name, CellType::ParameterName)
+                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                DetailCell::text(id),
+                DetailCell::text(funct_class),
+                DetailCell::text("Service"),
+                DetailCell::text(inherited),
             ],
-            cell_types: vec![
-                CellType::ParameterName,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-            ],
-            cell_jump_targets: vec![
-                Some(crate::tree::CellJumpTarget::new(
-                    CellJumpTargetType::TreeNodeByName,
-                )),
-                None,
-                None,
-                None,
-                None,
-            ],
-            indent: 0,
-        })
+            0,
+        ))
     };
 
     rows.extend(
@@ -148,35 +114,18 @@ pub(super) fn build_diag_comms_table_section(
             .filter_map(|(ds, _)| build_service_row(ds, "true")),
     );
 
-    rows.extend(job_names.iter().map(|job_name| DetailRow {
-        row_type: DetailRowType::Normal,
-        metadata: None,
-        diff_status: None,
-
-        cells: vec![
-            job_name.clone(),
-            "-".to_owned(),
-            "-".to_owned(),
-            "Job".to_owned(),
-            "false".to_owned(),
-        ],
-        cell_types: vec![
-            CellType::ParameterName,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-        cell_jump_targets: vec![
-            Some(crate::tree::CellJumpTarget::new(
-                CellJumpTargetType::TreeNodeByName,
-            )),
-            None,
-            None,
-            None,
-            None,
-        ],
-        indent: 0,
+    rows.extend(job_names.iter().map(|job_name| {
+        DetailRow::normal(
+            vec![
+                DetailCell::new(job_name.clone(), CellType::ParameterName)
+                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                DetailCell::text("-"),
+                DetailCell::text("-"),
+                DetailCell::text("Job"),
+                DetailCell::text("false"),
+            ],
+            0,
+        )
     }));
 
     DetailSectionData {
@@ -213,23 +162,20 @@ pub(crate) fn build_service_overview_rows(
     if let Some(dc) = ds.diag_comm() {
         rows.extend(dc.short_name().map(|sn| {
             DetailRow::normal(
-                vec!["Service".to_owned(), sn.to_owned()],
-                vec![CellType::Text, CellType::Text],
+                vec![DetailCell::text("Service"), DetailCell::text(sn)],
                 0,
             )
         }));
         rows.extend(dc.semantic().map(|semantic| {
             DetailRow::normal(
-                vec!["Semantic".to_owned(), semantic.to_owned()],
-                vec![CellType::Text, CellType::Text],
+                vec![DetailCell::text("Semantic"), DetailCell::text(semantic)],
                 0,
             )
         }));
     }
     if let Some(sid) = ds.request_id() {
         rows.push(DetailRow::normal(
-            vec!["SID".to_owned(), format!("0x{sid:02X}")],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("SID"), DetailCell::text(format!("0x{sid:02X}"))],
             0,
         ));
     }
@@ -241,25 +187,22 @@ pub(crate) fn build_service_overview_rows(
         };
         rows.push(DetailRow::normal(
             vec![
-                "Sub-Function".to_owned(),
-                format!("{sub_fn_str} ({bit_len} bits)"),
+                DetailCell::text("Sub-Function"),
+                DetailCell::text(format!("{sub_fn_str} ({bit_len} bits)")),
             ],
-            vec![CellType::Text, CellType::Text],
             0,
         ));
     }
 
     rows.push(DetailRow::normal(
-        vec!["Addressing".to_owned(), format!("{:?}", ds.addressing())],
-        vec![CellType::Text, CellType::Text],
+        vec![DetailCell::text("Addressing"), DetailCell::text(format!("{:?}", ds.addressing()))],
         0,
     ));
     rows.push(DetailRow::normal(
         vec![
-            "Transmission".to_owned(),
-            format!("{:?}", ds.transmission_mode()),
+            DetailCell::text("Transmission"),
+            DetailCell::text(format!("{:?}", ds.transmission_mode())),
         ],
-        vec![CellType::Text, CellType::Text],
         0,
     ));
 
@@ -280,10 +223,7 @@ pub(crate) fn build_service_overview_section(
     DetailSectionData::new(
         "Overview".to_owned(),
         DetailContent::Table {
-            header: DetailRow::header(
-                vec!["Property".to_owned(), "Value".to_owned()],
-                vec![CellType::Text, CellType::Text],
-            ),
+            header: DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]),
             rows,
             constraints: vec![
                 ColumnConstraint::Percentage(30),
@@ -312,8 +252,7 @@ fn build_overview_section(
 
         if !states.is_empty() {
             rows.push(DetailRow::normal(
-                vec!["State".to_owned(), states.join(", ")],
-                vec![CellType::Text, CellType::Text],
+                vec![DetailCell::text("State"), DetailCell::text(states.join(", "))],
                 0,
             ));
         }
@@ -323,12 +262,11 @@ fn build_overview_section(
             .and_then(|fc_list| (!fc_list.is_empty()).then(|| fc_list.get(0)))
             .and_then(|fc| fc.short_name())
             .unwrap_or("-");
-        rows.push(DetailRow::with_jump_targets(
-            vec!["Functional Class".to_owned(), funct_class_name.to_owned()],
-            vec![CellType::Text, CellType::ParameterName],
+        rows.push(DetailRow::normal(
             vec![
-                None,
-                Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                DetailCell::text("Functional Class"),
+                DetailCell::new(funct_class_name, CellType::ParameterName)
+                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
             ],
             0,
         ));
@@ -337,10 +275,7 @@ fn build_overview_section(
     DetailSectionData::new(
         "Overview".to_owned(),
         DetailContent::Table {
-            header: DetailRow::header(
-                vec!["Property".to_owned(), "Value".to_owned()],
-                vec![CellType::Text, CellType::Text],
-            ),
+            header: DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]),
             rows,
             constraints: vec![
                 ColumnConstraint::Percentage(30),
@@ -354,44 +289,23 @@ fn build_overview_section(
 }
 
 fn build_comparam_refs_section() -> DetailSectionData {
-    let comparam_header = DetailRow {
-        row_type: DetailRowType::Normal,
-        metadata: None,
-        diff_status: None,
-
-        cells: vec![
-            "ComParam".to_owned(),
-            "Value".to_owned(),
-            "Complex Value".to_owned(),
-            "Protocol".to_owned(),
-            "Prot-Stack".to_owned(),
-        ],
-        cell_types: vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-        cell_jump_targets: vec![None; 5],
-        indent: 0,
-    };
+    let comparam_header = DetailRow::header(vec![
+        DetailCell::text("ComParam"),
+        DetailCell::text("Value"),
+        DetailCell::text("Complex Value"),
+        DetailCell::text("Protocol"),
+        DetailCell::text("Prot-Stack"),
+    ]);
     DetailSectionData {
         title: "ComParam-Refs".to_owned(),
         render_as_header: false,
         section_type: DetailSectionType::ComParams,
         content: DetailContent::Table {
             header: comparam_header,
-            rows: vec![DetailRow {
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-
-                cells: vec!["(No ComParam refs at comm level)".to_owned()],
-                cell_types: vec![CellType::Text],
-                cell_jump_targets: vec![None; 1],
-                indent: 0,
-            }],
+            rows: vec![DetailRow::normal(
+                vec![DetailCell::text("(No ComParam refs at comm level)")],
+                0,
+            )],
             constraints: vec![
                 ColumnConstraint::Percentage(20),
                 ColumnConstraint::Percentage(20),
@@ -485,11 +399,10 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
                 .map(|sd| {
                     DetailRow::normal(
                         vec![
-                            sd.value().unwrap_or("-").to_owned(),
-                            sd.si().unwrap_or("-").to_owned(),
-                            sd.ti().unwrap_or("-").to_owned(),
+                            DetailCell::text(sd.value().unwrap_or("-")),
+                            DetailCell::text(sd.si().unwrap_or("-")),
+                            DetailCell::text(sd.ti().unwrap_or("-")),
                         ],
-                        vec![CellType::Text, CellType::Text, CellType::Text],
                         0,
                     )
                 })
@@ -507,10 +420,11 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
                 render_as_header: false,
                 section_type: DetailSectionType::Custom,
                 content: DetailContent::Table {
-                    header: DetailRow::header(
-                        vec!["Value".to_owned(), "SI".to_owned(), "TI".to_owned()],
-                        vec![CellType::Text, CellType::Text, CellType::Text],
-                    ),
+                    header: DetailRow::header(vec![
+                        DetailCell::text("Value"),
+                        DetailCell::text("SI"),
+                        DetailCell::text("TI"),
+                    ]),
                     rows: sd_rows,
                     constraints: vec![
                         ColumnConstraint::Percentage(50),
@@ -534,32 +448,17 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
 }
 
 fn build_related_refs_section() -> DetailSectionData {
-    let related_header = DetailRow {
-        row_type: DetailRowType::Normal,
-        metadata: None,
-        diff_status: None,
-
-        cells: vec!["Short Name".to_owned()],
-        cell_types: vec![CellType::Text],
-        cell_jump_targets: vec![None; 1],
-        indent: 0,
-    };
+    let related_header = DetailRow::header(vec![DetailCell::text("Short Name")]);
     DetailSectionData {
         title: "Related-Diag-Comm-Refs".to_owned(),
         render_as_header: false,
         section_type: DetailSectionType::RelatedRefs,
         content: DetailContent::Table {
             header: related_header,
-            rows: vec![DetailRow {
-                row_type: DetailRowType::Normal,
-                metadata: None,
-                diff_status: None,
-
-                cells: vec!["(Related comms not available)".to_owned()],
-                cell_types: vec![CellType::Text],
-                cell_jump_targets: vec![None; 1],
-                indent: 0,
-            }],
+            rows: vec![DetailRow::normal(
+                vec![DetailCell::text("(Related comms not available)")],
+                0,
+            )],
             constraints: vec![ColumnConstraint::Percentage(100)],
             use_row_selection: false,
         },
@@ -575,16 +474,11 @@ fn build_precondition_state_refs_section(ds: &DiagService<'_>) -> DetailSectionD
 pub(super) fn build_precondition_state_refs_from_diag_comm(
     dc: Option<DiagComm<'_>>,
 ) -> DetailSectionData {
-    let header = DetailRow {
-        cells: vec![
-            "State".to_owned(),
-            "Value".to_owned(),
-            "Input Param".to_owned(),
-        ],
-        cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-        indent: 0,
-        ..Default::default()
-    };
+    let header = DetailRow::header(vec![
+        DetailCell::text("State"),
+        DetailCell::text("Value"),
+        DetailCell::text("Input Param"),
+    ]);
 
     let rows: Vec<DetailRow> = dc
         .and_then(|dc| dc.pre_condition_state_refs())
@@ -603,26 +497,26 @@ pub(super) fn build_precondition_state_refs_from_diag_comm(
                 .unwrap_or("-")
                 .to_owned();
 
-            DetailRow {
-                cells: vec![state_name, value, input_param],
-                cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-                indent: 0,
-                ..Default::default()
-            }
+            DetailRow::normal(
+                vec![
+                    DetailCell::text(state_name),
+                    DetailCell::text(value),
+                    DetailCell::text(input_param),
+                ],
+                0,
+            )
         })
         .collect();
 
     let rows = if rows.is_empty() {
-        vec![DetailRow {
-            cells: vec![
-                "(No precondition state refs)".to_owned(),
-                "-".to_owned(),
-                "-".to_owned(),
+        vec![DetailRow::normal(
+            vec![
+                DetailCell::text("(No precondition state refs)"),
+                DetailCell::text("-"),
+                DetailCell::text("-"),
             ],
-            cell_types: vec![CellType::Text, CellType::Text, CellType::Text],
-            indent: 0,
-            ..Default::default()
-        }]
+            0,
+        )]
     } else {
         rows
     };
@@ -645,22 +539,12 @@ pub(super) fn build_precondition_state_refs_from_diag_comm(
 }
 
 fn build_state_transition_refs_section(ds: &DiagService<'_>) -> DetailSectionData {
-    let header = DetailRow {
-        cells: vec![
-            "Short Name".to_owned(),
-            "Source".to_owned(),
-            "Target".to_owned(),
-            "Value".to_owned(),
-        ],
-        cell_types: vec![
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-            CellType::Text,
-        ],
-        indent: 0,
-        ..Default::default()
-    };
+    let header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("Source"),
+        DetailCell::text("Target"),
+        DetailCell::text("Value"),
+    ]);
 
     let rows: Vec<DetailRow> = ds
         .diag_comm()
@@ -680,37 +564,28 @@ fn build_state_transition_refs_section(ds: &DiagService<'_>) -> DetailSectionDat
             );
             let value = st.value().unwrap_or("-").to_owned();
 
-            DetailRow {
-                cells: vec![short_name, source, target, value],
-                cell_types: vec![
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::Text,
+            DetailRow::normal(
+                vec![
+                    DetailCell::text(short_name),
+                    DetailCell::text(source),
+                    DetailCell::text(target),
+                    DetailCell::text(value),
                 ],
-                indent: 0,
-                ..Default::default()
-            }
+                0,
+            )
         })
         .collect();
 
     let rows = if rows.is_empty() {
-        vec![DetailRow {
-            cells: vec![
-                "(No state transition refs)".to_owned(),
-                "-".to_owned(),
-                "-".to_owned(),
-                "-".to_owned(),
+        vec![DetailRow::normal(
+            vec![
+                DetailCell::text("(No state transition refs)"),
+                DetailCell::text("-"),
+                DetailCell::text("-"),
+                DetailCell::text("-"),
             ],
-            cell_types: vec![
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-                CellType::Text,
-            ],
-            indent: 0,
-            ..Default::default()
-        }]
+            0,
+        )]
     } else {
         rows
     };

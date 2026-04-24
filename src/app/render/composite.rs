@@ -292,7 +292,7 @@ impl App {
             .cells
             .iter()
             .map(|c| {
-                Cell::from(c.clone()).style(
+                Cell::from(c.text.clone()).style(
                     Style::default()
                         .fg(self.theme.table_header)
                         .add_modifier(Modifier::BOLD),
@@ -307,7 +307,7 @@ impl App {
             .map(|r| {
                 let cells: Vec<Cell> = (0..max_columns)
                     .map(|col| {
-                        let text = r.cells.get(col).map_or("", String::as_str);
+                        let text = r.cells.get(col).map_or("", |c| c.text.as_str());
                         Cell::from(text.to_owned())
                             .style(Style::default().fg(self.theme.table_cell))
                     })

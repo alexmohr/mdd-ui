@@ -13,7 +13,7 @@ use std::{collections::HashSet, sync::Arc};
 use cda_database::datatypes::DiagnosticDatabase;
 
 use crate::tree::{
-    self, CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DiffStatus,
+    self, ColumnConstraint, DetailCell, DetailContent, DetailRow, DetailSectionData, DiffStatus,
     NodeType, TreeNode,
 };
 
@@ -465,13 +465,13 @@ fn annotate_table_rows(old_rows: &[DetailRow], new_rows: &mut Vec<DetailRow>) {
     // Index old rows by first cell value.
     let old_by_key: std::collections::BTreeMap<&str, &DetailRow> = old_rows
         .iter()
-        .filter_map(|r| r.cells.first().map(|k| (k.as_str(), r)))
+        .filter_map(|r| r.cells.first().map(|k| (k.text.as_str(), r)))
         .collect();
 
     let mut matched_old_keys: HashSet<String> = HashSet::new();
 
     for new_row in new_rows.iter_mut() {
-        let Some(key) = new_row.cells.first().cloned() else {
+        let Some(key) = new_row.cells.first().map(|c| c.text.clone()) else {
             continue;
         };
         if let Some(old_row) = old_by_key.get(key.as_str()) {
@@ -492,7 +492,7 @@ fn annotate_table_rows(old_rows: &[DetailRow], new_rows: &mut Vec<DetailRow>) {
         .filter(|r| {
             r.cells
                 .first()
-                .is_some_and(|k| !matched_old_keys.contains(k.as_str()))
+                .is_some_and(|k| !matched_old_keys.contains(k.text.as_str()))
         })
         .map(|r| {
             let mut row = r.clone();
@@ -621,11 +621,11 @@ fn extract_table_diffs(
         ) => {
             let old_keys: HashSet<&str> = old_rows
                 .iter()
-                .filter_map(|r| r.cells.first().map(String::as_str))
+                .filter_map(|r| r.cells.first().map(|c| c.text.as_str()))
                 .collect();
             let new_keys: HashSet<&str> = new_rows
                 .iter()
-                .filter_map(|r| r.cells.first().map(String::as_str))
+                .filter_map(|r| r.cells.first().map(|c| c.text.as_str()))
                 .collect();
 
             // Modified rows — present in both with differing cells.
@@ -643,24 +643,18 @@ fn extract_table_diffs(
                         .zip(new_row.cells.iter())
                         .skip(1)
                         .filter(|(o, n)| o != n)
-                        .map(|(o, n)| format!("{o} → {n}"))
+                        .map(|(o, n)| format!("{} → {}", o.text, n.text))
                         .collect();
                     let prop_name = if section_title.is_empty() {
-                        key.clone()
+                        key.text.clone()
                     } else {
-                        format!("{section_title}: {key}")
+                        format!("{section_title}: {}", key.text)
                     };
                     diffs.push(ChangedProperty {
                         name: prop_name,
-                        old_value: old_row
-                            .cells
-                            .get(1..)
-                            .map_or_else(String::new, |s| s.join(", ")),
+                        old_value: join_cell_texts(&old_row.cells, 1),
                         new_value: if changed_cols.is_empty() {
-                            new_row
-                                .cells
-                                .get(1..)
-                                .map_or_else(String::new, |s| s.join(", "))
+                            join_cell_texts(&new_row.cells, 1)
                         } else {
                             changed_cols.join("; ")
                         },
@@ -673,18 +667,15 @@ fn extract_table_diffs(
                 let Some(key) = old_row.cells.first() else {
                     continue;
                 };
-                if !new_keys.contains(key.as_str()) {
+                if !new_keys.contains(key.text.as_str()) {
                     let prop_name = if section_title.is_empty() {
-                        key.clone()
+                        key.text.clone()
                     } else {
-                        format!("{section_title}: {key}")
+                        format!("{section_title}: {}", key.text)
                     };
                     diffs.push(ChangedProperty {
                         name: prop_name,
-                        old_value: old_row
-                            .cells
-                            .get(1..)
-                            .map_or_else(String::new, |s| s.join(", ")),
+                        old_value: join_cell_texts(&old_row.cells, 1),
                         new_value: "(removed)".to_owned(),
                     });
                 }
@@ -695,19 +686,16 @@ fn extract_table_diffs(
                 let Some(key) = new_row.cells.first() else {
                     continue;
                 };
-                if !old_keys.contains(key.as_str()) {
+                if !old_keys.contains(key.text.as_str()) {
                     let prop_name = if section_title.is_empty() {
-                        key.clone()
+                        key.text.clone()
                     } else {
-                        format!("{section_title}: {key}")
+                        format!("{section_title}: {}", key.text)
                     };
                     diffs.push(ChangedProperty {
                         name: prop_name,
                         old_value: "(added)".to_owned(),
-                        new_value: new_row
-                            .cells
-                            .get(1..)
-                            .map_or_else(String::new, |s| s.join(", ")),
+                        new_value: join_cell_texts(&new_row.cells, 1),
                     });
                 }
             }
@@ -731,22 +719,43 @@ fn extract_table_diffs(
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Join the text of cells starting at `skip` with `", "`.
+fn join_cell_texts(cells: &[DetailCell], skip: usize) -> String {
+    cells
+        .get(skip..)
+        .map_or_else(String::new, |slice| {
+            slice
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+}
+
+// ---------------------------------------------------------------------------
 // Property diff table builder
 // ---------------------------------------------------------------------------
 
 /// Create a detail section containing a table of property differences.
 fn build_property_diff_section(title: &str, diffs: &[ChangedProperty]) -> DetailSectionData {
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Old".to_owned(), "New".to_owned()],
-        vec![CellType::Text, CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Old"),
+        DetailCell::text("New"),
+    ]);
 
     let rows: Vec<DetailRow> = diffs
         .iter()
         .map(|p| {
             DetailRow::normal(
-                vec![p.name.clone(), p.old_value.clone(), p.new_value.clone()],
-                vec![CellType::Text, CellType::Text, CellType::Text],
+                vec![
+                    DetailCell::text(&p.name),
+                    DetailCell::text(&p.old_value),
+                    DetailCell::text(&p.new_value),
+                ],
                 0,
             )
         })
@@ -880,54 +889,45 @@ fn add_summary_to_general(
     };
 
     // Build a detail section showing file sources and summary
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
     let rows = vec![
         DetailRow::normal(
-            vec!["Old file (removed)".to_owned(), old_path.to_owned()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Old file (removed)"), DetailCell::text(old_path)],
             0,
         ),
         DetailRow::normal(
-            vec!["New file (added)".to_owned(), new_path.to_owned()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("New file (added)"), DetailCell::text(new_path)],
             0,
         ),
         DetailRow::normal(
-            vec!["Added".to_owned(), summary.added.to_string()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Added"), DetailCell::text(summary.added.to_string())],
             0,
         ),
         DetailRow::normal(
-            vec!["Removed".to_owned(), summary.removed.to_string()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Removed"), DetailCell::text(summary.removed.to_string())],
             0,
         ),
         DetailRow::normal(
-            vec!["Modified".to_owned(), summary.modified.to_string()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Modified"), DetailCell::text(summary.modified.to_string())],
             0,
         ),
         DetailRow::normal(
-            vec!["Unchanged".to_owned(), summary.unchanged.to_string()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Unchanged"), DetailCell::text(summary.unchanged.to_string())],
             0,
         ),
         DetailRow::normal(
-            vec!["Total added".to_owned(), totals.added.to_string()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Total added"), DetailCell::text(totals.added.to_string())],
             0,
         ),
         DetailRow::normal(
-            vec!["Total changed".to_owned(), totals.modified.to_string()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Total changed"), DetailCell::text(totals.modified.to_string())],
             0,
         ),
         DetailRow::normal(
-            vec!["Total removed".to_owned(), totals.removed.to_string()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Total removed"), DetailCell::text(totals.removed.to_string())],
             0,
         ),
     ];

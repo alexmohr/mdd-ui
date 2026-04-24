@@ -8,7 +8,7 @@ use cda_database::datatypes::DiagLayer;
 use crate::tree::{
     DetailContent,
     builder::TreeBuilder,
-    types::{CellType, ColumnConstraint, DetailRow, DetailSectionData, NodeType},
+    types::{ColumnConstraint, DetailCell, DetailRow, DetailSectionData, NodeType},
 };
 
 /// Add placeholder sections that are not fully implemented yet.
@@ -32,17 +32,13 @@ pub fn add_additional_audiences(b: &mut TreeBuilder, layer: &DiagLayer<'_>, dept
                     .to_owned();
 
                 DetailRow::normal(
-                    vec![short_name, long_name],
-                    vec![CellType::Text, CellType::Text],
+                    vec![DetailCell::text(short_name), DetailCell::text(long_name)],
                     0,
                 )
             })
             .collect();
 
-        let header = DetailRow::header(
-            vec!["Short Name".to_owned(), "Long Name".to_owned()],
-            vec![CellType::Text, CellType::Text],
-        );
+        let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("Long Name")]);
 
         let section = DetailSectionData::new(
             "Additional Audiences".to_owned(),

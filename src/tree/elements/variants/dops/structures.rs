@@ -5,7 +5,7 @@
 
 use super::kv_row;
 use crate::tree::types::{
-    CellJumpTargetType, CellType, ColumnConstraint, DetailContent, DetailRow, DetailRowType,
+    CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent, DetailRow,
     DetailSectionData, DetailSectionType,
 };
 
@@ -43,10 +43,7 @@ pub(super) fn build_structure_dop_tabs(
     // Drop the default types_rows (Short Name, DOP Variant, etc.) — not needed for structures
     types_rows.clear();
 
-    let overview_header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let overview_header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     sections.push(
         DetailSectionData::new(
@@ -79,28 +76,15 @@ fn build_params_section(
             content: DetailContent::PlainText(vec!["No params".to_owned()]),
         };
     };
-    let params_header = DetailRow {
-        cells: vec![
-            "Short Name".to_owned(),
-            "Byte".to_owned(),
-            "Bit\nLen".to_owned(),
-            "Byte\nLen".to_owned(),
-            "Value".to_owned(),
-            "DOP".to_owned(),
-            "Semantic".to_owned(),
-        ],
-        cell_types: vec![
-            CellType::Text,
-            CellType::NumericValue,
-            CellType::NumericValue,
-            CellType::NumericValue,
-            CellType::NumericValue,
-            CellType::Text,
-            CellType::Text,
-        ],
-        indent: 0,
-        ..Default::default()
-    };
+    let params_header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::new("Byte", CellType::NumericValue),
+        DetailCell::new("Bit\nLen", CellType::NumericValue),
+        DetailCell::new("Byte\nLen", CellType::NumericValue),
+        DetailCell::new("Value", CellType::NumericValue),
+        DetailCell::text("DOP"),
+        DetailCell::text("Semantic"),
+    ]);
 
     let rows: Vec<DetailRow> = params
         .iter()
@@ -124,44 +108,29 @@ fn build_params_section(
                 None
             };
 
-            DetailRow {
-                cells: vec![
-                    name,
-                    byte_pos.to_string(),
-                    bit_len,
-                    byte_len,
-                    value,
-                    dop_name,
-                    semantic,
-                ],
-                cell_types: vec![
-                    CellType::ParameterName,
-                    CellType::NumericValue,
-                    CellType::Text,
-                    CellType::Text,
-                    CellType::NumericValue,
-                    if has_dop {
-                        CellType::DopReference
-                    } else {
-                        CellType::Text
-                    },
-                    CellType::Text,
-                ],
-                cell_jump_targets: vec![
-                    Some(crate::tree::CellJumpTarget::new(
-                        CellJumpTargetType::Parameter { param_id },
-                    )),
-                    None,
-                    None,
-                    None,
-                    None,
-                    dop_jump,
-                    None,
-                ],
-                indent: 0,
-                row_type: DetailRowType::Normal,
-                metadata: Some(crate::tree::RowMetadata::ParameterRow { param_id }),
-                diff_status: None,
+            {
+                let dop_cell_type = if has_dop { CellType::DopReference } else { CellType::Text };
+                let mut dop_cell = DetailCell::new(dop_name, dop_cell_type);
+                if let Some(jump) = dop_jump {
+                    dop_cell = dop_cell.with_jump(jump);
+                }
+                let mut row = DetailRow::normal(
+                    vec![
+                        DetailCell::new(name, CellType::ParameterName)
+                            .with_jump(crate::tree::CellJumpTarget::new(
+                                CellJumpTargetType::Parameter { param_id },
+                            )),
+                        DetailCell::new(byte_pos.to_string(), CellType::NumericValue),
+                        DetailCell::text(bit_len),
+                        DetailCell::text(byte_len),
+                        DetailCell::new(value, CellType::NumericValue),
+                        dop_cell,
+                        DetailCell::text(semantic),
+                    ],
+                    0,
+                );
+                row.metadata = Some(crate::tree::RowMetadata::ParameterRow { param_id });
+                row
             }
         })
         .collect();

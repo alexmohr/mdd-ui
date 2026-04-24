@@ -8,8 +8,8 @@ use cda_database::datatypes::ParentRef;
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellType, ColumnConstraint, DetailContent, DetailRow, DetailSectionData, DetailSectionType,
-        NodeType,
+        CellType, ColumnConstraint, DetailCell, DetailContent, DetailRow, DetailSectionData,
+        DetailSectionType, NodeType,
     },
 };
 
@@ -113,11 +113,11 @@ struct TableRowData {
 }
 
 fn build_tables_overview(tables: &[TableData]) -> DetailSectionData {
-    let header = DetailRow::header(vec!["Short Name".to_owned()], vec![CellType::Text]);
+    let header = DetailRow::header(vec![DetailCell::text("Short Name")]);
 
     let rows: Vec<DetailRow> = tables
         .iter()
-        .map(|t| DetailRow::normal(vec![t.short_name.clone()], vec![CellType::Text], 0))
+        .map(|t| DetailRow::normal(vec![DetailCell::text(t.short_name.clone())], 0))
         .collect();
 
     DetailSectionData {
@@ -136,30 +136,23 @@ fn build_tables_overview(tables: &[TableData]) -> DetailSectionData {
 fn build_table_detail(table: &TableData) -> Vec<DetailSectionData> {
     let mut sections = Vec::new();
 
-    let header = DetailRow::header(
-        vec!["Property".to_owned(), "Value".to_owned()],
-        vec![CellType::Text, CellType::Text],
-    );
+    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
 
     let mut overview_rows = vec![
         DetailRow::normal(
-            vec!["Short Name".to_owned(), table.short_name.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Short Name"), DetailCell::text(table.short_name.clone())],
             0,
         ),
         DetailRow::normal(
-            vec!["Semantic".to_owned(), table.semantic.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Semantic"), DetailCell::text(table.semantic.clone())],
             0,
         ),
         DetailRow::normal(
-            vec!["Key Label".to_owned(), table.key_label.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Key Label"), DetailCell::text(table.key_label.clone())],
             0,
         ),
         DetailRow::normal(
-            vec!["Struct Label".to_owned(), table.struct_label.clone()],
-            vec![CellType::Text, CellType::Text],
+            vec![DetailCell::text("Struct Label"), DetailCell::text(table.struct_label.clone())],
             0,
         ),
     ];
@@ -171,15 +164,16 @@ fn build_table_detail(table: &TableData) -> Vec<DetailSectionData> {
     };
     overview_rows.push(DetailRow::normal(
         vec![
-            "Key DOP".to_owned(),
-            table.key_dop_name.clone().unwrap_or_else(|| "-".to_owned()),
+            DetailCell::text("Key DOP"),
+            DetailCell::new(
+                table.key_dop_name.clone().unwrap_or_else(|| "-".to_owned()),
+                key_cell_type,
+            ),
         ],
-        vec![CellType::Text, key_cell_type],
         0,
     ));
     overview_rows.push(DetailRow::normal(
-        vec!["Row Count".to_owned(), table.row_count.to_string()],
-        vec![CellType::Text, CellType::NumericValue],
+        vec![DetailCell::text("Row Count"), DetailCell::new(table.row_count.to_string(), CellType::NumericValue)],
         0,
     ));
 
@@ -201,33 +195,29 @@ fn build_table_detail(table: &TableData) -> Vec<DetailSectionData> {
     );
 
     if !table.rows.is_empty() {
-        let rows_header = DetailRow::header(
-            vec![
-                "Table Row".to_owned(),
-                "Key".to_owned(),
-                "Struct Ref".to_owned(),
-            ],
-            vec![CellType::Text, CellType::Text, CellType::DopReference],
-        );
+        let rows_header = DetailRow::header(vec![
+            DetailCell::text("Table Row"),
+            DetailCell::text("Key"),
+            DetailCell::new("Struct Ref", CellType::DopReference),
+        ]);
 
         let rows: Vec<DetailRow> = table
             .rows
             .iter()
             .map(|r| {
+                let struct_type = if r.structure.is_some() {
+                    CellType::DopReference
+                } else {
+                    CellType::Text
+                };
                 DetailRow::normal(
                     vec![
-                        r.short_name.clone(),
-                        r.key.clone(),
-                        r.structure.clone().unwrap_or_else(|| "-".to_owned()),
-                    ],
-                    vec![
-                        CellType::Text,
-                        CellType::Text,
-                        if r.structure.is_some() {
-                            CellType::DopReference
-                        } else {
-                            CellType::Text
-                        },
+                        DetailCell::text(r.short_name.clone()),
+                        DetailCell::text(r.key.clone()),
+                        DetailCell::new(
+                            r.structure.clone().unwrap_or_else(|| "-".to_owned()),
+                            struct_type,
+                        ),
                     ],
                     0,
                 )

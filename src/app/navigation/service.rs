@@ -108,7 +108,7 @@ impl App {
             Self::is_service_list_type(node, crate::tree::ServiceListType::FunctionalClasses);
         let name_column_index = usize::from(!is_functional_class);
 
-        selected_row.cells.get(name_column_index).cloned()
+        selected_row.cells.get(name_column_index).map(|c| c.text.clone())
     }
 
     /// Find and navigate to a service by name

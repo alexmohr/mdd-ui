@@ -12,7 +12,7 @@ use cda_database::datatypes::DiagnosticDatabase;
 use elements::{add_ecu_shared_data, add_functional_groups, add_protocols, add_variants};
 // Re-export public types
 pub use types::{
-    CellJumpTarget, CellJumpTargetType, CellType, ChildElementType, ColumnConstraint,
+    CellJumpTarget, CellJumpTargetType, CellType, ChildElementType, ColumnConstraint, DetailCell,
     DetailContent, DetailRow, DetailRowType, DetailSectionData, DetailSectionType, DiffStatus,
     NodeTextPrefix, NodeType, RowMetadata, SectionType, ServiceListType, TreeNode,
     lines_to_single_section, param_type_label,
