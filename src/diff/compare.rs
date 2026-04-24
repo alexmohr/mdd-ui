@@ -170,32 +170,19 @@ fn compare_maps<T: PartialEq>(
 // Property-level diff helpers
 // ---------------------------------------------------------------------------
 
-fn diff_prop(name: &str, old: &str, new: &str, diffs: &mut Vec<PropertyDiff>) {
-    if old != new {
+fn diff_val(
+    name: &str,
+    old: impl std::fmt::Display,
+    new: impl std::fmt::Display,
+    diffs: &mut Vec<PropertyDiff>,
+) {
+    let old_s = old.to_string();
+    let new_s = new.to_string();
+    if old_s != new_s {
         diffs.push(PropertyDiff {
             name: name.to_owned(),
-            old_value: old.to_owned(),
-            new_value: new.to_owned(),
-        });
-    }
-}
-
-fn diff_bool(name: &str, old: bool, new: bool, diffs: &mut Vec<PropertyDiff>) {
-    if old != new {
-        diffs.push(PropertyDiff {
-            name: name.to_owned(),
-            old_value: old.to_string(),
-            new_value: new.to_string(),
-        });
-    }
-}
-
-fn diff_u32(name: &str, old: u32, new: u32, diffs: &mut Vec<PropertyDiff>) {
-    if old != new {
-        diffs.push(PropertyDiff {
-            name: name.to_owned(),
-            old_value: old.to_string(),
-            new_value: new.to_string(),
+            old_value: old_s,
+            new_value: new_s,
         });
     }
 }
@@ -226,9 +213,9 @@ fn diff_string_vec(name: &str, old: &[String], new: &[String], diffs: &mut Vec<P
 
 fn compare_ecu_properties(old: &EcuSnapshot, new: &EcuSnapshot) -> Vec<PropertyDiff> {
     let mut diffs = Vec::new();
-    diff_prop("name", &old.name, &new.name, &mut diffs);
-    diff_prop("version", &old.version, &new.version, &mut diffs);
-    diff_prop("revision", &old.revision, &new.revision, &mut diffs);
+    diff_val("name", &old.name, &new.name, &mut diffs);
+    diff_val("version", &old.version, &new.version, &mut diffs);
+    diff_val("revision", &old.revision, &new.revision, &mut diffs);
 
     if old.metadata != new.metadata {
         let format_metadata = |m: &[(String, String)]| -> String {
@@ -256,7 +243,7 @@ fn compare_variants(
     new: &VariantSnapshot,
 ) -> (Vec<PropertyDiff>, Vec<ElementDiff>) {
     let mut diffs = Vec::new();
-    diff_bool(
+    diff_val(
         "is_base_variant",
         old.is_base_variant,
         new.is_base_variant,
@@ -286,22 +273,22 @@ fn compare_functional_groups(
 
 fn compare_dtcs(old: &DtcSnapshot, new: &DtcSnapshot) -> (Vec<PropertyDiff>, Vec<ElementDiff>) {
     let mut diffs = Vec::new();
-    diff_prop("short_name", &old.short_name, &new.short_name, &mut diffs);
-    diff_u32(
+    diff_val("short_name", &old.short_name, &new.short_name, &mut diffs);
+    diff_val(
         "trouble_code",
         old.trouble_code,
         new.trouble_code,
         &mut diffs,
     );
-    diff_prop(
+    diff_val(
         "display_trouble_code",
         &old.display_trouble_code,
         &new.display_trouble_code,
         &mut diffs,
     );
-    diff_prop("text", &old.text, &new.text, &mut diffs);
+    diff_val("text", &old.text, &new.text, &mut diffs);
     diff_opt_u32("level", old.level, new.level, &mut diffs);
-    diff_bool(
+    diff_val(
         "is_temporary",
         old.is_temporary,
         new.is_temporary,
@@ -320,8 +307,8 @@ fn compare_diag_layers(
     new: &DiagLayerSnapshot,
 ) -> (Vec<PropertyDiff>, Vec<ElementDiff>) {
     let mut diffs = Vec::new();
-    diff_prop("short_name", &old.short_name, &new.short_name, &mut diffs);
-    diff_prop("long_name", &old.long_name, &new.long_name, &mut diffs);
+    diff_val("short_name", &old.short_name, &new.short_name, &mut diffs);
+    diff_val("long_name", &old.long_name, &new.long_name, &mut diffs);
     diff_string_vec(
         "funct_classes",
         &old.funct_classes,
@@ -429,15 +416,15 @@ fn compare_services(
             new_value: format_sub_fn(new.request_sub_function),
         });
     }
-    diff_prop("addressing", &old.addressing, &new.addressing, &mut diffs);
-    diff_prop(
+    diff_val("addressing", &old.addressing, &new.addressing, &mut diffs);
+    diff_val(
         "transmission_mode",
         &old.transmission_mode,
         &new.transmission_mode,
         &mut diffs,
     );
-    diff_bool("is_cyclic", old.is_cyclic, new.is_cyclic, &mut diffs);
-    diff_bool("is_multiple", old.is_multiple, new.is_multiple, &mut diffs);
+    diff_val("is_cyclic", old.is_cyclic, new.is_cyclic, &mut diffs);
+    diff_val("is_multiple", old.is_multiple, new.is_multiple, &mut diffs);
 
     let mut children = Vec::new();
 
@@ -501,10 +488,10 @@ fn compare_diag_comms(
     new: &DiagCommSnapshot,
 ) -> (Vec<PropertyDiff>, Vec<ElementDiff>) {
     let mut diffs = Vec::new();
-    diff_prop("short_name", &old.short_name, &new.short_name, &mut diffs);
-    diff_prop("long_name", &old.long_name, &new.long_name, &mut diffs);
-    diff_prop("semantic", &old.semantic, &new.semantic, &mut diffs);
-    diff_prop(
+    diff_val("short_name", &old.short_name, &new.short_name, &mut diffs);
+    diff_val("long_name", &old.long_name, &new.long_name, &mut diffs);
+    diff_val("semantic", &old.semantic, &new.semantic, &mut diffs);
+    diff_val(
         "diag_class_type",
         &old.diag_class_type,
         &new.diag_class_type,
@@ -516,19 +503,19 @@ fn compare_diag_comms(
         &new.funct_classes,
         &mut diffs,
     );
-    diff_bool(
+    diff_val(
         "is_mandatory",
         old.is_mandatory,
         new.is_mandatory,
         &mut diffs,
     );
-    diff_bool(
+    diff_val(
         "is_executable",
         old.is_executable,
         new.is_executable,
         &mut diffs,
     );
-    diff_bool("is_final", old.is_final, new.is_final, &mut diffs);
+    diff_val("is_final", old.is_final, new.is_final, &mut diffs);
 
     let mut children = Vec::new();
     compare_audience(
@@ -552,31 +539,31 @@ fn compare_audience(
         (Some(old_aud), Some(new_aud)) => {
             if old_aud != new_aud {
                 let mut aud_diffs = Vec::new();
-                diff_bool(
+                diff_val(
                     "is_supplier",
                     old_aud.is_supplier,
                     new_aud.is_supplier,
                     &mut aud_diffs,
                 );
-                diff_bool(
+                diff_val(
                     "is_development",
                     old_aud.is_development,
                     new_aud.is_development,
                     &mut aud_diffs,
                 );
-                diff_bool(
+                diff_val(
                     "is_manufacturing",
                     old_aud.is_manufacturing,
                     new_aud.is_manufacturing,
                     &mut aud_diffs,
                 );
-                diff_bool(
+                diff_val(
                     "is_after_sales",
                     old_aud.is_after_sales,
                     new_aud.is_after_sales,
                     &mut aud_diffs,
                 );
-                diff_bool(
+                diff_val(
                     "is_after_market",
                     old_aud.is_after_market,
                     new_aud.is_after_market,
@@ -690,28 +677,28 @@ fn compare_params_list(
 /// Compare individual fields of two `ParamSnapshot` values.
 fn compare_single_param(old: &ParamSnapshot, new: &ParamSnapshot) -> Vec<PropertyDiff> {
     let mut diffs = Vec::new();
-    diff_prop("short_name", &old.short_name, &new.short_name, &mut diffs);
-    diff_prop("semantic", &old.semantic, &new.semantic, &mut diffs);
-    diff_prop(
+    diff_val("short_name", &old.short_name, &new.short_name, &mut diffs);
+    diff_val("semantic", &old.semantic, &new.semantic, &mut diffs);
+    diff_val(
         "physical_default_value",
         &old.physical_default_value,
         &new.physical_default_value,
         &mut diffs,
     );
-    diff_u32(
+    diff_val(
         "byte_position",
         old.byte_position,
         new.byte_position,
         &mut diffs,
     );
-    diff_u32(
+    diff_val(
         "bit_position",
         old.bit_position,
         new.bit_position,
         &mut diffs,
     );
-    diff_prop("param_type", &old.param_type, &new.param_type, &mut diffs);
-    diff_prop(
+    diff_val("param_type", &old.param_type, &new.param_type, &mut diffs);
+    diff_val(
         "specific_data_summary",
         &old.specific_data_summary,
         &new.specific_data_summary,
@@ -740,7 +727,7 @@ fn compare_response_lists(
             (Some(old_resp), Some(new_resp)) => {
                 if old_resp != new_resp {
                     let mut diffs = Vec::new();
-                    diff_prop(
+                    diff_val(
                         "response_type",
                         &old_resp.response_type,
                         &new_resp.response_type,
@@ -793,9 +780,9 @@ fn compare_state_charts(
     new: &StateChartSnapshot,
 ) -> (Vec<PropertyDiff>, Vec<ElementDiff>) {
     let mut diffs = Vec::new();
-    diff_prop("short_name", &old.short_name, &new.short_name, &mut diffs);
-    diff_prop("semantic", &old.semantic, &new.semantic, &mut diffs);
-    diff_prop(
+    diff_val("short_name", &old.short_name, &new.short_name, &mut diffs);
+    diff_val("semantic", &old.semantic, &new.semantic, &mut diffs);
+    diff_val(
         "start_state",
         &old.start_state,
         &new.start_state,

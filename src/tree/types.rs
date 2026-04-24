@@ -168,9 +168,10 @@ pub enum DetailSectionType {
 }
 
 /// Type of row for interaction purposes.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub enum DetailRowType {
     /// Regular data row.
+    #[default]
     Normal,
     /// Table header row.
     Header,
@@ -235,9 +236,10 @@ pub enum RowMetadata {
 }
 
 /// Type of cell content for interaction purposes
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum CellType {
     /// Regular text cell
+    #[default]
     Text,
     /// Cell containing a DOP (Data Object Property) reference
     DopReference,
@@ -281,7 +283,7 @@ impl CellJumpTarget {
 }
 
 /// A row in a detail table.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DetailRow {
     /// Column values for this row.
     pub cells: Vec<String>,
@@ -297,20 +299,6 @@ pub struct DetailRow {
     pub metadata: Option<RowMetadata>,
     /// Diff status for comparison mode.  `None` in browse mode.
     pub diff_status: Option<DiffStatus>,
-}
-
-impl Default for DetailRow {
-    fn default() -> Self {
-        Self {
-            cells: Vec::new(),
-            cell_types: Vec::new(),
-            cell_jump_targets: Vec::new(),
-            indent: 0,
-            row_type: DetailRowType::Normal,
-            metadata: None,
-            diff_status: None,
-        }
-    }
 }
 
 /// Column constraint for table layout
