@@ -154,6 +154,11 @@ pub struct TreeNode {
     /// identity comparisons do not need to parse the display `text` (which
     /// may carry decorations like `" [base]"`).  `None` for non-container nodes.
     pub short_name: Option<String>,
+    /// Canonical short name for diagcomm nodes (Service, `ParentRefService`,
+    /// Request, `PosResponse`, `NegResponse`, Job).  Stored separately so
+    /// that sorting, matching and navigation do not need to parse the service
+    /// display text (e.g. `"0x2E01 - WriteDID"` → `"WriteDID"`).
+    pub service_short_name: Option<String>,
     /// Index into `all_nodes` of this node's direct parent, computed at build
     /// time. `None` for root (depth-0) nodes.  Enables O(1) parent lookups
     /// instead of O(n) backward scans.

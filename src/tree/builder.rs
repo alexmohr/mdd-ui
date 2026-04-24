@@ -22,6 +22,7 @@ struct NodeConfig {
     param_id: Option<u32>,
     parent_ref_names: Vec<String>,
     short_name: Option<String>,
+    service_short_name: Option<String>,
 }
 
 /// Accumulates `TreeNode`s while walking the database model.
@@ -50,6 +51,7 @@ impl TreeBuilder {
             param_id: cfg.param_id,
             parent_ref_names: cfg.parent_ref_names,
             short_name: cfg.short_name,
+            service_short_name: cfg.service_short_name,
             parent_idx: None,
             diff_status: None,
         });
@@ -114,6 +116,31 @@ impl TreeBuilder {
             node_type: NodeType::Container,
             parent_ref_names,
             short_name: Some(short_name),
+            ..NodeConfig::default()
+        });
+    }
+
+    /// Push a diagcomm node (Service, `ParentRefService`, Request, Response, Job)
+    /// with its canonical `short_name` stored for type-safe lookups.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_service_node(
+        &mut self,
+        depth: usize,
+        text: String,
+        expanded: bool,
+        has_children: bool,
+        sections: Vec<DetailSectionData>,
+        node_type: NodeType,
+        service_short_name: String,
+    ) {
+        self.push_node(NodeConfig {
+            depth,
+            text,
+            expanded,
+            has_children,
+            sections,
+            node_type,
+            service_short_name: Some(service_short_name),
             ..NodeConfig::default()
         });
     }

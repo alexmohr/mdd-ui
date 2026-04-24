@@ -154,13 +154,14 @@ impl App {
         if is_functional_class {
             node.node_type == NodeType::FunctionalClass && node.text == target_name
         } else {
-            let is_target_node = node.node_type.is_diagcomm();
-
-            if !is_target_node {
+            if !node.node_type.is_diagcomm() {
                 return false;
             }
 
-            if node.node_type == NodeType::Job {
+            // Prefer the structured field; fall back to text matching
+            if let Some(ref sn) = node.service_short_name {
+                sn == target_name
+            } else if node.node_type == NodeType::Job {
                 let job_name = node
                     .text
                     .strip_prefix(NodeTextPrefix::Job.as_str())
@@ -177,8 +178,14 @@ impl App {
         node.node_type.is_service()
     }
 
-    /// Extract service name from node text
+    /// Extract service name from node text.
+    ///
+    /// Prefers the pre-computed `service_short_name` field, falling back to
+    /// parsing the display text for nodes that lack it.
     pub(super) fn extract_service_name_from_node(node: &TreeNode) -> String {
+        if let Some(ref sn) = node.service_short_name {
+            return sn.clone();
+        }
         node.text.find(" - ").map_or_else(
             || node.text.clone(),
             |dash_idx| node.text[dash_idx.saturating_add(3)..].to_string(),
@@ -264,7 +271,13 @@ impl App {
     /// Searches within the current container's hierarchy first, then globally.
     pub(super) fn navigate_to_service_or_job(&mut self, target_short_name: &str) {
         let matches_service = |n: &TreeNode| -> bool {
-            if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
+            if !n.node_type.is_diagcomm() {
+                return false;
+            }
+            // Prefer the structured field; fall back to text parsing
+            if let Some(ref sn) = n.service_short_name {
+                sn == target_short_name
+            } else if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
                 let service_name = n
                     .text
                     .find(" - ")

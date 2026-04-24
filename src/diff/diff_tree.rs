@@ -279,10 +279,17 @@ fn match_key(node: &TreeNode) -> String {
         return sn.clone();
     }
 
+    // Diagcomm nodes carry a canonical service_short_name.
+    if let Some(ref sn) = node.service_short_name {
+        return sn.clone();
+    }
+
     let text = node.text.strip_suffix(" [base]").unwrap_or(&node.text);
 
-    // Service nodes: "[Service] 0x2E01 - WriteDID" → "WriteDID"
-    // Job nodes:     "[Job] MyJob"                 → "MyJob"
+    // Service nodes without service_short_name (shouldn't happen in normal
+    // builds, but keep as fallback for diff-merge created nodes):
+    // "[Service] 0x2E01 - WriteDID" → "WriteDID"
+    // "[Job] MyJob"                 → "MyJob"
     for prefix in [
         tree::NodeTextPrefix::Service.as_str(),
         tree::NodeTextPrefix::Job.as_str(),
@@ -967,6 +974,7 @@ mod tests {
             param_id: None,
             parent_ref_names: Vec::new(),
             short_name: None,
+            service_short_name: None,
             parent_idx: None,
             diff_status: None,
         }
@@ -989,6 +997,7 @@ mod tests {
             param_id: None,
             parent_ref_names: Vec::new(),
             short_name: None,
+            service_short_name: None,
             parent_idx: None,
             diff_status: None,
         }
