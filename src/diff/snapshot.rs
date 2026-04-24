@@ -281,7 +281,7 @@ impl EcuSnapshot {
 impl VariantSnapshot {
     pub fn from_variant(v: &Variant<'_>) -> Self {
         let is_base_variant = v.is_base_variant();
-        let diag_layer = v.diag_layer().map_or_else(DiagLayerSnapshot::empty, |dl| {
+        let diag_layer = v.diag_layer().map_or_else(Default::default, |dl| {
             DiagLayerSnapshot::from_layer(&DiagLayer(dl))
         });
 
@@ -332,7 +332,7 @@ impl DiagLayerSnapshot {
             .into_iter()
             .flatten()
             .filter_map(|job| {
-                let diag_comm = job.diag_comm().map_or_else(DiagCommSnapshot::empty, |dc| {
+                let diag_comm = job.diag_comm().map_or_else(Default::default, |dc| {
                     DiagCommSnapshot::from_diag_comm(&DiagComm(dc))
                 });
 
@@ -379,8 +379,8 @@ impl DiagLayerSnapshot {
         }
     }
 
-    /// Create an empty placeholder layer.
-    fn empty() -> Self {
+impl Default for DiagLayerSnapshot {
+    fn default() -> Self {
         Self {
             short_name: String::new(),
             long_name: String::new(),
@@ -391,6 +391,7 @@ impl DiagLayerSnapshot {
         }
     }
 }
+}
 
 // ---------------------------------------------------------------------------
 // Extraction: DiagService
@@ -398,7 +399,7 @@ impl DiagLayerSnapshot {
 
 impl DiagServiceSnapshot {
     pub fn from_service(ds: &DiagService<'_>) -> Self {
-        let diag_comm = ds.diag_comm().map_or_else(DiagCommSnapshot::empty, |dc| {
+        let diag_comm = ds.diag_comm().map_or_else(Default::default, |dc| {
             DiagCommSnapshot::from_diag_comm(&DiagComm(dc))
         });
 
@@ -519,8 +520,8 @@ impl DiagCommSnapshot {
         }
     }
 
-    /// Create an empty placeholder `DiagComm`.
-    fn empty() -> Self {
+impl Default for DiagCommSnapshot {
+    fn default() -> Self {
         Self {
             short_name: String::new(),
             long_name: String::new(),

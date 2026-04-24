@@ -117,12 +117,7 @@ fn compare_maps<T: PartialEq>(
     for key in old.keys() {
         if !new.contains_key(key) {
             summary.removed = summary.removed.saturating_add(1);
-            results.push(ElementDiff {
-                name: key.clone(),
-                status: DiffStatus::Removed,
-                property_diffs: Vec::new(),
-                children: Vec::new(),
-            });
+            results.push(new(key.clone(), DiffStatus::Removed));
         }
     }
 
@@ -131,12 +126,7 @@ fn compare_maps<T: PartialEq>(
         if let Some(new_val) = new.get(key) {
             if old_val == new_val {
                 summary.unchanged = summary.unchanged.saturating_add(1);
-                results.push(ElementDiff {
-                    name: key.clone(),
-                    status: DiffStatus::Unchanged,
-                    property_diffs: Vec::new(),
-                    children: Vec::new(),
-                });
+                results.push(new(key.clone(), DiffStatus::Unchanged));
             } else {
                 let (prop_diffs, children) = compare_fn(old_val, new_val);
                 summary.modified = summary.modified.saturating_add(1);
@@ -154,16 +144,42 @@ fn compare_maps<T: PartialEq>(
     for key in new.keys() {
         if !old.contains_key(key) {
             summary.added = summary.added.saturating_add(1);
-            results.push(ElementDiff {
-                name: key.clone(),
-                status: DiffStatus::Added,
-                property_diffs: Vec::new(),
-                children: Vec::new(),
-            });
+            results.push(new(key.clone(), DiffStatus::Added));
         }
     }
 
     results
+}
+
+// ---------------------------------------------------------------------------
+// Element diff helpers
+// ---------------------------------------------------------------------------
+
+/// Create an `ElementDiff` with the given name and status.
+/// Used for Removed, Unchanged, and Added elements where there are no property or child diffs.
+fn new(name: String, status: DiffStatus) -> ElementDiff {
+    ElementDiff {
+        name,
+        status,
+        property_diffs: Vec::new(),
+        children: Vec::new(),
+    }
+}
+
+/// Create a category `ElementDiff` (e.g., Services, SingleEcuJobs, StateCharts).
+/// The status is Modified if any child has changes, otherwise Unchanged.
+fn create_category_diff(name: &str, children: Vec<ElementDiff>) -> ElementDiff {
+    let has_changes = children.iter().any(|d| d.status != DiffStatus::Unchanged);
+    ElementDiff {
+        name: name.to_owned(),
+        status: if has_changes {
+            DiffStatus::Modified
+        } else {
+            DiffStatus::Unchanged
+        },
+        property_diffs: Vec::new(),
+        children,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -321,19 +337,7 @@ fn compare_diag_layers(
     let mut discard = DiffSummary::default();
     let service_diffs = compare_maps(&old.services, &new.services, compare_services, &mut discard);
     if !service_diffs.is_empty() {
-        let has_changes = service_diffs
-            .iter()
-            .any(|d| d.status != DiffStatus::Unchanged);
-        children.push(ElementDiff {
-            name: "Services".to_owned(),
-            status: if has_changes {
-                DiffStatus::Modified
-            } else {
-                DiffStatus::Unchanged
-            },
-            property_diffs: Vec::new(),
-            children: service_diffs,
-        });
+        children.push(create_category_diff("Services", service_diffs));
     }
 
     let mut discard2 = DiffSummary::default();
@@ -344,17 +348,7 @@ fn compare_diag_layers(
         &mut discard2,
     );
     if !job_diffs.is_empty() {
-        let has_changes = job_diffs.iter().any(|d| d.status != DiffStatus::Unchanged);
-        children.push(ElementDiff {
-            name: "SingleEcuJobs".to_owned(),
-            status: if has_changes {
-                DiffStatus::Modified
-            } else {
-                DiffStatus::Unchanged
-            },
-            property_diffs: Vec::new(),
-            children: job_diffs,
-        });
+        children.push(create_category_diff("SingleEcuJobs", job_diffs));
     }
 
     let mut discard3 = DiffSummary::default();
@@ -365,19 +359,7 @@ fn compare_diag_layers(
         &mut discard3,
     );
     if !chart_diffs.is_empty() {
-        let has_changes = chart_diffs
-            .iter()
-            .any(|d| d.status != DiffStatus::Unchanged);
-        children.push(ElementDiff {
-            name: "StateCharts".to_owned(),
-            status: if has_changes {
-                DiffStatus::Modified
-            } else {
-                DiffStatus::Unchanged
-            },
-            property_diffs: Vec::new(),
-            children: chart_diffs,
-        });
+        children.push(create_category_diff("StateCharts", chart_diffs));
     }
 
     (diffs, children)
@@ -448,20 +430,10 @@ fn compare_services(
             }
         }
         (None, Some(_)) => {
-            children.push(ElementDiff {
-                name: "Request".to_owned(),
-                status: DiffStatus::Added,
-                property_diffs: Vec::new(),
-                children: Vec::new(),
-            });
+            children.push(new("Request".to_owned(), DiffStatus::Added));
         }
         (Some(_), None) => {
-            children.push(ElementDiff {
-                name: "Request".to_owned(),
-                status: DiffStatus::Removed,
-                property_diffs: Vec::new(),
-                children: Vec::new(),
-            });
+            children.push(new("Request".to_owned(), DiffStatus::Removed));
         }
         (None, None) => {}
     }
@@ -578,20 +550,10 @@ fn compare_audience(
             }
         }
         (None, Some(_)) => {
-            children.push(ElementDiff {
-                name: "Audience".to_owned(),
-                status: DiffStatus::Added,
-                property_diffs: Vec::new(),
-                children: Vec::new(),
-            });
+            children.push(new("Audience".to_owned(), DiffStatus::Added));
         }
         (Some(_), None) => {
-            children.push(ElementDiff {
-                name: "Audience".to_owned(),
-                status: DiffStatus::Removed,
-                property_diffs: Vec::new(),
-                children: Vec::new(),
-            });
+            children.push(new("Audience".to_owned(), DiffStatus::Removed));
         }
         (None, None) => {}
     }
@@ -626,12 +588,7 @@ fn compare_params_list(
     // Removed params
     for key in old_map.keys() {
         if !new_map.contains_key(key) {
-            param_elements.push(ElementDiff {
-                name: (*key).to_owned(),
-                status: DiffStatus::Removed,
-                property_diffs: Vec::new(),
-                children: Vec::new(),
-            });
+            param_elements.push(new((*key).to_owned(), DiffStatus::Removed));
         }
     }
 
@@ -653,12 +610,7 @@ fn compare_params_list(
     // Added params
     for key in new_map.keys() {
         if !old_map.contains_key(key) {
-            param_elements.push(ElementDiff {
-                name: (*key).to_owned(),
-                status: DiffStatus::Added,
-                property_diffs: Vec::new(),
-                children: Vec::new(),
-            });
+            param_elements.push(new((*key).to_owned(), DiffStatus::Added));
         }
     }
 
@@ -666,12 +618,7 @@ fn compare_params_list(
         return Vec::new();
     }
 
-    vec![ElementDiff {
-        name: name.to_owned(),
-        status: DiffStatus::Modified,
-        property_diffs: Vec::new(),
-        children: param_elements,
-    }]
+    vec![create_category_diff(name, param_elements)]
 }
 
 /// Compare individual fields of two `ParamSnapshot` values.
@@ -749,20 +696,10 @@ fn compare_response_lists(
                 }
             }
             (None, Some(_)) => {
-                children.push(ElementDiff {
-                    name: label,
-                    status: DiffStatus::Added,
-                    property_diffs: Vec::new(),
-                    children: Vec::new(),
-                });
+                children.push(new(label.clone(), DiffStatus::Added));
             }
             (Some(_), None) => {
-                children.push(ElementDiff {
-                    name: label,
-                    status: DiffStatus::Removed,
-                    property_diffs: Vec::new(),
-                    children: Vec::new(),
-                });
+                children.push(new(label.clone(), DiffStatus::Removed));
             }
             (None, None) => {}
         }
@@ -854,28 +791,11 @@ mod tests {
     };
 
     fn empty_diag_comm() -> DiagCommSnapshot {
-        DiagCommSnapshot {
-            short_name: String::new(),
-            long_name: String::new(),
-            semantic: String::new(),
-            diag_class_type: String::new(),
-            funct_classes: Vec::new(),
-            is_mandatory: false,
-            is_executable: false,
-            is_final: false,
-            audience: None,
-        }
+        DiagCommSnapshot::default()
     }
 
     fn empty_diag_layer() -> DiagLayerSnapshot {
-        DiagLayerSnapshot {
-            short_name: String::new(),
-            long_name: String::new(),
-            services: BTreeMap::new(),
-            single_ecu_jobs: BTreeMap::new(),
-            state_charts: BTreeMap::new(),
-            funct_classes: Vec::new(),
-        }
+        DiagLayerSnapshot::default()
     }
 
     fn simple_ecu(name: &str, version: &str) -> EcuSnapshot {
