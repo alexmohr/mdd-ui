@@ -385,11 +385,20 @@ fn format_detail_content(content: &DetailContent, output: &mut String, indent: u
         }
         DetailContent::Table { header, rows, .. } => {
             if !header.cells.is_empty() {
-                let _ = writeln!(output, "{prefix}{}", header.cells.join(" | "));
+                let _ = writeln!(
+                    output,
+                    "{prefix}{}",
+                    header
+                        .cells
+                        .iter()
+                        .map(|c| c.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                );
                 let separator: Vec<String> = header
                     .cells
                     .iter()
-                    .map(|c| "-".repeat(c.len().max(3)))
+                    .map(|c| "-".repeat(c.text.len().max(3)))
                     .collect();
                 let _ = writeln!(output, "{prefix}{}", separator.join("-+-"));
             }
@@ -404,7 +413,11 @@ fn format_detail_content(content: &DetailContent, output: &mut String, indent: u
                 let _ = writeln!(
                     output,
                     "{prefix}{diff_prefix}{row_indent}{}",
-                    row.cells.join(" | ")
+                    row.cells
+                        .iter()
+                        .map(|c| c.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
                 );
             }
         }

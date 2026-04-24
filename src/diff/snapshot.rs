@@ -66,7 +66,7 @@ pub struct FunctionalGroupSnapshot {
 }
 
 /// The core diagnostic layer present in variants and functional groups.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct DiagLayerSnapshot {
     pub short_name: String,
     pub long_name: String,
@@ -92,7 +92,7 @@ pub struct DiagServiceSnapshot {
 }
 
 /// The `DiagComm` portion shared by services and ECU jobs.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct DiagCommSnapshot {
     pub short_name: String,
     pub long_name: String,
@@ -364,19 +364,6 @@ impl DiagLayerSnapshot {
     }
 }
 
-impl Default for DiagLayerSnapshot {
-    fn default() -> Self {
-        Self {
-            short_name: String::new(),
-            long_name: String::new(),
-            services: BTreeMap::new(),
-            single_ecu_jobs: BTreeMap::new(),
-            state_charts: BTreeMap::new(),
-            funct_classes: Vec::new(),
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Extraction: DiagService
 // ---------------------------------------------------------------------------
@@ -501,22 +488,6 @@ impl DiagCommSnapshot {
             is_executable,
             is_final,
             audience,
-        }
-    }
-}
-
-impl Default for DiagCommSnapshot {
-    fn default() -> Self {
-        Self {
-            short_name: String::new(),
-            long_name: String::new(),
-            semantic: String::new(),
-            diag_class_type: String::new(),
-            funct_classes: Vec::new(),
-            is_mandatory: false,
-            is_executable: false,
-            is_final: false,
-            audience: None,
         }
     }
 }
