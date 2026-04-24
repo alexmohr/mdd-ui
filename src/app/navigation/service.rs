@@ -5,7 +5,7 @@
 
 use crate::{
     app::{App, FocusState, SCROLL_CONTEXT_LINES},
-    tree::{DetailSectionType, NodeTextPrefix, NodeType, TreeNode},
+    tree::{DetailSectionType, NodeType, TreeNode},
 };
 
 impl App {
@@ -157,22 +157,10 @@ impl App {
         if is_functional_class {
             node.node_type == NodeType::FunctionalClass && node.text == target_name
         } else {
-            if !node.node_type.is_diagcomm() {
-                return false;
-            }
-
-            // Prefer the structured field; fall back to text matching
-            if let Some(sn) = node.service_short_name() {
-                sn == target_name
-            } else if node.node_type == NodeType::Job {
-                let job_name = node
-                    .text
-                    .strip_prefix(NodeTextPrefix::Job.as_str())
-                    .unwrap_or(&node.text);
-                job_name == target_name
-            } else {
-                node.text.contains(target_name)
-            }
+            node.node_type.is_diagcomm()
+                && node
+                    .service_short_name()
+                    .is_some_and(|sn| sn == target_name)
         }
     }
 
@@ -181,18 +169,9 @@ impl App {
         node.node_type.is_service()
     }
 
-    /// Extract service name from node text.
-    ///
-    /// Prefers the pre-computed `service_short_name` field, falling back to
-    /// parsing the display text for nodes that lack it.
+    /// Return the canonical short name for a service / job node.
     pub(super) fn extract_service_name_from_node(node: &TreeNode) -> String {
-        if let Some(sn) = node.service_short_name() {
-            return sn.to_owned();
-        }
-        node.text.find(" - ").map_or_else(
-            || node.text.clone(),
-            |dash_idx| node.text[dash_idx.saturating_add(3)..].to_string(),
-        )
+        node.service_short_name().unwrap_or(&node.text).to_owned()
     }
 
     /// Navigate to parent service in the container
@@ -263,7 +242,10 @@ impl App {
                 .enumerate()
                 .take_while(|(_, node)| node.depth > diagcomm_depth)
                 .filter(|(_, node)| node.depth == diagcomm_depth.saturating_add(1))
-                .find(|(_, node)| node.text.contains(service_name))
+                .find(|(_, node)| {
+                    node.service_short_name()
+                        .is_some_and(|sn| sn == service_name)
+                })
                 .map(|(offset, _)| diagcomm_idx.saturating_add(1).saturating_add(offset))
         } else {
             None
@@ -274,27 +256,9 @@ impl App {
     /// Searches within the current container's hierarchy first, then globally.
     pub(super) fn navigate_to_service_or_job(&mut self, target_short_name: &str) {
         let matches_service = |n: &TreeNode| -> bool {
-            if !n.node_type.is_diagcomm() {
-                return false;
-            }
-            // Prefer the structured field; fall back to text parsing
-            if let Some(sn) = n.service_short_name() {
-                sn == target_short_name
-            } else if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
-                let service_name = n
-                    .text
-                    .find(" - ")
-                    .map_or(n.text.as_str(), |idx| &n.text[idx.saturating_add(3)..]);
-                service_name == target_short_name
-            } else if n.node_type == NodeType::Job {
-                let job_name = n
-                    .text
-                    .strip_prefix(NodeTextPrefix::Job.as_str())
-                    .unwrap_or(&n.text);
-                job_name == target_short_name
-            } else {
-                false
-            }
+            n.node_type.is_diagcomm()
+                && n.service_short_name()
+                    .is_some_and(|sn| sn == target_short_name)
         };
 
         let Some(service_node_idx) = self.find_in_hierarchy(matches_service) else {

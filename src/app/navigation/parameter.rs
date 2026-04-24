@@ -5,9 +5,7 @@
 
 use crate::{
     app::{App, FocusState, SCROLL_CONTEXT_LINES},
-    tree::{
-        CellJumpTarget, CellJumpTargetType, CellType, DetailCell, NodeTextPrefix, ServiceListType,
-    },
+    tree::{CellJumpTarget, CellJumpTargetType, CellType, DetailCell, ServiceListType},
 };
 
 impl App {
@@ -39,9 +37,7 @@ impl App {
             let section_type = ctx.section.section_type;
             let service_name = ctx
                 .node
-                .text
-                .strip_prefix(NodeTextPrefix::Service.as_str())
-                .or_else(|| ctx.node.text.strip_prefix(NodeTextPrefix::Job.as_str()))
+                .service_short_name()
                 .unwrap_or(&ctx.node.text)
                 .to_owned();
             (
