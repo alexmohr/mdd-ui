@@ -253,12 +253,8 @@ impl App {
                 services.sort_by_key(|n| extract_service_id(&n.text));
             } else {
                 services.sort_by(|a, b| {
-                    let a_name = a
-                        .service_short_name()
-                        .unwrap_or_else(|| extract_service_name(&a.text));
-                    let b_name = b
-                        .service_short_name()
-                        .unwrap_or_else(|| extract_service_name(&b.text));
+                    let a_name = a.service_short_name().unwrap_or(&a.text);
+                    let b_name = b.service_short_name().unwrap_or(&b.text);
                     a_name.cmp(b_name)
                 });
             }
@@ -333,13 +329,4 @@ fn extract_service_id(text: &str) -> Option<u32> {
     let dash_pos = hex_part.find(" - ")?;
     let id_str = hex_part[..dash_pos].trim();
     u32::from_str_radix(id_str, 16).ok()
-}
-
-fn extract_service_name(text: &str) -> &str {
-    // Extract name from format like "0x10    - ServiceName"
-    if let Some(dash_pos) = text.find(" - ") {
-        let start = dash_pos.saturating_add(3);
-        return text.get(start..).unwrap_or(text).trim();
-    }
-    text
 }
