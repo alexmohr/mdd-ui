@@ -178,7 +178,7 @@ impl App {
             .get(self.tree.cursor)
             .copied()
             .and_then(|node_idx| self.find_param_in_subtree_by_name(node_idx, param_name))
-            .or_else(|| self.find_in_hierarchy(|n| n.param_id.is_some() && n.text == param_name));
+            .or_else(|| self.find_in_hierarchy(|n| n.param_id().is_some() && n.text == param_name));
 
         let Some(param_idx) = param_idx else {
             self.status = format!("Parameter '{param_name}' not found");
@@ -211,7 +211,7 @@ impl App {
             .enumerate()
             .skip(parent_idx.saturating_add(1))
             .take_while(|(_, node)| node.depth > parent_depth)
-            .find(|(_, node)| node.param_id.is_some() && node.text == param_name)
+            .find(|(_, node)| node.param_id().is_some() && node.text == param_name)
             .map(|(idx, _)| idx)
     }
 

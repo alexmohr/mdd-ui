@@ -27,7 +27,7 @@ impl App {
             .filter_map(|i| self.tree.all_nodes.get(i))
             .filter(|parent| parent.depth < node_depth)
             .any(|parent| {
-                parent.depth == 0 && matches!(&parent.section_type, Some(st) if *st == section_type)
+                parent.depth == 0 && parent.section_type() == Some(section_type)
             })
     }
 
@@ -208,16 +208,13 @@ impl App {
         let matches_scope = match scope {
             SearchScope::All => true,
             SearchScope::Variants => {
-                matches!(node.section_type, Some(crate::tree::SectionType::Variants))
+                node.section_type() == Some(crate::tree::SectionType::Variants)
                     || (matches!(node.node_type, NodeType::Container)
                         && node_idx > 0
                         && self.is_under_section_type(node_idx, crate::tree::SectionType::Variants))
             }
             SearchScope::FunctionalGroups => {
-                matches!(
-                    node.section_type,
-                    Some(crate::tree::SectionType::FunctionalGroups)
-                ) || (matches!(node.node_type, NodeType::Container)
+                node.section_type() == Some(crate::tree::SectionType::FunctionalGroups) || (matches!(node.node_type, NodeType::Container)
                     && node_idx > 0
                     && self.is_under_section_type(
                         node_idx,
@@ -225,10 +222,7 @@ impl App {
                     ))
             }
             SearchScope::EcuSharedData => {
-                matches!(
-                    node.section_type,
-                    Some(crate::tree::SectionType::EcuSharedData)
-                ) || (matches!(node.node_type, NodeType::Container)
+                node.section_type() == Some(crate::tree::SectionType::EcuSharedData) || (matches!(node.node_type, NodeType::Container)
                     && node_idx > 0
                     && self
                         .is_under_section_type(node_idx, crate::tree::SectionType::EcuSharedData))

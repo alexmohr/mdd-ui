@@ -159,7 +159,7 @@ impl App {
             }
 
             // Prefer the structured field; fall back to text matching
-            if let Some(ref sn) = node.service_short_name {
+            if let Some(sn) = node.service_short_name() {
                 sn == target_name
             } else if node.node_type == NodeType::Job {
                 let job_name = node
@@ -183,8 +183,8 @@ impl App {
     /// Prefers the pre-computed `service_short_name` field, falling back to
     /// parsing the display text for nodes that lack it.
     pub(super) fn extract_service_name_from_node(node: &TreeNode) -> String {
-        if let Some(ref sn) = node.service_short_name {
-            return sn.clone();
+        if let Some(sn) = node.service_short_name() {
+            return sn.to_owned();
         }
         node.text.find(" - ").map_or_else(
             || node.text.clone(),
@@ -275,7 +275,7 @@ impl App {
                 return false;
             }
             // Prefer the structured field; fall back to text parsing
-            if let Some(ref sn) = n.service_short_name {
+            if let Some(sn) = n.service_short_name() {
                 sn == target_short_name
             } else if matches!(n.node_type, NodeType::Service | NodeType::ParentRefService) {
                 let service_name = n

@@ -460,12 +460,12 @@ impl App {
 
     /// Helper: Check if a node is a service list section header
     fn is_service_list_section(node: &TreeNode) -> bool {
-        node.service_list_type.is_some()
+        node.service_list_type().is_some()
     }
 
     /// Helper: Check if a node is a specific service list type
     fn is_service_list_type(node: &TreeNode, list_type: crate::tree::ServiceListType) -> bool {
-        matches!(&node.service_list_type, Some(t) if *t == list_type)
+        node.service_list_type() == Some(list_type)
     }
 
     /// Return the index of this node's direct parent.

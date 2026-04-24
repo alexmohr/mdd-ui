@@ -124,6 +124,45 @@ pub enum DiffStatus {
     Unchanged,
 }
 
+/// Extra data that only applies to certain [`NodeType`] variants.
+///
+/// Using an enum instead of a bag of `Option` fields shrinks the common-case
+/// size of [`TreeNode`] and makes invariants explicit (e.g. only `Container`
+/// nodes carry `parent_ref_names`).
+#[derive(Clone, Debug, Default)]
+pub enum NodePayload {
+    /// Container (variant / functional group / ECU shared data layer).
+    Container {
+        /// Canonical short name (identity comparisons, not display text).
+        short_name: String,
+        /// Short names of parent-ref containers from the database hierarchy.
+        parent_ref_names: Vec<String>,
+    },
+    /// Top-level section header (depth 0).
+    SectionHeader {
+        /// Which top-level section this header represents.
+        section_type: SectionType,
+    },
+    /// Service-list section header (e.g. Diag-Comms, Requests, …).
+    ServiceListHeader {
+        /// Which kind of service list this header represents.
+        service_list_type: ServiceListType,
+    },
+    /// Diagcomm node (Service, `ParentRefService`, Request, Response, Job).
+    DiagComm {
+        /// Canonical short name used for sorting, matching and navigation.
+        service_short_name: String,
+    },
+    /// Parameter node.
+    Parameter {
+        /// Database parameter ID.
+        param_id: u32,
+    },
+    /// Fallback for nodes that carry no extra data.
+    #[default]
+    None,
+}
+
 /// A single row in the flat tree view. Depth controls indentation, and
 /// `expanded` / `has_children` drive the collapse/expand behaviour.
 #[derive(Clone, Debug)]
@@ -140,31 +179,69 @@ pub struct TreeNode {
     pub detail_sections: Arc<[DetailSectionData]>,
     /// Classification of this node for styling and interaction.
     pub node_type: NodeType,
-    /// If this is a `SectionHeader` at depth 0, specifies which top-level section it represents
-    pub section_type: Option<SectionType>,
-    /// If this is a `SectionHeader`, specifies which kind of service list it represents
-    pub service_list_type: Option<ServiceListType>,
-    /// If this is a parameter node, stores the parameter ID for lookup
-    pub param_id: Option<u32>,
-    /// For `Container` nodes: short names of parent-ref containers from the
-    /// database hierarchy. Used by the navigation system to walk the DB
-    /// inheritance chain instead of scanning the tree.
-    pub parent_ref_names: Vec<String>,
-    /// Canonical short name for `Container` nodes, stored separately so that
-    /// identity comparisons do not need to parse the display `text` (which
-    /// may carry decorations like `" [base]"`).  `None` for non-container nodes.
-    pub short_name: Option<String>,
-    /// Canonical short name for diagcomm nodes (Service, `ParentRefService`,
-    /// Request, `PosResponse`, `NegResponse`, Job).  Stored separately so
-    /// that sorting, matching and navigation do not need to parse the service
-    /// display text (e.g. `"0x2E01 - WriteDID"` → `"WriteDID"`).
-    pub service_short_name: Option<String>,
+    /// Enum-discriminated extra data for this node type.
+    pub payload: NodePayload,
     /// Index into `all_nodes` of this node's direct parent, computed at build
     /// time. `None` for root (depth-0) nodes.  Enables O(1) parent lookups
     /// instead of O(n) backward scans.
     pub parent_idx: Option<usize>,
     /// Diff annotation for comparison mode. `None` in browse mode.
     pub diff_status: Option<DiffStatus>,
+}
+
+impl TreeNode {
+    /// Returns the [`SectionType`] if this is a `SectionHeader` node.
+    pub fn section_type(&self) -> Option<SectionType> {
+        match &self.payload {
+            NodePayload::SectionHeader { section_type } => Some(*section_type),
+            _ => None,
+        }
+    }
+
+    /// Returns the [`ServiceListType`] if this is a service-list header.
+    pub fn service_list_type(&self) -> Option<ServiceListType> {
+        match &self.payload {
+            NodePayload::ServiceListHeader { service_list_type } => Some(*service_list_type),
+            _ => None,
+        }
+    }
+
+    /// Returns the parameter ID if this is a `Parameter` node.
+    pub fn param_id(&self) -> Option<u32> {
+        match &self.payload {
+            NodePayload::Parameter { param_id } => Some(*param_id),
+            _ => None,
+        }
+    }
+
+    /// Returns the parent-ref container short names (empty slice for
+    /// non-container nodes).
+    pub fn parent_ref_names(&self) -> &[String] {
+        match &self.payload {
+            NodePayload::Container {
+                parent_ref_names, ..
+            } => parent_ref_names,
+            _ => &[],
+        }
+    }
+
+    /// Returns the canonical short name for `Container` nodes.
+    pub fn short_name(&self) -> Option<&str> {
+        match &self.payload {
+            NodePayload::Container { short_name, .. } => Some(short_name),
+            _ => None,
+        }
+    }
+
+    /// Returns the canonical short name for diagcomm nodes.
+    pub fn service_short_name(&self) -> Option<&str> {
+        match &self.payload {
+            NodePayload::DiagComm {
+                service_short_name, ..
+            } => Some(service_short_name),
+            _ => None,
+        }
+    }
 }
 
 /// Type of detail section for logic and navigation.
