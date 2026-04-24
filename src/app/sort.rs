@@ -254,12 +254,10 @@ impl App {
             } else {
                 services.sort_by(|a, b| {
                     let a_name = a
-                        .service_short_name
-                        .as_deref()
+                        .service_short_name()
                         .unwrap_or_else(|| extract_service_name(&a.text));
                     let b_name = b
-                        .service_short_name
-                        .as_deref()
+                        .service_short_name()
                         .unwrap_or_else(|| extract_service_name(&b.text));
                     a_name.cmp(b_name)
                 });

@@ -275,13 +275,13 @@ fn mark_subtree(node: &HierNode, status: DiffStatus) -> MergedNode {
 /// item counts change).
 fn match_key(node: &TreeNode) -> String {
     // Container nodes carry a canonical short_name — use it directly.
-    if let Some(ref sn) = node.short_name {
-        return sn.clone();
+    if let Some(sn) = node.short_name() {
+        return sn.to_owned();
     }
 
     // Diagcomm nodes carry a canonical service_short_name.
-    if let Some(ref sn) = node.service_short_name {
-        return sn.clone();
+    if let Some(sn) = node.service_short_name() {
+        return sn.to_owned();
     }
 
     let text = node.text.strip_suffix(" [base]").unwrap_or(&node.text);
@@ -969,12 +969,7 @@ mod tests {
             has_children,
             detail_sections: Arc::from([]),
             node_type: NodeType::Default,
-            section_type: None,
-            service_list_type: None,
-            param_id: None,
-            parent_ref_names: Vec::new(),
-            short_name: None,
-            service_short_name: None,
+            payload: Default::default(),
             parent_idx: None,
             diff_status: None,
         }
@@ -992,12 +987,7 @@ mod tests {
             has_children: false,
             detail_sections: Arc::from(sections),
             node_type: NodeType::Default,
-            section_type: None,
-            service_list_type: None,
-            param_id: None,
-            parent_ref_names: Vec::new(),
-            short_name: None,
-            service_short_name: None,
+            payload: Default::default(),
             parent_idx: None,
             diff_status: None,
         }

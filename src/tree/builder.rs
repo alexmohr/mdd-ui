@@ -5,7 +5,9 @@
 
 use std::sync::Arc;
 
-use super::types::{DetailSectionData, NodeType, SectionType, ServiceListType, TreeNode};
+use super::types::{
+    DetailSectionData, NodePayload, NodeType, SectionType, ServiceListType, TreeNode,
+};
 
 /// Configuration for a single tree node, used to avoid repeating the full
 /// `TreeNode` struct literal in every `push_*` method.
@@ -17,12 +19,7 @@ struct NodeConfig {
     has_children: bool,
     sections: Vec<DetailSectionData>,
     node_type: NodeType,
-    section_type: Option<SectionType>,
-    service_list_type: Option<ServiceListType>,
-    param_id: Option<u32>,
-    parent_ref_names: Vec<String>,
-    short_name: Option<String>,
-    service_short_name: Option<String>,
+    payload: NodePayload,
 }
 
 /// Accumulates `TreeNode`s while walking the database model.
@@ -46,12 +43,7 @@ impl TreeBuilder {
             has_children: cfg.has_children,
             detail_sections: Arc::from(cfg.sections),
             node_type: cfg.node_type,
-            section_type: cfg.section_type,
-            service_list_type: cfg.service_list_type,
-            param_id: cfg.param_id,
-            parent_ref_names: cfg.parent_ref_names,
-            short_name: cfg.short_name,
-            service_short_name: cfg.service_short_name,
+            payload: cfg.payload,
             parent_idx: None,
             diff_status: None,
         });
@@ -92,7 +84,7 @@ impl TreeBuilder {
             text,
             sections,
             node_type,
-            param_id: Some(param_id),
+            payload: NodePayload::Parameter { param_id },
             ..NodeConfig::default()
         });
     }
@@ -114,8 +106,10 @@ impl TreeBuilder {
             has_children: true,
             sections,
             node_type: NodeType::Container,
-            parent_ref_names,
-            short_name: Some(short_name),
+            payload: NodePayload::Container {
+                short_name,
+                parent_ref_names,
+            },
             ..NodeConfig::default()
         });
     }
@@ -140,7 +134,9 @@ impl TreeBuilder {
             has_children,
             sections,
             node_type,
-            service_short_name: Some(service_short_name),
+            payload: NodePayload::DiagComm {
+                service_short_name,
+            },
             ..NodeConfig::default()
         });
     }
@@ -162,7 +158,9 @@ impl TreeBuilder {
             has_children,
             sections,
             node_type: NodeType::SectionHeader,
-            service_list_type: Some(service_list_type),
+            payload: NodePayload::ServiceListHeader {
+                service_list_type,
+            },
             ..NodeConfig::default()
         });
     }
@@ -182,7 +180,7 @@ impl TreeBuilder {
             has_children,
             sections,
             node_type: NodeType::SectionHeader,
-            section_type: Some(section_type),
+            payload: NodePayload::SectionHeader { section_type },
             ..NodeConfig::default()
         });
     }

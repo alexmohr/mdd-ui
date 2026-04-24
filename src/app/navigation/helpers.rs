@@ -106,8 +106,7 @@ impl App {
                 return false;
             }
 
-            node.short_name
-                .as_deref()
+            node.short_name()
                 .is_some_and(|sn| sn == name)
         })
     }
@@ -213,7 +212,7 @@ impl App {
         visited: &mut HashSet<usize>,
     ) -> Option<usize> {
         let container = self.tree.all_nodes.get(container_idx)?;
-        let parent_names = &container.parent_ref_names;
+        let parent_names = container.parent_ref_names();
 
         parent_names.iter().find_map(|parent_name| {
             let pc_idx = self.find_container_by_name(parent_name)?;
@@ -232,7 +231,7 @@ impl App {
     /// `service_list_type` (e.g. Diag-Comms, Pos-Responses).
     pub(super) fn find_enclosing_list_section(&self, from_node_idx: usize) -> Option<usize> {
         let from_node = self.tree.all_nodes.get(from_node_idx)?;
-        if from_node.service_list_type.is_some() {
+        if from_node.service_list_type().is_some() {
             return Some(from_node_idx);
         }
         let from_depth = from_node.depth;
@@ -240,7 +239,7 @@ impl App {
             self.tree
                 .all_nodes
                 .get(i)
-                .is_some_and(|n| n.depth < from_depth && n.service_list_type.is_some())
+                .is_some_and(|n| n.depth < from_depth && n.service_list_type().is_some())
         })
     }
 
@@ -353,7 +352,7 @@ impl App {
         let target_depth = container.depth.saturating_add(1);
         let (c_start, c_end) = self.subtree_range(container_idx);
         self.find_at_depth(c_start, c_end, target_depth, &|n| {
-            n.service_list_type == Some(target_list_type)
+            n.service_list_type() == Some(target_list_type)
         })
     }
 
@@ -413,7 +412,7 @@ impl App {
         visited: &mut HashSet<usize>,
     ) -> Option<usize> {
         let container = self.tree.all_nodes.get(container_idx)?;
-        let parent_names = &container.parent_ref_names;
+        let parent_names = container.parent_ref_names();
 
         parent_names.iter().find_map(|parent_name| {
             let pc_idx = self.find_container_by_name(parent_name)?;
@@ -482,8 +481,7 @@ impl App {
     pub(super) fn navigate_to_container_by_name(&mut self, target_short_name: &str) {
         let is_target = |n: &TreeNode| -> bool {
             matches!(n.node_type, NodeType::Container)
-                && n.short_name
-                    .as_deref()
+                && n.short_name()
                     .is_some_and(|sn| sn == target_short_name)
         };
 

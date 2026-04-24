@@ -30,7 +30,7 @@ impl App {
         };
 
         // Early returns for different node types using functional matching
-        if let Some(SectionType::Variants) = node.section_type {
+        if let Some(SectionType::Variants) = node.section_type() {
             self.try_navigate_to_variant();
             return;
         }
@@ -50,7 +50,7 @@ impl App {
             return;
         }
 
-        if node.service_list_type.is_some() {
+        if node.service_list_type().is_some() {
             self.try_navigate_to_service();
             return;
         }
