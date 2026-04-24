@@ -724,15 +724,13 @@ fn extract_table_diffs(
 
 /// Join the text of cells starting at `skip` with `", "`.
 fn join_cell_texts(cells: &[DetailCell], skip: usize) -> String {
-    cells
-        .get(skip..)
-        .map_or_else(String::new, |slice| {
-            slice
-                .iter()
-                .map(|c| c.text.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
+    cells.get(skip..).map_or_else(String::new, |slice| {
+        slice
+            .iter()
+            .map(|c| c.text.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -895,39 +893,66 @@ fn add_summary_to_general(
     ]);
     let rows = vec![
         DetailRow::normal(
-            vec![DetailCell::text("Old file (removed)"), DetailCell::text(old_path)],
+            vec![
+                DetailCell::text("Old file (removed)"),
+                DetailCell::text(old_path),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("New file (added)"), DetailCell::text(new_path)],
+            vec![
+                DetailCell::text("New file (added)"),
+                DetailCell::text(new_path),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Added"), DetailCell::text(summary.added.to_string())],
+            vec![
+                DetailCell::text("Added"),
+                DetailCell::text(summary.added.to_string()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Removed"), DetailCell::text(summary.removed.to_string())],
+            vec![
+                DetailCell::text("Removed"),
+                DetailCell::text(summary.removed.to_string()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Modified"), DetailCell::text(summary.modified.to_string())],
+            vec![
+                DetailCell::text("Modified"),
+                DetailCell::text(summary.modified.to_string()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Unchanged"), DetailCell::text(summary.unchanged.to_string())],
+            vec![
+                DetailCell::text("Unchanged"),
+                DetailCell::text(summary.unchanged.to_string()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Total added"), DetailCell::text(totals.added.to_string())],
+            vec![
+                DetailCell::text("Total added"),
+                DetailCell::text(totals.added.to_string()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Total changed"), DetailCell::text(totals.modified.to_string())],
+            vec![
+                DetailCell::text("Total changed"),
+                DetailCell::text(totals.modified.to_string()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Total removed"), DetailCell::text(totals.removed.to_string())],
+            vec![
+                DetailCell::text("Total removed"),
+                DetailCell::text(totals.removed.to_string()),
+            ],
             0,
         ),
     ];

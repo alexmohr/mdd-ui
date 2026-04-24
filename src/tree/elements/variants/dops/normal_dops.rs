@@ -273,13 +273,19 @@ pub(super) fn build_normal_dop_tabs(
 ) {
     if let Ok(coded_type) = normal_dop.diag_coded_type() {
         types_rows.push(DetailRow::normal(
-            vec![DetailCell::text("Diag Coded Type"), DetailCell::text(format!("{:?}", coded_type.base_datatype()))],
+            vec![
+                DetailCell::text("Diag Coded Type"),
+                DetailCell::text(format!("{:?}", coded_type.base_datatype())),
+            ],
             0,
         ));
 
         if let Some(bit_len) = coded_type.bit_len() {
             types_rows.push(DetailRow::normal(
-                vec![DetailCell::text("Bit Length"), DetailCell::new(bit_len.to_string(), CellType::NumericValue)],
+                vec![
+                    DetailCell::text("Bit Length"),
+                    DetailCell::new(bit_len.to_string(), CellType::NumericValue),
+                ],
                 0,
             ));
         }
@@ -287,19 +293,28 @@ pub(super) fn build_normal_dop_tabs(
 
     if let Some(phys_type) = normal_dop.physical_type() {
         types_rows.push(DetailRow::normal(
-            vec![DetailCell::text("Physical Type"), DetailCell::text(format!("{:?}", phys_type.base_data_type()))],
+            vec![
+                DetailCell::text("Physical Type"),
+                DetailCell::text(format!("{:?}", phys_type.base_data_type())),
+            ],
             0,
         ));
 
         if let Some(precision) = phys_type.precision() {
             types_rows.push(DetailRow::normal(
-                vec![DetailCell::text("Precision"), DetailCell::new(precision.to_string(), CellType::NumericValue)],
+                vec![
+                    DetailCell::text("Precision"),
+                    DetailCell::new(precision.to_string(), CellType::NumericValue),
+                ],
                 0,
             ));
         }
 
         types_rows.push(DetailRow::normal(
-            vec![DetailCell::text("Display Radix"), DetailCell::text(format!("{:?}", phys_type.display_radix()))],
+            vec![
+                DetailCell::text("Display Radix"),
+                DetailCell::text(format!("{:?}", phys_type.display_radix())),
+            ],
             0,
         ));
     }
@@ -313,7 +328,10 @@ pub(super) fn build_normal_dop_tabs(
         }
         if let Some(display_name) = unit.display_name() {
             types_rows.push(DetailRow::normal(
-                vec![DetailCell::text("Unit Display"), DetailCell::text(display_name)],
+                vec![
+                    DetailCell::text("Unit Display"),
+                    DetailCell::text(display_name),
+                ],
                 0,
             ));
         }
@@ -321,7 +339,10 @@ pub(super) fn build_normal_dop_tabs(
 
     if let Some(ref data_type) = parsed_name.data_type {
         types_rows.push(DetailRow::normal(
-            vec![DetailCell::text("Data Type (from name)"), DetailCell::text(data_type.clone())],
+            vec![
+                DetailCell::text("Data Type (from name)"),
+                DetailCell::text(data_type.clone()),
+            ],
             0,
         ));
     }

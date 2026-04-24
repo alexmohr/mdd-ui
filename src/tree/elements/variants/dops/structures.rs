@@ -43,7 +43,10 @@ pub(super) fn build_structure_dop_tabs(
     // Drop the default types_rows (Short Name, DOP Variant, etc.) — not needed for structures
     types_rows.clear();
 
-    let overview_header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let overview_header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     sections.push(
         DetailSectionData::new(
@@ -109,17 +112,22 @@ fn build_params_section(
             };
 
             {
-                let dop_cell_type = if has_dop { CellType::DopReference } else { CellType::Text };
+                let dop_cell_type = if has_dop {
+                    CellType::DopReference
+                } else {
+                    CellType::Text
+                };
                 let mut dop_cell = DetailCell::new(dop_name, dop_cell_type);
                 if let Some(jump) = dop_jump {
                     dop_cell = dop_cell.with_jump(jump);
                 }
                 let mut row = DetailRow::normal(
                     vec![
-                        DetailCell::new(name, CellType::ParameterName)
-                            .with_jump(crate::tree::CellJumpTarget::new(
-                                CellJumpTargetType::Parameter { param_id },
-                            )),
+                        DetailCell::new(name, CellType::ParameterName).with_jump(
+                            crate::tree::CellJumpTarget::new(CellJumpTargetType::Parameter {
+                                param_id,
+                            }),
+                        ),
                         DetailCell::new(byte_pos.to_string(), CellType::NumericValue),
                         DetailCell::text(bit_len),
                         DetailCell::text(byte_len),

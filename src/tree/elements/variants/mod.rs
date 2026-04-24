@@ -26,8 +26,8 @@ use crate::tree::{
     builder::TreeBuilder,
     types::{
         CellJumpTarget, CellJumpTargetType, CellType, ChildElementType, ColumnConstraint,
-        DetailCell, DetailContent, DetailRow, DetailRowType, DetailSectionData, DetailSectionType, RowMetadata,
-        SectionType,
+        DetailCell, DetailContent, DetailRow, DetailRowType, DetailSectionData, DetailSectionType,
+        RowMetadata, SectionType,
     },
 };
 
@@ -183,7 +183,13 @@ pub fn add_variants(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                     .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
             );
 
-            b.push_container(1, short_name, display_name, detail_sections, parent_ref_names);
+            b.push_container(
+                1,
+                short_name,
+                display_name,
+                detail_sections,
+                parent_ref_names,
+            );
 
             // Add diag layer content directly under variant (no section header)
             if let Some(dl) = vw.diag_layer() {
@@ -244,7 +250,13 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                         .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
                 );
 
-                b.push_container(1, name.to_string(), name.to_string(), detail_sections, parent_ref_names);
+                b.push_container(
+                    1,
+                    name.to_string(),
+                    name.to_string(),
+                    detail_sections,
+                    parent_ref_names,
+                );
 
                 // Pass parent refs from functional group for inherited elements
                 let parent_refs_iter = fg
@@ -347,7 +359,13 @@ fn add_layer_section(
         let detail_sections = build_layer_summary_section(layer, name);
 
         // ECU Shared Data / Protocols are at the top of the hierarchy — no parent refs
-        b.push_container(1, name.to_string(), name.to_string(), detail_sections, Vec::new());
+        b.push_container(
+            1,
+            name.to_string(),
+            name.to_string(),
+            detail_sections,
+            Vec::new(),
+        );
 
         b.add_diag_layer_structured(
             layer,
@@ -422,7 +440,13 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
 
         // Protocols are at the top of the hierarchy — their parent refs are handled
         // by the layers that reference them (variants, functional groups)
-        b.push_container(1, name.to_string(), name.to_string(), detail_sections, Vec::new());
+        b.push_container(
+            1,
+            name.to_string(),
+            name.to_string(),
+            detail_sections,
+            Vec::new(),
+        );
 
         b.add_diag_layer_structured(
             layer,
@@ -438,15 +462,18 @@ fn build_variant_summary_section(vw: &VariantWrap<'_>, name: &str) -> Vec<Detail
     let mut sections = vec![];
 
     // Create info table section
-    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     let mut info_rows = vec![
+        DetailRow::normal(vec![DetailCell::text("Variant"), DetailCell::text(name)], 0),
         DetailRow::normal(
-            vec![DetailCell::text("Variant"), DetailCell::text(name)],
-            0,
-        ),
-        DetailRow::normal(
-            vec![DetailCell::text("Base Variant"), DetailCell::text(vw.is_base_variant().to_string())],
+            vec![
+                DetailCell::text("Base Variant"),
+                DetailCell::text(vw.is_base_variant().to_string()),
+            ],
             0,
         ),
     ];
@@ -478,7 +505,10 @@ fn build_variant_summary_section(vw: &VariantWrap<'_>, name: &str) -> Vec<Detail
 
 /// Build summary section for a `DiagLayer` (used by functional groups and ECU shared data)
 fn build_layer_summary_section(layer: &DiagLayer<'_>, name: &str) -> Vec<DetailSectionData> {
-    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     let mut info_rows = vec![DetailRow::normal(
         vec![DetailCell::text("Name"), DetailCell::text(name)],
@@ -517,7 +547,10 @@ fn append_layer_info_rows(layer: &DiagLayer<'_>, info_rows: &mut Vec<DetailRow>)
         let value = ln.value().unwrap_or("-");
         let ti = ln.ti().unwrap_or("-");
         info_rows.push(DetailRow::normal(
-            vec![DetailCell::text("Long Name"), DetailCell::text(format!("value: {value}, ti: {ti}"))],
+            vec![
+                DetailCell::text("Long Name"),
+                DetailCell::text(format!("value: {value}, ti: {ti}")),
+            ],
             0,
         ));
     }

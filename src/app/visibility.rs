@@ -26,9 +26,7 @@ impl App {
             .rev()
             .filter_map(|i| self.tree.all_nodes.get(i))
             .filter(|parent| parent.depth < node_depth)
-            .any(|parent| {
-                parent.depth == 0 && parent.section_type() == Some(section_type)
-            })
+            .any(|parent| parent.depth == 0 && parent.section_type() == Some(section_type))
     }
 
     /// Check if `node_idx` is within the subtree rooted at `root_idx`.
@@ -214,18 +212,22 @@ impl App {
                         && self.is_under_section_type(node_idx, crate::tree::SectionType::Variants))
             }
             SearchScope::FunctionalGroups => {
-                node.section_type() == Some(crate::tree::SectionType::FunctionalGroups) || (matches!(node.node_type, NodeType::Container)
-                    && node_idx > 0
-                    && self.is_under_section_type(
-                        node_idx,
-                        crate::tree::SectionType::FunctionalGroups,
-                    ))
+                node.section_type() == Some(crate::tree::SectionType::FunctionalGroups)
+                    || (matches!(node.node_type, NodeType::Container)
+                        && node_idx > 0
+                        && self.is_under_section_type(
+                            node_idx,
+                            crate::tree::SectionType::FunctionalGroups,
+                        ))
             }
             SearchScope::EcuSharedData => {
-                node.section_type() == Some(crate::tree::SectionType::EcuSharedData) || (matches!(node.node_type, NodeType::Container)
-                    && node_idx > 0
-                    && self
-                        .is_under_section_type(node_idx, crate::tree::SectionType::EcuSharedData))
+                node.section_type() == Some(crate::tree::SectionType::EcuSharedData)
+                    || (matches!(node.node_type, NodeType::Container)
+                        && node_idx > 0
+                        && self.is_under_section_type(
+                            node_idx,
+                            crate::tree::SectionType::EcuSharedData,
+                        ))
             }
             SearchScope::Services => node.node_type.is_service(),
             SearchScope::DiagComms => {

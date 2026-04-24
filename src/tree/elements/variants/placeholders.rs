@@ -38,7 +38,10 @@ pub fn add_additional_audiences(b: &mut TreeBuilder, layer: &DiagLayer<'_>, dept
             })
             .collect();
 
-        let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("Long Name")]);
+        let header = DetailRow::header(vec![
+            DetailCell::text("Short Name"),
+            DetailCell::text("Long Name"),
+        ]);
 
         let section = DetailSectionData::new(
             "Additional Audiences".to_owned(),

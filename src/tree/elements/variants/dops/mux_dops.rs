@@ -22,7 +22,10 @@ pub(super) fn build_mux_dop_tabs(
 
     let mut general_rows = Vec::new();
 
-    general_rows.push(DetailRow::header(vec![DetailCell::text("Switch Key"), DetailCell::text("")]));
+    general_rows.push(DetailRow::header(vec![
+        DetailCell::text("Switch Key"),
+        DetailCell::text(""),
+    ]));
 
     if let Some(switch_key) = mux_dop.switch_key() {
         if let Some(dop) = switch_key.dop() {
@@ -45,14 +48,20 @@ pub(super) fn build_mux_dop_tabs(
         }
     }
 
-    general_rows.push(DetailRow::header(vec![DetailCell::text("Default Case"), DetailCell::text("")]));
+    general_rows.push(DetailRow::header(vec![
+        DetailCell::text("Default Case"),
+        DetailCell::text(""),
+    ]));
 
     if let Some(default_case) = mux_dop.default_case() {
         let dc_name = default_case.short_name().unwrap_or("-").to_owned();
         general_rows.push(kv_row("Short Name", dc_name, CellType::Text, 1));
     }
 
-    let general_header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let general_header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     sections.push(
         DetailSectionData::new(

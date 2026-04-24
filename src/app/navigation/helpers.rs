@@ -106,8 +106,7 @@ impl App {
                 return false;
             }
 
-            node.short_name()
-                .is_some_and(|sn| sn == name)
+            node.short_name().is_some_and(|sn| sn == name)
         })
     }
 
@@ -481,8 +480,7 @@ impl App {
     pub(super) fn navigate_to_container_by_name(&mut self, target_short_name: &str) {
         let is_target = |n: &TreeNode| -> bool {
             matches!(n.node_type, NodeType::Container)
-                && n.short_name()
-                    .is_some_and(|sn| sn == target_short_name)
+                && n.short_name().is_some_and(|sn| sn == target_short_name)
         };
 
         // 1. Search the DB hierarchy (current container + parent refs)

@@ -134,9 +134,7 @@ impl TreeBuilder {
             has_children,
             sections,
             node_type,
-            payload: NodePayload::DiagComm {
-                service_short_name,
-            },
+            payload: NodePayload::DiagComm { service_short_name },
             ..NodeConfig::default()
         });
     }
@@ -158,9 +156,7 @@ impl TreeBuilder {
             has_children,
             sections,
             node_type: NodeType::SectionHeader,
-            payload: NodePayload::ServiceListHeader {
-                service_list_type,
-            },
+            payload: NodePayload::ServiceListHeader { service_list_type },
             ..NodeConfig::default()
         });
     }

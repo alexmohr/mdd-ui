@@ -151,9 +151,7 @@ impl App {
 
     /// Determine which column is focused, clamped to the available cell count
     pub(super) fn get_focused_column(&self, cells: &[DetailCell]) -> usize {
-        self.table
-            .focused_column
-            .min(cells.len().saturating_sub(1))
+        self.table.focused_column.min(cells.len().saturating_sub(1))
     }
 
     /// Navigate to a DOP node by name.

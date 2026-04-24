@@ -47,7 +47,9 @@ impl TryFrom<String> for ColorString {
 }
 
 impl<'de> Deserialize<'de> for ColorString {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
         ColorString::try_from(s).map_err(serde::de::Error::custom)
     }

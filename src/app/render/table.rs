@@ -515,8 +515,7 @@ impl App {
 
                         let cell_type = cell.cell_type;
 
-                        let has_jump = cell.jump_target.is_some()
-                            || is_child_element;
+                        let has_jump = cell.jump_target.is_some() || is_child_element;
 
                         let highlight = if is_selected_row && col_idx == focused_col {
                             CellHighlight::FocusedCell

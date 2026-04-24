@@ -100,7 +100,10 @@ fn build_sdgs_table_section(sdg_data_list: &[SdgData]) -> DetailSectionData {
         .iter()
         .map(|sdg_data| {
             DetailRow::normal(
-                vec![DetailCell::text(sdg_data.caption.clone()), DetailCell::text(sdg_data.si.clone())],
+                vec![
+                    DetailCell::text(sdg_data.caption.clone()),
+                    DetailCell::text(sdg_data.si.clone()),
+                ],
                 0,
             )
         })
@@ -147,15 +150,24 @@ fn build_sdg_detail_sections(sdg_data: &SdgData) -> Vec<DetailSectionData> {
 
 /// Build overview section for SDG
 fn build_sdg_overview_section(sdg_data: &SdgData) -> DetailSectionData {
-    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     let rows = vec![
         DetailRow::normal(
-            vec![DetailCell::text("Short Name"), DetailCell::text(sdg_data.caption.clone())],
+            vec![
+                DetailCell::text("Short Name"),
+                DetailCell::text(sdg_data.caption.clone()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("SI"), DetailCell::text(sdg_data.si.clone())],
+            vec![
+                DetailCell::text("SI"),
+                DetailCell::text(sdg_data.si.clone()),
+            ],
             0,
         ),
     ];
@@ -184,7 +196,10 @@ fn build_sd_elements_table_section(sd_elements: &[SdElement]) -> DetailSectionDa
         .iter()
         .map(|sd| {
             DetailRow::normal(
-                vec![DetailCell::text(sd.short_name.clone()), DetailCell::text(sd.value.clone())],
+                vec![
+                    DetailCell::text(sd.short_name.clone()),
+                    DetailCell::text(sd.value.clone()),
+                ],
                 sd.depth,
             )
         })
