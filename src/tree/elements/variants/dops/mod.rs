@@ -17,8 +17,8 @@ use cda_database::datatypes::{DiagLayer, DiagService, Parameter};
 use crate::tree::{
     builder::TreeBuilder,
     types::{
-        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell,
-        DetailContent, DetailRow, DetailSectionData, DetailSectionType, NodeType,
+        CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent,
+        DetailRow, DetailSectionData, DetailSectionType, NodeType,
     },
 };
 
@@ -668,18 +668,23 @@ fn collect_dops_from_service<'a>(
 fn build_dops_overview_table(
     categories: &[(DopCategory, &[DopInfo<'_>])],
 ) -> Vec<DetailSectionData> {
-    let header = DetailRow::header(vec![DetailCell::text("Category"), DetailCell::new("Count", CellType::NumericValue)]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Category"),
+        DetailCell::new("Count", CellType::NumericValue),
+    ]);
 
     let rows: Vec<DetailRow> = categories
         .iter()
-        .map(|(cat, dops)| DetailRow::normal(
-            vec![
-                DetailCell::new(cat.label(), CellType::ParameterName)
-                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
-                DetailCell::new(dops.len().to_string(), CellType::NumericValue),
-            ],
-            0,
-        ))
+        .map(|(cat, dops)| {
+            DetailRow::normal(
+                vec![
+                    DetailCell::new(cat.label(), CellType::ParameterName)
+                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::new(dops.len().to_string(), CellType::NumericValue),
+                ],
+                0,
+            )
+        })
         .collect();
 
     vec![DetailSectionData {
@@ -802,7 +807,10 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
 /// Helper to push a "Types" tab section from accumulated rows
 fn push_types_section(types_rows: Vec<DetailRow>, sections: &mut Vec<DetailSectionData>) {
     if !types_rows.is_empty() {
-        let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+        let header = DetailRow::header(vec![
+            DetailCell::text("Property"),
+            DetailCell::text("Value"),
+        ]);
         sections.insert(
             0,
             DetailSectionData {
@@ -833,23 +841,35 @@ fn build_dop_detail_sections(dop_info: &DopInfo<'_>) -> Vec<DetailSectionData> {
 
     let mut types_rows = Vec::new();
     types_rows.push(DetailRow::normal(
-        vec![DetailCell::text("Short Name"), DetailCell::text(dop_info.name.clone())],
+        vec![
+            DetailCell::text("Short Name"),
+            DetailCell::text(dop_info.name.clone()),
+        ],
         0,
     ));
     types_rows.push(DetailRow::normal(
-        vec![DetailCell::text("DOP Variant"), DetailCell::text(dop_info.dop_type.clone())],
+        vec![
+            DetailCell::text("DOP Variant"),
+            DetailCell::text(dop_info.dop_type.clone()),
+        ],
         0,
     ));
 
     if let Some(ref compu) = parsed_name.compu_category {
         types_rows.push(DetailRow::normal(
-            vec![DetailCell::text("Compu Category (from name)"), DetailCell::text(compu.clone())],
+            vec![
+                DetailCell::text("Compu Category (from name)"),
+                DetailCell::text(compu.clone()),
+            ],
             0,
         ));
     }
     if let Some(ref unit) = parsed_name.unit {
         types_rows.push(DetailRow::normal(
-            vec![DetailCell::text("Unit (from name)"), DetailCell::text(unit.clone())],
+            vec![
+                DetailCell::text("Unit (from name)"),
+                DetailCell::text(unit.clone()),
+            ],
             0,
         ));
     }

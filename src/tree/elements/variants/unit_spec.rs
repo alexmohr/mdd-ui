@@ -218,23 +218,38 @@ fn build_unit_spec_overview(
 }
 
 fn build_unit_detail(unit: &UnitData) -> Vec<DetailSectionData> {
-    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     let rows = vec![
         DetailRow::normal(
-            vec![DetailCell::text("Short Name"), DetailCell::text(unit.short_name.clone())],
+            vec![
+                DetailCell::text("Short Name"),
+                DetailCell::text(unit.short_name.clone()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Display Name"), DetailCell::text(unit.display_name.clone())],
+            vec![
+                DetailCell::text("Display Name"),
+                DetailCell::text(unit.display_name.clone()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Factor (SI→Unit)"), DetailCell::new(unit.factor.clone(), CellType::NumericValue)],
+            vec![
+                DetailCell::text("Factor (SI→Unit)"),
+                DetailCell::new(unit.factor.clone(), CellType::NumericValue),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Offset (SI→Unit)"), DetailCell::new(unit.offset.clone(), CellType::NumericValue)],
+            vec![
+                DetailCell::text("Offset (SI→Unit)"),
+                DetailCell::new(unit.offset.clone(), CellType::NumericValue),
+            ],
             0,
         ),
     ];
@@ -258,15 +273,24 @@ fn build_unit_detail(unit: &UnitData) -> Vec<DetailSectionData> {
 }
 
 fn build_unit_group_detail(group: &UnitGroupData) -> Vec<DetailSectionData> {
-    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     let rows = vec![
         DetailRow::normal(
-            vec![DetailCell::text("Short Name"), DetailCell::text(group.short_name.clone())],
+            vec![
+                DetailCell::text("Short Name"),
+                DetailCell::text(group.short_name.clone()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Unit Count"), DetailCell::new(group.unit_count.to_string(), CellType::NumericValue)],
+            vec![
+                DetailCell::text("Unit Count"),
+                DetailCell::new(group.unit_count.to_string(), CellType::NumericValue),
+            ],
             0,
         ),
     ];

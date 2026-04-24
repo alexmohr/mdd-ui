@@ -782,7 +782,10 @@ mod tests {
     #[test]
     fn search_scope_variants_indicators() {
         assert_eq!(SearchScope::Variants.search_indicator(), " [variants]");
-        assert_eq!(SearchScope::Variants.status_indicator(), " | scope: variants");
+        assert_eq!(
+            SearchScope::Variants.status_indicator(),
+            " | scope: variants"
+        );
         assert_eq!(SearchScope::Variants.abbrev(), "[V]");
     }
 }

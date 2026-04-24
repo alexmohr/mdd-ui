@@ -161,10 +161,7 @@ pub(crate) fn build_service_overview_rows(
 
     if let Some(dc) = ds.diag_comm() {
         rows.extend(dc.short_name().map(|sn| {
-            DetailRow::normal(
-                vec![DetailCell::text("Service"), DetailCell::text(sn)],
-                0,
-            )
+            DetailRow::normal(vec![DetailCell::text("Service"), DetailCell::text(sn)], 0)
         }));
         rows.extend(dc.semantic().map(|semantic| {
             DetailRow::normal(
@@ -175,7 +172,10 @@ pub(crate) fn build_service_overview_rows(
     }
     if let Some(sid) = ds.request_id() {
         rows.push(DetailRow::normal(
-            vec![DetailCell::text("SID"), DetailCell::text(format!("0x{sid:02X}"))],
+            vec![
+                DetailCell::text("SID"),
+                DetailCell::text(format!("0x{sid:02X}")),
+            ],
             0,
         ));
     }
@@ -195,7 +195,10 @@ pub(crate) fn build_service_overview_rows(
     }
 
     rows.push(DetailRow::normal(
-        vec![DetailCell::text("Addressing"), DetailCell::text(format!("{:?}", ds.addressing()))],
+        vec![
+            DetailCell::text("Addressing"),
+            DetailCell::text(format!("{:?}", ds.addressing())),
+        ],
         0,
     ));
     rows.push(DetailRow::normal(
@@ -223,7 +226,10 @@ pub(crate) fn build_service_overview_section(
     DetailSectionData::new(
         "Overview".to_owned(),
         DetailContent::Table {
-            header: DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]),
+            header: DetailRow::header(vec![
+                DetailCell::text("Property"),
+                DetailCell::text("Value"),
+            ]),
             rows,
             constraints: vec![
                 ColumnConstraint::Percentage(30),
@@ -252,7 +258,10 @@ fn build_overview_section(
 
         if !states.is_empty() {
             rows.push(DetailRow::normal(
-                vec![DetailCell::text("State"), DetailCell::text(states.join(", "))],
+                vec![
+                    DetailCell::text("State"),
+                    DetailCell::text(states.join(", ")),
+                ],
                 0,
             ));
         }
@@ -275,7 +284,10 @@ fn build_overview_section(
     DetailSectionData::new(
         "Overview".to_owned(),
         DetailContent::Table {
-            header: DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]),
+            header: DetailRow::header(vec![
+                DetailCell::text("Property"),
+                DetailCell::text("Value"),
+            ]),
             rows,
             constraints: vec![
                 ColumnConstraint::Percentage(30),

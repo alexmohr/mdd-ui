@@ -162,16 +162,18 @@ fn add_single_ecu_jobs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize)
             section_type: DetailSectionType::Header,
         });
 
-        let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+        let header = DetailRow::header(vec![
+            DetailCell::text("Property"),
+            DetailCell::text("Value"),
+        ]);
 
         let mut rows = Vec::new();
 
-        rows.extend(dc.short_name().map(|sn| {
-            DetailRow::normal(
-                vec![DetailCell::text("Job"), DetailCell::text(sn)],
-                0,
-            )
-        }));
+        rows.extend(
+            dc.short_name().map(|sn| {
+                DetailRow::normal(vec![DetailCell::text("Job"), DetailCell::text(sn)], 0)
+            }),
+        );
         rows.extend(dc.semantic().map(|semantic| {
             DetailRow::normal(
                 vec![DetailCell::text("Semantic"), DetailCell::text(semantic)],

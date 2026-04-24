@@ -72,7 +72,10 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
         return vec![];
     };
 
-    let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("Type")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("Type"),
+    ]);
 
     let mut rows: Vec<DetailRow> = cp_refs
         .iter()
@@ -116,10 +119,7 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
 
 /// Helper to create a simple key-value row without jump target.
 fn kv_row(key: &str, value: String) -> DetailRow {
-    DetailRow::normal(
-        vec![DetailCell::text(key), DetailCell::text(value)],
-        0,
-    )
+    DetailRow::normal(vec![DetailCell::text(key), DetailCell::text(value)], 0)
 }
 
 /// Helper to create a key-value row with a DOP reference (jump cell).
@@ -141,10 +141,9 @@ fn dop_row(key: &str, dop_name: &str) -> DetailRow {
     DetailRow::normal(
         vec![
             DetailCell::text(key),
-            DetailCell::new(value, CellType::DopReference)
-                .with_jump(CellJumpTarget::new(CellJumpTargetType::Dop {
-                    name: nav_name,
-                })),
+            DetailCell::new(value, CellType::DopReference).with_jump(CellJumpTarget::new(
+                CellJumpTargetType::Dop { name: nav_name },
+            )),
         ],
         0,
     )
@@ -239,7 +238,10 @@ fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSect
         return None;
     }
 
-    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     Some(
         DetailSectionData::new(
@@ -277,7 +279,11 @@ fn build_complex_value_section(layer: &DiagLayer<'_>, idx: usize) -> Option<Deta
                 .and_then(|sv| sv.value().map(format_value_hex_decimal))
                 .unwrap_or_else(|| format!("Complex[{i}]"));
             DetailRow::normal(
-                vec![DetailCell::text(format!("{i}")), DetailCell::text(format!("{tag:?}")), DetailCell::text(value)],
+                vec![
+                    DetailCell::text(format!("{i}")),
+                    DetailCell::text(format!("{tag:?}")),
+                    DetailCell::text(value),
+                ],
                 0,
             )
         })
@@ -287,7 +293,11 @@ fn build_complex_value_section(layer: &DiagLayer<'_>, idx: usize) -> Option<Deta
         return None;
     }
 
-    let header = DetailRow::header(vec![DetailCell::text("#"), DetailCell::text("Type"), DetailCell::text("Value")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("#"),
+        DetailCell::text("Type"),
+        DetailCell::text("Value"),
+    ]);
     Some(
         DetailSectionData::new(
             "Complex Value".to_owned(),

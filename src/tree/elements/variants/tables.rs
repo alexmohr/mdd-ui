@@ -136,23 +136,38 @@ fn build_tables_overview(tables: &[TableData]) -> DetailSectionData {
 fn build_table_detail(table: &TableData) -> Vec<DetailSectionData> {
     let mut sections = Vec::new();
 
-    let header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
 
     let mut overview_rows = vec![
         DetailRow::normal(
-            vec![DetailCell::text("Short Name"), DetailCell::text(table.short_name.clone())],
+            vec![
+                DetailCell::text("Short Name"),
+                DetailCell::text(table.short_name.clone()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Semantic"), DetailCell::text(table.semantic.clone())],
+            vec![
+                DetailCell::text("Semantic"),
+                DetailCell::text(table.semantic.clone()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Key Label"), DetailCell::text(table.key_label.clone())],
+            vec![
+                DetailCell::text("Key Label"),
+                DetailCell::text(table.key_label.clone()),
+            ],
             0,
         ),
         DetailRow::normal(
-            vec![DetailCell::text("Struct Label"), DetailCell::text(table.struct_label.clone())],
+            vec![
+                DetailCell::text("Struct Label"),
+                DetailCell::text(table.struct_label.clone()),
+            ],
             0,
         ),
     ];
@@ -173,7 +188,10 @@ fn build_table_detail(table: &TableData) -> Vec<DetailSectionData> {
         0,
     ));
     overview_rows.push(DetailRow::normal(
-        vec![DetailCell::text("Row Count"), DetailCell::new(table.row_count.to_string(), CellType::NumericValue)],
+        vec![
+            DetailCell::text("Row Count"),
+            DetailCell::new(table.row_count.to_string(), CellType::NumericValue),
+        ],
         0,
     ));
 

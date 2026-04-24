@@ -40,7 +40,10 @@ pub fn build_parent_refs_detail_section<'a>(
         return None;
     }
 
-    let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("Type")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("Type"),
+    ]);
 
     let rows: Vec<DetailRow> = parent_refs_list
         .iter()
@@ -162,7 +165,10 @@ fn extract_parent_ref_info(parent_ref: &ParentRef<'_>) -> (&'static str, String)
 }
 
 fn build_parent_refs_overview(parent_refs_list: &[ParentRef<'_>]) -> DetailSectionData {
-    let header = DetailRow::header(vec![DetailCell::text("Short Name"), DetailCell::text("Type")]);
+    let header = DetailRow::header(vec![
+        DetailCell::text("Short Name"),
+        DetailCell::text("Type"),
+    ]);
 
     let rows: Vec<DetailRow> = parent_refs_list
         .iter()
@@ -203,7 +209,10 @@ fn build_single_parent_ref_detail(
     let mut sections = Vec::new();
 
     // General info
-    let general_header = DetailRow::header(vec![DetailCell::text("Property"), DetailCell::text("Value")]);
+    let general_header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
     let general_rows = vec![
         DetailRow::normal(
             vec![DetailCell::text("Short Name"), DetailCell::text(short_name)],
@@ -303,10 +312,9 @@ fn make_dop_row(name: &str) -> DetailRow {
     let dop_name = name.to_owned();
     DetailRow::normal(
         vec![
-            DetailCell::new(dop_name.clone(), CellType::DopReference)
-                .with_jump(CellJumpTarget::new(CellJumpTargetType::Dop {
-                    name: dop_name,
-                })),
+            DetailCell::new(dop_name.clone(), CellType::DopReference).with_jump(
+                CellJumpTarget::new(CellJumpTargetType::Dop { name: dop_name }),
+            ),
         ],
         0,
     )
