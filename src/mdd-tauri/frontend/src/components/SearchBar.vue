@@ -38,10 +38,20 @@ async function onClear() {
       @keydown.enter="onSubmit"
       @keydown.escape="onCancel"
     />
-    <button
-      class="px-2 py-0.5 rounded text-[0.85em] text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
-      @click="store.cycleScope()"
-    >{{ store.searchScope }}</button>
+    <select
+      :value="store.searchScope"
+      class="bg-neutral-800 text-neutral-300 text-[0.85em] rounded px-1.5 py-0.5 border border-neutral-700 outline-none cursor-pointer hover:border-neutral-500 transition-colors"
+      @change="store.setScope(($event.target as HTMLSelectElement).value)"
+    >
+      <option value="All">All</option>
+      <option value="Variants">Variants</option>
+      <option value="Functional Groups">Functional Groups</option>
+      <option value="ECU Shared Data">ECU Shared Data</option>
+      <option value="Services">Services</option>
+      <option value="Diag-Comms">Diag-Comms</option>
+      <option value="Requests">Requests</option>
+      <option value="Responses">Responses</option>
+    </select>
     <button
       class="p-1 rounded text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-colors"
       title="Clear search (x)"

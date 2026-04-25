@@ -19,6 +19,7 @@ fn main() {
             commands::search,
             commands::clear_search,
             commands::cycle_search_scope,
+            commands::set_search_scope,
             commands::toggle_sort,
             commands::expand_all,
             commands::collapse_all,
