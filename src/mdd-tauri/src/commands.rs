@@ -452,6 +452,23 @@ pub fn cycle_search_scope(state: State<'_, AppState>) -> Result<String, String> 
 }
 
 #[tauri::command]
+pub fn set_search_scope(scope: String, state: State<'_, AppState>) -> Result<String, String> {
+    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    core.search_scope = match scope.as_str() {
+        "All" => SearchScope::All,
+        "Variants" => SearchScope::Variants,
+        "Functional Groups" => SearchScope::FunctionalGroups,
+        "ECU Shared Data" => SearchScope::EcuSharedData,
+        "Services" => SearchScope::Services,
+        "Diag-Comms" => SearchScope::DiagComms,
+        "Requests" => SearchScope::Requests,
+        "Responses" => SearchScope::Responses,
+        _ => return Err(format!("Unknown scope: {scope}")),
+    };
+    Ok(core.search_scope.to_string())
+}
+
+#[tauri::command]
 pub fn toggle_sort(
     node_index: Option<usize>,
     state: State<'_, AppState>,

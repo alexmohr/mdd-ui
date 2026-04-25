@@ -202,6 +202,14 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
+  async function setScope(scope: string) {
+    try {
+      searchScope.value = await api.setSearchScope(scope);
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    }
+  }
+
   async function expandAll() {
     try { nodes.value = await api.expandAll(); } catch (e) { status.value = `Error: ${e}`; }
   }
@@ -314,7 +322,7 @@ export const useAppStore = defineStore("app", () => {
     status, loading, history, canGoBack, breadcrumbs, splitPct,
     fileLoaded, filePath, hideUnchanged, fontSize, sortLabel, recentFiles,
     loadFile, loadDiff, selectNode, goBack, toggleExpand, search,
-    clearSearch, cycleScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
+    clearSearch, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize,
     navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
   };

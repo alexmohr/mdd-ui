@@ -125,6 +125,10 @@ export async function cycleSearchScope(): Promise<string> {
   return invoke<string>("cycle_search_scope");
 }
 
+export async function setSearchScope(scope: string): Promise<string> {
+  return invoke<string>("set_search_scope", { scope });
+}
+
 export async function toggleSort(nodeIndex?: number): Promise<ToggleSortResult> {
   return invoke<ToggleSortResult>("toggle_sort", { nodeIndex: nodeIndex ?? null });
 }
