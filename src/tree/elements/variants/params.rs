@@ -30,7 +30,10 @@ fn dop_kv_row(dop_name: &str) -> DetailRow {
         vec![
             DetailCell::text("DOP"),
             DetailCell::new(nav_name.clone(), CellType::DopReference).with_jump(
-                CellJumpTarget::new(CellJumpTargetType::Dop { index: usize::MAX, name: nav_name }),
+                CellJumpTarget::new(CellJumpTargetType::Dop {
+                    index: usize::MAX,
+                    name: nav_name,
+                }),
             ),
         ],
         0,

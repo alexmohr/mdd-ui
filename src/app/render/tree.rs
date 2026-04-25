@@ -3,6 +3,8 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
+use std::borrow::Cow;
+
 use ratatui::{
     Frame,
     layout::Rect,
@@ -11,8 +13,6 @@ use ratatui::{
 };
 
 use super::{border_style, expand_icon, render_scrollbar, row_style};
-use std::borrow::Cow;
-
 use crate::{
     app::{App, FocusState},
     tree::{DiffStatus, NodeTextPrefix, NodeType},

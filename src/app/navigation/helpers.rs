@@ -73,32 +73,6 @@ impl App {
         }
     }
 
-    /// Expand all ancestors of a node
-    pub(super) fn expand_node_ancestors(&mut self, node_idx: usize) {
-        let Some(target_node) = self.tree.all_nodes.get(node_idx) else {
-            return;
-        };
-        let target_depth = target_node.depth;
-
-        if target_depth == 0 {
-            return;
-        }
-
-        let to_expand: Vec<usize> = (0..node_idx)
-            .filter(|&i| {
-                self.tree
-                    .all_nodes
-                    .get(i)
-                    .is_some_and(|n| n.depth < target_depth && n.has_children)
-            })
-            .collect();
-        for &i in &to_expand {
-            if let Some(n) = self.tree.all_nodes.get_mut(i) {
-                n.expanded = true;
-            }
-        }
-    }
-
     /// Find a container (variant/functional group) by name
     pub(super) fn find_container_by_name(&self, name: &str) -> Option<usize> {
         self.tree.all_nodes.iter().position(|node| {

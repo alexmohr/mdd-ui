@@ -102,12 +102,7 @@ pub fn add_functional_classes<'a>(
         let details = build_functional_class_detail(name, &all_services, &all_job_info);
 
         node_indices.insert(name.clone(), b.next_index());
-        b.push_functional_class(
-            depth.saturating_add(1),
-            name.clone(),
-            name.clone(),
-            details,
-        );
+        b.push_functional_class(depth.saturating_add(1), name.clone(), name.clone(), details);
     }
 
     // Build table with tree-node indices and patch header.
