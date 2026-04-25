@@ -100,14 +100,6 @@ impl App {
         if let Some(section) = section {
             if section.section_type == DetailSectionType::RelatedRefs {
                 self.try_navigate_to_parent_ref();
-            } else if matches!(
-                section.section_type,
-                DetailSectionType::NotInheritedDiagComms
-                    | DetailSectionType::NotInheritedDops
-                    | DetailSectionType::NotInheritedTables
-                    | DetailSectionType::NotInheritedVariables
-            ) {
-                self.try_navigate_to_not_inherited_element();
             } else {
                 self.try_navigate_from_detail_row();
             }
@@ -194,18 +186,22 @@ impl App {
             CellJumpTargetType::Dop { ref name } => {
                 self.navigate_to_dop(name);
             }
-            CellJumpTargetType::TreeNodeByName => {
-                if let Some(idx) = self.find_in_hierarchy(|n| n.text == cell_value) {
+            CellJumpTargetType::TreeNodeByIndex {
+                index,
+                ref short_name,
+            } => {
+                let matches_node = |n: &crate::tree::TreeNode| {
+                    n.service_short_name().is_some_and(|sn| sn == short_name)
+                        || n.short_name().is_some_and(|sn| sn == short_name)
+                        || n.text == *short_name
+                };
+                if self.tree.all_nodes.get(index).is_some_and(matches_node) {
+                    self.navigate_to_node(index);
+                } else if let Some(idx) = self.find_in_hierarchy(matches_node) {
                     self.navigate_to_node(idx);
                 } else {
-                    self.status = format!("Node \"{cell_value}\" not found in tree");
+                    self.status = format!("Node \"{short_name}\" not found in tree");
                 }
-            }
-            CellJumpTargetType::ContainerByName => {
-                self.navigate_to_container_by_name(cell_value);
-            }
-            CellJumpTargetType::ServiceOrJobByName => {
-                self.navigate_to_service_or_job(cell_value);
             }
         }
     }

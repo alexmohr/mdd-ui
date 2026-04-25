@@ -51,8 +51,12 @@ pub fn build_parent_refs_detail_section<'a>(
             let (ref_type, name) = extract_parent_ref_info(pr);
             DetailRow::normal(
                 vec![
-                    DetailCell::new(name, CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                    DetailCell::new(name.clone(), CellType::ParameterName).with_jump(
+                        CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                            index: usize::MAX,
+                            short_name: name,
+                        }),
+                    ),
                     DetailCell::text(ref_type),
                 ],
                 0,
@@ -176,8 +180,12 @@ fn build_parent_refs_overview(parent_refs_list: &[ParentRef<'_>]) -> DetailSecti
             let (ref_type, name) = extract_parent_ref_info(pr);
             DetailRow::normal(
                 vec![
-                    DetailCell::new(name, CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                    DetailCell::new(name.clone(), CellType::ParameterName).with_jump(
+                        CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                            index: usize::MAX,
+                            short_name: name,
+                        }),
+                    ),
                     DetailCell::text(ref_type),
                 ],
                 0,
@@ -246,7 +254,7 @@ fn build_single_parent_ref_detail(
             "Not Inherited DiagComms",
             parent_ref.not_inherited_diag_comm_short_names(),
             DetailSectionType::NotInheritedDiagComms,
-            make_tree_node_row as fn(&str) -> DetailRow,
+            make_service_or_job_row as fn(&str) -> DetailRow,
         ),
         (
             "Not Inherited Variables",
@@ -298,11 +306,29 @@ fn build_not_inherited_section(
     .with_type(section_type)
 }
 
+fn make_service_or_job_row(name: &str) -> DetailRow {
+    DetailRow::normal(
+        vec![
+            DetailCell::new(name, CellType::ParameterName).with_jump(CellJumpTarget::new(
+                CellJumpTargetType::TreeNodeByIndex {
+                    index: usize::MAX,
+                    short_name: name.to_owned(),
+                },
+            )),
+        ],
+        0,
+    )
+}
+
 fn make_tree_node_row(name: &str) -> DetailRow {
     DetailRow::normal(
         vec![
-            DetailCell::new(name, CellType::ParameterName)
-                .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+            DetailCell::new(name, CellType::ParameterName).with_jump(CellJumpTarget::new(
+                CellJumpTargetType::TreeNodeByIndex {
+                    index: usize::MAX,
+                    short_name: name.to_owned(),
+                },
+            )),
         ],
         0,
     )

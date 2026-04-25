@@ -106,6 +106,7 @@ fn add_response_service(
     depth: usize,
     source_layer: Option<&str>,
     kind: &ResponseKind,
+    container_index: Option<usize>,
 ) {
     let Some(display_name) = format_service_display_name(ds) else {
         return;
@@ -116,7 +117,7 @@ fn add_response_service(
         .and_then(|dc| dc.short_name())
         .unwrap_or("?")
         .to_owned();
-    let sections = build_response_view_sections(ds, source_layer, kind);
+    let sections = build_response_view_sections(ds, source_layer, kind, container_index);
     let has_params = responses_of!(ds, kind).is_some_and(|r| {
         r.iter()
             .any(|resp| resp.params().is_some_and(|p| !p.is_empty()))
@@ -204,29 +205,61 @@ fn add_responses_section<'a>(
     let total_count = own_services.len().saturating_add(parent_services.len());
 
     if total_count > 0 {
-        let detail_section = build_service_list_table_section(
-            &own_services,
-            &parent_services,
-            &format!("{}s", kind.label),
-            kind.section_type,
-        );
-
+        // Push header first (empty details — patched below with indices).
+        let header_idx = b.next_index();
         b.push_service_list_header(
             depth,
             format!("{}s ({total_count})", kind.label),
             false,
             true,
-            vec![detail_section],
+            vec![],
             kind.service_list_type,
         );
 
+        // Push children, collecting (short_name → tree index).
+        let mut node_indices = std::collections::HashMap::new();
+
         for ds in &own_services {
-            add_response_service(b, ds, depth, None, kind);
+            if ds.diag_comm().is_some() {
+                let sn = ds
+                    .diag_comm()
+                    .and_then(|dc| dc.short_name())
+                    .unwrap_or("?")
+                    .to_owned();
+                node_indices.insert(sn, b.next_index());
+            }
+            add_response_service(b, ds, depth, None, kind, None);
         }
 
         for (ds, source_layer_name) in &parent_services {
-            add_response_service(b, ds, depth, Some(source_layer_name.as_str()), kind);
+            if ds.diag_comm().is_some() {
+                let sn = ds
+                    .diag_comm()
+                    .and_then(|dc| dc.short_name())
+                    .unwrap_or("?")
+                    .to_owned();
+                node_indices.insert(sn, b.next_index());
+            }
+            let container_idx = b.find_container_index(source_layer_name);
+            add_response_service(
+                b,
+                ds,
+                depth,
+                Some(source_layer_name.as_str()),
+                kind,
+                container_idx,
+            );
         }
+
+        // Build table with tree-node indices and patch the header.
+        let detail_section = build_service_list_table_section(
+            &own_services,
+            &parent_services,
+            &format!("{}s", kind.label),
+            kind.section_type,
+            &node_indices,
+        );
+        b.set_detail_sections(header_idx, vec![detail_section]);
     }
 }
 
@@ -255,6 +288,7 @@ fn build_response_view_sections(
     ds: &DiagService<'_>,
     parent_layer_name: Option<&str>,
     kind: &ResponseKind,
+    container_index: Option<usize>,
 ) -> Vec<DetailSectionData> {
     let mut sections = Vec::new();
 
@@ -274,7 +308,11 @@ fn build_response_view_sections(
         content: DetailContent::PlainText(vec![]),
     });
 
-    sections.push(build_service_overview_section(ds, parent_layer_name));
+    sections.push(build_service_overview_section(
+        ds,
+        parent_layer_name,
+        container_index,
+    ));
     sections.extend(build_responses_sections(ds, kind));
 
     sections

@@ -105,6 +105,7 @@ impl App {
         if is_diagcomms {
             self.tree.diagcomm_sort_by_id = !self.tree.diagcomm_sort_by_id;
             self.sort_diagcomm_nodes_in_place();
+            crate::tree::resolve_all_indices(&mut self.tree.all_nodes);
             self.rebuild_visible();
             if self.tree.diagcomm_sort_by_id {
                 self.status = "Sort: by ID".into();
@@ -113,6 +114,7 @@ impl App {
             }
         } else if sort_node.has_children {
             self.sort_children_by_name(sort_idx);
+            crate::tree::resolve_all_indices(&mut self.tree.all_nodes);
             self.rebuild_visible();
         } else {
             self.status = "No sortable section found".into();

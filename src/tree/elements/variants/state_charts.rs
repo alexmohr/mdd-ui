@@ -13,6 +13,17 @@ use crate::tree::{
     },
 };
 
+fn make_index_jump(
+    short_name: &str,
+    node_indices: &std::collections::HashMap<String, usize>,
+) -> CellJumpTarget {
+    let index = node_indices.get(short_name).copied().unwrap_or(usize::MAX);
+    CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+        index,
+        short_name: short_name.to_owned(),
+    })
+}
+
 /// Add state charts section to the tree
 pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
     let Some(charts) = layer.state_charts() else {
@@ -22,15 +33,14 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
         return;
     }
 
-    // Build overview table for the section header
-    let overview = build_state_charts_overview_table(layer);
-
+    // Push header first (empty details — patched below with indices).
+    let header_idx = b.next_index();
     b.push_details_structured(
         depth,
         format!("State Charts ({})", charts.len()),
         false,
         true,
-        overview,
+        vec![],
         NodeType::SectionHeader,
     );
 
@@ -38,7 +48,9 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
     let mut sorted_charts: Vec<_> = charts.iter().collect();
     sorted_charts.sort_by_cached_key(|chart| chart.short_name().unwrap_or("").to_lowercase());
 
-    for chart in sorted_charts {
+    // Push children, collecting (name → tree index).
+    let mut node_indices = std::collections::HashMap::new();
+    for chart in &sorted_charts {
         let chart_name = chart.short_name().unwrap_or("unnamed");
         let semantic = chart.semantic().unwrap_or("");
 
@@ -82,6 +94,7 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
             build_states_section(state_rows),
         ];
 
+        node_indices.insert(chart_name.to_owned(), b.next_index());
         b.push_details_structured(
             depth.saturating_add(1),
             chart_name.to_owned(),
@@ -91,6 +104,21 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
             NodeType::Default,
         );
     }
+
+    // Collect chart summaries for the overview table.
+    let chart_summaries: Vec<_> = sorted_charts
+        .iter()
+        .map(|chart| {
+            let name = chart.short_name().unwrap_or("unnamed").to_owned();
+            let states = chart.states().map_or(0, |s| s.len());
+            let transitions = chart.state_transitions().map_or(0, |t| t.len());
+            (name, states, transitions)
+        })
+        .collect();
+
+    // Build overview with tree-node indices and patch header.
+    let overview = build_state_charts_overview_table(&chart_summaries, &node_indices);
+    b.set_detail_sections(header_idx, overview);
 }
 
 fn build_transitions_section(mut transitions: Vec<DetailRow>) -> DetailSectionData {
@@ -142,30 +170,23 @@ fn build_states_section(mut states: Vec<DetailRow>) -> DetailSectionData {
 }
 
 /// Build an overview table listing all state chart short names for the section header
-fn build_state_charts_overview_table(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
-    let Some(charts) = layer.state_charts() else {
-        return vec![];
-    };
-
+fn build_state_charts_overview_table(
+    chart_summaries: &[(String, usize, usize)],
+    node_indices: &std::collections::HashMap<String, usize>,
+) -> Vec<DetailSectionData> {
     let header = DetailRow::header(vec![
         DetailCell::text("Name"),
         DetailCell::text("States"),
         DetailCell::text("Transitions"),
     ]);
 
-    let mut sorted_charts: Vec<_> = charts.iter().collect();
-    sorted_charts.sort_by_cached_key(|chart| chart.short_name().unwrap_or("").to_lowercase());
-
-    let rows: Vec<DetailRow> = sorted_charts
+    let rows: Vec<DetailRow> = chart_summaries
         .iter()
-        .map(|chart| {
-            let name = chart.short_name().unwrap_or("unnamed").to_owned();
-            let state_count = chart.states().map_or(0, |s| s.len());
-            let transition_count = chart.state_transitions().map_or(0, |t| t.len());
+        .map(|(name, state_count, transition_count)| {
+            let jump = make_index_jump(name, node_indices);
             DetailRow::normal(
                 vec![
-                    DetailCell::new(name, CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::new(name.clone(), CellType::ParameterName).with_jump(jump),
                     DetailCell::new(state_count.to_string(), CellType::NumericValue),
                     DetailCell::new(transition_count.to_string(), CellType::NumericValue),
                 ],

@@ -137,6 +137,9 @@ pub enum NodePayload {
         short_name: String,
         /// Short names of parent-ref containers from the database hierarchy.
         parent_ref_names: Vec<String>,
+        /// Resolved tree indices of parent-ref containers. Populated by
+        /// `TreeBuilder::finish()` from `parent_ref_names`.
+        parent_ref_indices: Vec<usize>,
     },
     /// Top-level section header (depth 0).
     SectionHeader {
@@ -214,13 +217,12 @@ impl TreeNode {
         }
     }
 
-    /// Returns the parent-ref container short names (empty slice for
-    /// non-container nodes).
-    pub fn parent_ref_names(&self) -> &[String] {
+    /// Returns the resolved parent-ref container tree indices.
+    pub fn parent_ref_indices(&self) -> &[usize] {
         match &self.payload {
             NodePayload::Container {
-                parent_ref_names, ..
-            } => parent_ref_names,
+                parent_ref_indices, ..
+            } => parent_ref_indices,
             _ => &[],
         }
     }
@@ -373,15 +375,11 @@ pub enum CellJumpTargetType {
     Parameter { param_id: u32 },
     /// Navigate to a DOP node by name
     Dop { name: String },
-    /// Navigate to a tree node whose text matches the cell value
-    TreeNodeByName,
-    /// Navigate to a container (variant / layer) by name
-    ContainerByName,
-    /// Navigate to a Service or Job tree node whose short name matches the cell
-    /// value. Service node texts have the format "ID - `ShortName`" so an exact
-    /// `text == value` comparison does not work; this variant uses the
-    /// dedicated service-name extraction logic instead.
-    ServiceOrJobByName,
+    /// Navigate directly to a tree node by its stored index.
+    /// Carries the canonical `short_name` for verification — if the node at
+    /// `index` no longer matches (e.g. after sorting), the handler falls
+    /// back to a hierarchy search by `short_name`.
+    TreeNodeByIndex { index: usize, short_name: String },
 }
 
 /// Per-cell jump target metadata: tells the navigation system where clicking
@@ -564,13 +562,18 @@ impl DetailRow {
         }
     }
 
-    /// Create an "Inherited From" navigation row
-    pub fn inherited_from(layer_name: String) -> Self {
+    /// Create an "Inherited From" navigation row.
+    /// `container_index` is the tree index of the parent container, or
+    /// `None` when the container has not been pushed yet.
+    pub fn inherited_from(layer_name: String, container_index: Option<usize>) -> Self {
+        let jump = CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+            index: container_index.unwrap_or(usize::MAX),
+            short_name: layer_name.clone(),
+        });
         Self {
             cells: vec![
                 DetailCell::text("Inherited From"),
-                DetailCell::new(layer_name.clone(), CellType::ParameterName)
-                    .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                DetailCell::new(layer_name.clone(), CellType::ParameterName).with_jump(jump),
             ],
             indent: 0,
             row_type: DetailRowType::InheritedFrom,

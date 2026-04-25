@@ -5,18 +5,8 @@
 
 use crate::{
     app::App,
-    tree::{DetailRowType, DetailSectionType, NodeType, RowMetadata},
+    tree::{CellJumpTargetType, DetailRowType, NodeType, RowMetadata},
 };
-
-/// Type of not-inherited element, determines navigation strategy
-enum NotInheritedElementType {
-    /// `DiagComm` services — navigates to the service/job node
-    DiagComm,
-    /// Data Object Properties — navigates to the DOP node
-    Dop,
-    /// Table structures or `DiagVariables` — navigates to the matching tree node
-    TreeNode,
-}
 
 impl App {
     /// Navigate to an inherited parent layer in the tree
@@ -44,8 +34,13 @@ impl App {
             return;
         };
 
-        // Find parent container and navigate
-        if let Some(container_idx) = self.find_container_by_name(&parent_layer_name) {
+        // Find parent container: prefer resolved index from jump target,
+        // fall back to name lookup.
+        let container_idx = self
+            .get_inherited_from_container_index(node_idx)
+            .or_else(|| self.find_container_by_name(&parent_layer_name));
+
+        if let Some(container_idx) = container_idx {
             self.navigate_to_parent_service(container_idx, &current_service_name);
         } else {
             self.status = format!("Parent layer '{parent_layer_name}' not found in tree");
@@ -96,22 +91,18 @@ impl App {
             return false;
         };
 
-        // Check if the current node is a child of a ParentRefs node
+        // Check if the current node's direct parent is a ParentRefs node.
         let Some(node) = self.tree.all_nodes.get(node_idx) else {
             return false;
         };
-        let node_depth = node.depth;
-
-        if node_depth == 0 {
+        let Some(parent_idx) = node.parent_idx else {
             return false;
-        }
-
-        // Walk backwards to find the parent node
-        let parent_is_parent_refs = (0..node_idx).rev().any(|i| {
-            self.tree.all_nodes.get(i).is_some_and(|n| {
-                n.node_type == NodeType::ParentRefs && n.depth == node_depth.saturating_sub(1)
-            })
-        });
+        };
+        let parent_is_parent_refs = self
+            .tree
+            .all_nodes
+            .get(parent_idx)
+            .is_some_and(|p| p.node_type == NodeType::ParentRefs);
 
         if !parent_is_parent_refs {
             return false;
@@ -123,9 +114,10 @@ impl App {
         true
     }
 
-    /// Navigate to a parent ref element from the Parent References table
+    /// Navigate to a parent ref element from the Parent References table.
+    /// Prefers the resolved index from the cell's jump target.
     pub(crate) fn try_navigate_to_parent_ref(&mut self) {
-        let target = {
+        let (cell_value, jump_index) = {
             let Some(ctx) = self.resolve_selected_row() else {
                 return;
             };
@@ -135,59 +127,45 @@ impl App {
             let Some(name_cell) = selected_row.cells.first() else {
                 return;
             };
-            name_cell.text.clone()
+            let idx = name_cell
+                .jump_target
+                .as_ref()
+                .and_then(|jt| match &jt.target_type {
+                    CellJumpTargetType::TreeNodeByIndex { index, .. } if *index != usize::MAX => {
+                        Some(*index)
+                    }
+                    _ => None,
+                });
+            (name_cell.text.clone(), idx)
         };
-        self.navigate_to_container_by_name(&target);
+
+        if let Some(idx) = jump_index {
+            self.navigate_to_node(idx);
+        } else {
+            self.navigate_to_container_by_name(&cell_value);
+        }
     }
 
-    /// Navigate to a not-inherited element (`DiagComm`, `DiagVariable`, `Dop`, `Table`)
-    pub(crate) fn try_navigate_to_not_inherited_element(&mut self) {
-        let (element_type, target_short_name) = {
-            let Some(ctx) = self.resolve_selected_row() else {
-                return;
-            };
-
-            let element_type = match ctx.section.section_type {
-                DetailSectionType::NotInheritedDiagComms => NotInheritedElementType::DiagComm,
-                DetailSectionType::NotInheritedDops => NotInheritedElementType::Dop,
-                DetailSectionType::NotInheritedTables
-                | DetailSectionType::NotInheritedVariables => NotInheritedElementType::TreeNode,
-                DetailSectionType::Header
-                | DetailSectionType::Overview
-                | DetailSectionType::Services
-                | DetailSectionType::Requests
-                | DetailSectionType::PosResponses
-                | DetailSectionType::NegResponses
-                | DetailSectionType::ComParams
-                | DetailSectionType::States
-                | DetailSectionType::RelatedRefs
-                | DetailSectionType::FunctionalClass
-                | DetailSectionType::Custom => return,
-            };
-
-            let Some(selected_row) = ctx.selected_row() else {
-                return;
-            };
-            let Some(name_cell) = selected_row.cells.first() else {
-                return;
-            };
-            let name = name_cell.text.clone();
-            if name.is_empty() {
-                return;
-            }
-            (element_type, name)
-        };
-
-        match element_type {
-            NotInheritedElementType::DiagComm => {
-                self.navigate_to_service_or_job(&target_short_name);
-            }
-            NotInheritedElementType::Dop => {
-                self.navigate_to_dop(&target_short_name);
-            }
-            NotInheritedElementType::TreeNode => {
-                self.navigate_to_tree_node_by_text(&target_short_name);
-            }
+    /// Extract the resolved container index from the "Inherited From" row's
+    /// jump target, if it has been resolved (not `usize::MAX`).
+    fn get_inherited_from_container_index(&self, node_idx: usize) -> Option<usize> {
+        let node = self.tree.all_nodes.get(node_idx)?;
+        let overview_idx = usize::from(
+            node.detail_sections.len() > 1
+                && node
+                    .detail_sections
+                    .first()
+                    .is_some_and(|s| s.render_as_header),
+        );
+        let section = node.detail_sections.get(overview_idx)?;
+        let rows = section.content.table_rows()?;
+        let inherited_row = rows
+            .iter()
+            .find(|r| r.row_type == DetailRowType::InheritedFrom)?;
+        let cell = inherited_row.cells.get(1)?;
+        match cell.jump_target.as_ref()?.target_type {
+            CellJumpTargetType::TreeNodeByIndex { index, .. } if index != usize::MAX => Some(index),
+            _ => None,
         }
     }
 }

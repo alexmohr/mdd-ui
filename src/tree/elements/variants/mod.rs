@@ -212,27 +212,22 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
     if let Some(groups) = ecu.functional_groups()
         && !groups.is_empty()
     {
-        let names: Vec<String> = groups
-            .iter()
-            .filter_map(|fg| {
-                fg.diag_layer()
-                    .and_then(|dl| dl.short_name().map(str::to_owned))
-            })
-            .collect();
-        let overview = build_names_overview_table(&names, "Functional Groups Overview");
-
+        let header_idx = b.next_index();
         b.push_section_header(
             "Functional Groups".to_string(),
             false,
             true,
-            overview,
+            vec![],
             SectionType::FunctionalGroups,
         );
 
+        let mut node_indices = std::collections::HashMap::new();
+        let mut names = Vec::new();
         for fg in groups {
             if let Some(dl) = fg.diag_layer() {
                 let layer = DiagLayer(dl);
                 let name = layer.short_name().unwrap_or("unnamed");
+                names.push(name.to_owned());
 
                 let mut detail_sections = build_layer_summary_section(&layer, name);
 
@@ -250,6 +245,7 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                         .map(|pr| pr.iter().map(cda_database::datatypes::ParentRef)),
                 );
 
+                node_indices.insert(name.to_string(), b.next_index());
                 b.push_container(
                     1,
                     name.to_string(),
@@ -270,6 +266,10 @@ pub fn add_functional_groups(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
                 );
             }
         }
+
+        let overview =
+            build_names_overview_table(&names, "Functional Groups Overview", &node_indices);
+        b.set_detail_sections(header_idx, overview);
     }
 }
 
@@ -340,25 +340,18 @@ fn add_layer_section(
         return;
     }
 
-    let names: Vec<String> = layers
-        .iter()
-        .filter_map(|dl| dl.short_name().map(str::to_owned))
-        .collect();
-    let overview = build_names_overview_table(&names, overview_title);
+    let header_idx = b.next_index();
+    b.push_section_header(section_name.to_string(), false, true, vec![], section_type);
 
-    b.push_section_header(
-        section_name.to_string(),
-        false,
-        true,
-        overview,
-        section_type,
-    );
-
+    let mut node_indices = std::collections::HashMap::new();
+    let mut names = Vec::new();
     for layer in layers {
         let name = layer.short_name().unwrap_or("unnamed");
+        names.push(name.to_owned());
         let detail_sections = build_layer_summary_section(layer, name);
 
         // ECU Shared Data / Protocols are at the top of the hierarchy — no parent refs
+        node_indices.insert(name.to_string(), b.next_index());
         b.push_container(
             1,
             name.to_string(),
@@ -374,6 +367,9 @@ fn add_layer_section(
             None::<std::iter::Empty<cda_database::datatypes::Variant>>,
         );
     }
+
+    let overview = build_names_overview_table(&names, overview_title, &node_indices);
+    b.set_detail_sections(header_idx, overview);
 }
 
 /// Add all ECU shared data to the tree
@@ -420,26 +416,26 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
         return;
     }
 
-    let names: Vec<String> = layers
-        .iter()
-        .filter_map(|dl| dl.short_name().map(str::to_owned))
-        .collect();
-    let overview = build_names_overview_table(&names, "Protocols Overview");
-
+    let header_idx = b.next_index();
     b.push_section_header(
         "Protocols".to_string(),
         false,
         true,
-        overview,
+        vec![],
         SectionType::Protocols,
     );
 
+    let mut node_indices: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    let mut names = Vec::new();
     for layer in &layers {
         let name = layer.short_name().unwrap_or("unnamed");
+        names.push(name.to_owned());
         let detail_sections = build_layer_summary_section(layer, name);
 
         // Protocols are at the top of the hierarchy — their parent refs are handled
         // by the layers that reference them (variants, functional groups)
+        node_indices.insert(name.to_string(), b.next_index());
         b.push_container(
             1,
             name.to_string(),
@@ -455,6 +451,9 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
             None::<std::iter::Empty<cda_database::datatypes::Variant>>,
         );
     }
+
+    let overview = build_names_overview_table(&names, "Protocols Overview", &node_indices);
+    b.set_detail_sections(header_idx, overview);
 }
 
 /// Build variant summary section with info and children table
@@ -699,8 +698,12 @@ fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionD
 
             DetailRow::normal(
                 vec![
-                    DetailCell::new(name, CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+                    DetailCell::new(name.clone(), CellType::ParameterName).with_jump(
+                        CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                            index: usize::MAX,
+                            short_name: name,
+                        }),
+                    ),
                     DetailCell::text(is_base),
                 ],
                 0,
@@ -728,7 +731,11 @@ fn build_variants_overview_table(variants: &[VariantWrap]) -> Vec<DetailSectionD
 
 /// Build a simple overview table with a "Short Name" column for a list of names.
 /// Used by Functional Groups, ECU Shared Data, and Protocols section headers.
-fn build_names_overview_table(names: &[String], title: &str) -> Vec<DetailSectionData> {
+fn build_names_overview_table(
+    names: &[String],
+    title: &str,
+    node_indices: &std::collections::HashMap<String, usize>,
+) -> Vec<DetailSectionData> {
     if names.is_empty() {
         return vec![];
     }
@@ -738,11 +745,13 @@ fn build_names_overview_table(names: &[String], title: &str) -> Vec<DetailSectio
     let rows: Vec<DetailRow> = names
         .iter()
         .map(|name| {
+            let index = node_indices.get(name).copied().unwrap_or(usize::MAX);
+            let jump = CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                index,
+                short_name: name.clone(),
+            });
             DetailRow::normal(
-                vec![
-                    DetailCell::new(name.clone(), CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
-                ],
+                vec![DetailCell::new(name.clone(), CellType::ParameterName).with_jump(jump)],
                 0,
             )
         })

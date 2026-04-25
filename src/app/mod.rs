@@ -412,12 +412,11 @@ pub struct PopupData {
     pub content: Vec<String>,
 }
 
-/// A single entry in the navigation history, storing the full path from root
-/// so that the target can be found even after expand/collapse or search changes.
+/// A single entry in the navigation history.
 #[derive(Clone)]
 pub(crate) struct HistoryEntry {
-    /// Path from root to target: `(depth, text)` pairs.
-    node_path: Vec<(usize, String)>,
+    /// Tree node index in `all_nodes`.
+    pub node_idx: usize,
 }
 
 impl App {
@@ -454,6 +453,7 @@ impl App {
         };
         // Apply initial sort order (default is by ID)
         app.sort_diagcomm_nodes_in_place();
+        crate::tree::resolve_all_indices(&mut app.tree.all_nodes);
         app.rebuild_visible();
         app
     }
