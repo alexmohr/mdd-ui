@@ -174,7 +174,7 @@ To build a release binary for your current platform:
 cargo tauri build
 ```
 
-The built application will be in `src/mdd-tauri/target/release/bundle/` with platform-specific installers:
+The built application will be in `target/release/bundle/` with platform-specific installers:
 - **Linux**: `.deb` and `.AppImage` files
 - **macOS**: `.dmg` file and `.app` bundle
 - **Windows**: `.msi` installer and `.exe` file

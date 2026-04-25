@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "frontend/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "cd mdd-tauri/frontend && bun install && bun run dev",
-    "beforeBuildCommand": "cd mdd-tauri/frontend && bun install && bun run build"
+    "beforeDevCommand": "cd frontend && bun install && bun run dev",
+    "beforeBuildCommand": "cd frontend && bun install && bun run build"
   },
   "app": {
     "windows": [
