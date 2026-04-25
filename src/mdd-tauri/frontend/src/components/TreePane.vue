@@ -49,6 +49,23 @@ function nodeTextClass(node: VisibleNode): string {
   }
 }
 
+function nodeIcon(node: VisibleNode): { char: string; cls: string } {
+  switch (node.node_type) {
+    case "SectionHeader": return { char: "#", cls: "text-gray-500" };
+    case "Container": return { char: "", cls: "" };
+    case "Service": return { char: "S", cls: "text-violet-500" };
+    case "Job": return { char: "J", cls: "text-violet-500/70" };
+    case "ParentRefService": return { char: "S", cls: "text-gray-600" };
+    case "Request": return { char: "Rq", cls: "text-teal-500" };
+    case "PosResponse": return { char: "R+", cls: "text-emerald-500" };
+    case "NegResponse": return { char: "R-", cls: "text-rose-500" };
+    case "FunctionalClass": return { char: "FC", cls: "text-orange-500" };
+    case "Dop": return { char: "D", cls: "text-pink-500" };
+    case "Sdg": return { char: "G", cls: "text-lime-500" };
+    default: return { char: "", cls: "" };
+  }
+}
+
 async function onClick(node: VisibleNode) {
   await store.selectNode(node.index);
 }
@@ -155,6 +172,11 @@ async function onChevronClick(e: Event, node: VisibleNode) {
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="m7 10 5 5 5-5z"/></svg>
         </span>
+        <span
+          v-else-if="nodeIcon(node).char"
+          class="w-4 shrink-0 text-center text-[9px] font-bold leading-none"
+          :class="nodeIcon(node).cls"
+        >{{ nodeIcon(node).char }}</span>
         <span v-else class="w-4 shrink-0" />
 
         <!-- Label -->
