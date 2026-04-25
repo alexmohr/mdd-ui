@@ -118,7 +118,7 @@ fn build_cases_section(mux_dop: &cda_database::datatypes::MuxDop<'_>) -> DetailS
                 .unwrap_or_default();
 
             let dop_jump = struct_name.as_ref().map(|n| {
-                crate::tree::CellJumpTarget::new(CellJumpTargetType::Dop { name: n.clone() })
+                crate::tree::CellJumpTarget::new(CellJumpTargetType::Dop { index: usize::MAX, name: n.clone() })
             });
             let struct_display = struct_name.clone().unwrap_or_else(|| "-".to_owned());
 

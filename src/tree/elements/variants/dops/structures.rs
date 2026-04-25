@@ -105,6 +105,7 @@ fn build_params_section(
 
             let dop_jump = if has_dop {
                 Some(crate::tree::CellJumpTarget::new(CellJumpTargetType::Dop {
+                    index: usize::MAX,
                     name: dop_name.clone(),
                 }))
             } else {

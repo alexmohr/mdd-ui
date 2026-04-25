@@ -288,22 +288,15 @@ fn match_key(node: &TreeNode) -> String {
 
     // Service nodes without service_short_name (shouldn't happen in normal
     // builds, but keep as fallback for diff-merge created nodes):
-    // "[Service] 0x2E01 - WriteDID" → "WriteDID"
-    // "[Job] MyJob"                 → "MyJob"
-    for prefix in [
-        tree::NodeTextPrefix::Service.as_str(),
-        tree::NodeTextPrefix::Job.as_str(),
-    ] {
-        if let Some(rest) = text.strip_prefix(prefix) {
-            return rest.find(" - ").map_or_else(
-                || rest.to_owned(),
-                |pos| {
-                    rest.get(pos.saturating_add(3)..)
-                        .unwrap_or_default()
-                        .to_owned()
-                },
-            );
+    // "0x2E01 - WriteDID" → "WriteDID"
+    if node.node_type.is_diagcomm() {
+        if let Some(pos) = text.find(" - ") {
+            return text
+                .get(pos.saturating_add(3)..)
+                .unwrap_or_default()
+                .to_owned();
         }
+        return text.to_owned();
     }
 
     // List headers: "Diag-Comms (5 services, 2 jobs)" → "Diag-Comms"

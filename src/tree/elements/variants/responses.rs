@@ -161,6 +161,7 @@ fn add_response_service(
             let param_detail = build_param_detail_sections(&param);
             b.push_param(
                 base_depth,
+                param_name.clone(),
                 param_name,
                 param_detail,
                 NodeType::Default,

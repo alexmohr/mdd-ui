@@ -95,7 +95,7 @@ pub(crate) fn format_service_display_name(ds: &DiagService<'_>) -> Option<String
             ds.request_sub_function_id().map_or_else(
                 || {
                     let id = format!("{sid:02X}{extra_bytes}");
-                    format!("0x{id:8} - {name}")
+                    format!("0x{id} - {name}")
                 },
                 |(sub_fn, bit_len)| {
                     let sub_fn_str = if bit_len <= 8 {
@@ -104,7 +104,7 @@ pub(crate) fn format_service_display_name(ds: &DiagService<'_>) -> Option<String
                         format!("{sub_fn:04X}")
                     };
                     let id = format!("{sid:02X}{sub_fn_str}{extra_bytes}");
-                    format!("0x{id:8} - {name}")
+                    format!("0x{id} - {name}")
                 },
             )
         },

@@ -168,7 +168,8 @@ impl App {
         is_functional_class: bool,
     ) -> bool {
         if is_functional_class {
-            node.node_type == NodeType::FunctionalClass && node.text == target_name
+            node.node_type == NodeType::FunctionalClass
+                && node.short_name().is_some_and(|sn| sn == target_name)
         } else {
             node.node_type.is_diagcomm()
                 && node
@@ -184,7 +185,10 @@ impl App {
 
     /// Return the canonical short name for a service / job node.
     pub(super) fn extract_service_name_from_node(node: &TreeNode) -> String {
-        node.service_short_name().unwrap_or(&node.text).to_owned()
+        node.service_short_name()
+            .or_else(|| node.short_name())
+            .unwrap_or_default()
+            .to_owned()
     }
 
     /// Navigate to parent service in the container

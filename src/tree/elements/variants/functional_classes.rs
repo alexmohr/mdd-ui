@@ -10,7 +10,7 @@ use crate::tree::{
     builder::TreeBuilder,
     types::{
         CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell, DetailContent,
-        DetailRow, DetailSectionData, DetailSectionType, NodeType,
+        DetailRow, DetailSectionData, DetailSectionType,
     },
 };
 
@@ -102,13 +102,11 @@ pub fn add_functional_classes<'a>(
         let details = build_functional_class_detail(name, &all_services, &all_job_info);
 
         node_indices.insert(name.clone(), b.next_index());
-        b.push_details_structured(
+        b.push_functional_class(
             depth.saturating_add(1),
             name.clone(),
-            false,
-            false,
+            name.clone(),
             details,
-            NodeType::FunctionalClass,
         );
     }
 

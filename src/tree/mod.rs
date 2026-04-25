@@ -79,13 +79,14 @@ fn resolve_sections(
                 .iter_mut()
                 .flat_map(|row| &mut row.cells)
                 .filter_map(|cell| cell.jump_target.as_mut())
-                .for_each(|jt| {
-                    if let CellJumpTargetType::TreeNodeByIndex { index, short_name } =
-                        &mut jt.target_type
-                        && let Some(&real) = name_to_idx.get(short_name.as_str())
-                    {
-                        *index = real;
+                .for_each(|jt| match &mut jt.target_type {
+                    CellJumpTargetType::TreeNodeByIndex { index, short_name }
+                    | CellJumpTargetType::Dop { index, name: short_name } => {
+                        if let Some(&real) = name_to_idx.get(short_name.as_str()) {
+                            *index = real;
+                        }
                     }
+                    CellJumpTargetType::Parameter { .. } => {}
                 }),
             DetailContent::Composite(subs) => resolve_sections(name_to_idx, subs),
             DetailContent::PlainText(_) => {}

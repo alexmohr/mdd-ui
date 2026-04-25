@@ -108,8 +108,9 @@ impl App {
             return false;
         }
 
-        // The node text is the short name of the target
-        let target_short_name = node.text.clone();
+        let Some(target_short_name) = node.short_name().map(ToOwned::to_owned) else {
+            return false;
+        };
         self.navigate_to_container_by_name(&target_short_name);
         true
     }

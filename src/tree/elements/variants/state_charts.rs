@@ -35,13 +35,13 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
 
     // Push header first (empty details — patched below with indices).
     let header_idx = b.next_index();
-    b.push_details_structured(
+    b.push_service_list_header(
         depth,
         format!("State Charts ({})", charts.len()),
         false,
         true,
         vec![],
-        NodeType::SectionHeader,
+        crate::tree::ServiceListType::StateCharts,
     );
 
     // Sort state charts alphabetically by name

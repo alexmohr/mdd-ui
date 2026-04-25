@@ -33,13 +33,13 @@ pub fn add_com_params(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) 
 
     // Push header first (empty details — patched below with indices).
     let header_idx = b.next_index();
-    b.push_details_structured(
+    b.push_service_list_header(
         depth,
         format!("ComParam Refs ({})", cp_refs.len()),
         false,
         true,
         vec![],
-        NodeType::SectionHeader,
+        crate::tree::ServiceListType::ComParamRefs,
     );
 
     // Collect and sort by name
@@ -163,7 +163,7 @@ fn dop_row(key: &str, dop_name: &str) -> DetailRow {
         vec![
             DetailCell::text(key),
             DetailCell::new(value, CellType::DopReference).with_jump(CellJumpTarget::new(
-                CellJumpTargetType::Dop { name: nav_name },
+                CellJumpTargetType::Dop { index: usize::MAX, name: nav_name },
             )),
         ],
         0,

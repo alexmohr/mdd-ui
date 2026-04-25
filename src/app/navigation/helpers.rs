@@ -364,7 +364,8 @@ impl App {
         let target_depth = section.depth.saturating_add(1);
         let (s_start, s_end) = self.subtree_range(section_idx);
         self.find_at_depth(s_start, s_end, target_depth, &|n| {
-            n.service_short_name().is_some_and(|sn| sn == service_name) || n.text == service_name
+            n.service_short_name().is_some_and(|sn| sn == service_name)
+                || n.short_name().is_some_and(|sn| sn == service_name)
         })
     }
 
@@ -442,7 +443,7 @@ impl App {
             .enumerate()
             .skip(parent_node_idx.saturating_add(1))
             .take_while(|(_, n)| n.depth > parent_depth)
-            .find(|(_, n)| n.depth == target_depth && element_type.matches_node_text(&n.text))
+            .find(|(_, n)| n.depth == target_depth && element_type.matches_node(n))
             .map(|(i, _)| i);
 
         let Some(target_node_idx) = target_idx else {
