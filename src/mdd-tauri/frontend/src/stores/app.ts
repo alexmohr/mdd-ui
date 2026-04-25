@@ -4,6 +4,7 @@ import type {
   VisibleNode,
   DetailSection,
   JumpTarget,
+  RecentFile,
 } from "../api/commands";
 import * as api from "../api/commands";
 
@@ -31,6 +32,7 @@ export const useAppStore = defineStore("app", () => {
   const filePath = ref("");
   const hideUnchanged = ref(false);
   const fontSize = ref(13);
+  const recentFiles = ref<RecentFile[]>([]);
 
   const selectedNode = computed(() =>
     nodes.value.find((n: VisibleNode) => n.index === selectedIndex.value) ?? null,
@@ -78,6 +80,7 @@ export const useAppStore = defineStore("app", () => {
       fileLoaded.value = true;
       filePath.value = path;
       status.value = `${result.node_count} nodes`;
+      await api.addRecentFile(path);
     } catch (e) {
       status.value = `Error: ${e}`;
     } finally {
@@ -215,14 +218,32 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
+  async function loadRecentFiles() {
+    try {
+      const result = await api.getRecentFiles();
+      recentFiles.value = result.files;
+    } catch (e) {
+      console.error("Failed to load recent files:", e);
+    }
+  }
+
+  async function clearRecentFiles() {
+    try {
+      await api.clearRecentFiles();
+      recentFiles.value = [];
+    } catch (e) {
+      console.error("Failed to clear recent files:", e);
+    }
+  }
+
   return {
     nodes, ecuName, nodeCount, isDiff, selectedIndex, selectedNode,
     detailSections, selectedTab, searchQuery, searchScope, searchActive,
     status, loading, history, canGoBack, breadcrumbs, splitPct,
-    fileLoaded, filePath, hideUnchanged, fontSize,
+    fileLoaded, filePath, hideUnchanged, fontSize, recentFiles,
     loadFile, loadDiff, selectNode, goBack, toggleExpand, search,
     clearSearch, cycleScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize,
-    navigateTo,
+    navigateTo, loadRecentFiles, clearRecentFiles,
   };
 });

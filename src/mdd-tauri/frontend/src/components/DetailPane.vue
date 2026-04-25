@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { useAppStore } from "../stores/app";
 import type { DetailSection, DetailContent, DetailRow, JumpTarget } from "../api/commands";
 
@@ -32,26 +32,33 @@ function diffCls(s: string | null): string {
 
 async function nav(t: JumpTarget | null) { if (t) await store.navigateTo(t); }
 
-// --- Column sorting ---
-const sortCol = ref<number | null>(null);
-const sortAsc = ref(true);
+// --- Column sorting (persisted per section key) ---
+type SortState = { col: number; asc: boolean };
+const sortStates = ref<Map<string, SortState>>(new Map());
+const colWidthMap = ref<Map<string, number[]>>(new Map());
 
-watch(() => store.selectedTab, () => { sortCol.value = null; sortAsc.value = true; });
-watch(() => store.selectedIndex, () => { sortCol.value = null; sortAsc.value = true; });
+function sectionKey(): string {
+  return `${store.selectedIndex ?? ''}-${store.selectedTab}`;
+}
+
+function currentSort(): SortState | undefined {
+  return sortStates.value.get(sectionKey());
+}
 
 function toggleSort(colIdx: number) {
-  if (sortCol.value === colIdx) {
-    sortAsc.value = !sortAsc.value;
+  const key = sectionKey();
+  const cur = sortStates.value.get(key);
+  if (cur && cur.col === colIdx) {
+    sortStates.value.set(key, { col: colIdx, asc: !cur.asc });
   } else {
-    sortCol.value = colIdx;
-    sortAsc.value = true;
+    sortStates.value.set(key, { col: colIdx, asc: true });
   }
 }
 
 function sortedRows(rows: DetailRow[]): DetailRow[] {
-  if (sortCol.value === null) return rows;
-  const col = sortCol.value;
-  const asc = sortAsc.value;
+  const s = currentSort();
+  if (!s) return rows;
+  const { col, asc } = s;
   return [...rows].sort((a, b) => {
     const at = a.cells[col]?.text ?? "";
     const bt = b.cells[col]?.text ?? "";
@@ -61,10 +68,8 @@ function sortedRows(rows: DetailRow[]): DetailRow[] {
   });
 }
 
-// --- Column resize ---
-const colWidths = ref<number[]>([]);
-
-watch([() => store.selectedTab, () => store.selectedIndex], () => { colWidths.value = []; });
+// --- Column resize (persisted per section key) ---
+const colWidths = computed(() => colWidthMap.value.get(sectionKey()) ?? []);
 
 function onColResize(e: MouseEvent, colIdx: number) {
   e.preventDefault();
@@ -73,9 +78,10 @@ function onColResize(e: MouseEvent, colIdx: number) {
   const onMove = (ev: MouseEvent) => {
     const delta = ev.clientX - startX;
     const newW = Math.max(40, startW + delta);
-    const arr = [...colWidths.value];
+    const key = sectionKey();
+    const arr = [...(colWidthMap.value.get(key) ?? [])];
     arr[colIdx] = newW;
-    colWidths.value = arr;
+    colWidthMap.value.set(key, arr);
   };
   const onUp = () => {
     window.removeEventListener("mousemove", onMove);
@@ -151,7 +157,7 @@ function colStyle(colIdx: number): Record<string, string> {
                   @click="toggleSort(ci)"
                 >
                   <span>{{ cell.text }}</span>
-                  <span v-if="sortCol === ci" class="ml-1 text-blue-400">{{ sortAsc ? '▲' : '▼' }}</span>
+                  <span v-if="currentSort()?.col === ci" class="ml-1 text-blue-400">{{ currentSort()?.asc ? '▲' : '▼' }}</span>
                   <span
                     class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/40 opacity-0 group-hover:opacity-100"
                     @mousedown="onColResize($event, ci)"
