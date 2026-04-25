@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 [workspace]
-members = ["crates/mdd-core", "crates/mdd-tauri"]
+members = ["src/mdd-core", "src/mdd-tauri"]
 default-members = ["."]
 
 [package]
@@ -15,7 +15,7 @@ license = "Apache-2.0"
 mcp = ["dep:rmcp", "dep:tokio", "dep:serde_json"]
 
 [dependencies]
-mdd-core = { path = "crates/mdd-core" }
+mdd-core = { path = "src/mdd-core" }
 
 # TUI
 ratatui = "0.30.0"
