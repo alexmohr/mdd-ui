@@ -230,7 +230,7 @@ async function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-neutral-950 outline-none" tabindex="0" @keydown="onKeydown">
+  <div class="flex flex-col h-full bg-neutral-950 outline-none select-none" tabindex="0" @keydown="onKeydown">
     <!-- Header -->
     <div class="flex items-center h-8 px-2 border-b border-neutral-800/60 shrink-0 gap-1">
       <span class="text-[0.85em] text-neutral-500 font-medium uppercase tracking-wider flex-1">Explorer</span>
