@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Alexander Mohr
 
+// Tauri commands require owned types for JSON deserialization and state injection.
+#![allow(clippy::needless_pass_by_value)]
+
 use std::{fs, path::PathBuf, sync::Mutex};
 
 use mdd_core::tree::{DetailSectionData, DiffStatus, NodeType, TreeNode};
@@ -187,10 +190,10 @@ fn build_visible(state: &CoreState) -> Vec<usize> {
 
     for (i, node) in state.all_nodes.iter().enumerate() {
         // If search is active, skip nodes not in the include set
-        if let Some(ref inc) = include {
-            if !inc.get(i).copied().unwrap_or(false) {
-                continue;
-            }
+        if let Some(ref inc) = include
+            && !inc.get(i).copied().unwrap_or(false)
+        {
+            continue;
         }
 
         // Skip nodes under collapsed parent
@@ -233,10 +236,8 @@ fn apply_search_filter(
 
         if let Some(depth) = skip_below {
             if node.depth > depth {
-                if included {
-                    if let Some(slot) = new_include.get_mut(i) {
-                        *slot = true;
-                    }
+                if included && let Some(slot) = new_include.get_mut(i) {
+                    *slot = true;
                 }
                 continue;
             }
@@ -332,7 +333,7 @@ pub fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, 
 
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
     core.all_nodes = nodes;
-    core.ecu_name = ecu_name.clone();
+    core.ecu_name.clone_from(&ecu_name);
     core.is_diff_mode = false;
     core.hide_unchanged = false;
     core.search_stack.clear();
@@ -363,7 +364,7 @@ pub fn load_diff(
 
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
     core.all_nodes = nodes;
-    core.ecu_name = ecu_name.clone();
+    core.ecu_name.clone_from(&ecu_name);
     core.is_diff_mode = true;
     core.hide_unchanged = false;
     core.search_stack.clear();
@@ -399,10 +400,10 @@ pub fn get_node_detail(
 #[tauri::command]
 pub fn toggle_expand(index: usize, state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
-    if let Some(node) = core.all_nodes.get_mut(index) {
-        if node.has_children {
-            node.expanded = !node.expanded;
-        }
+    if let Some(node) = core.all_nodes.get_mut(index)
+        && node.has_children
+    {
+        node.expanded = !node.expanded;
     }
     core.visible = build_visible(&core);
     Ok(to_visible_nodes(&core))
@@ -514,8 +515,8 @@ pub fn toggle_sort(
     })
 }
 
-/// Sort DiagComm children using the given mode.
-fn sort_groups_by_mode(groups: &mut Vec<Vec<TreeNode>>, mode: DiagcommSortMode) {
+/// Sort `DiagComm` children using the given mode.
+fn sort_groups_by_mode(groups: &mut [Vec<TreeNode>], mode: DiagcommSortMode) {
     match mode {
         DiagcommSortMode::IdAsc => {
             groups.sort_by_key(|g| g.first().and_then(|n| extract_service_id(&n.text)));
@@ -556,7 +557,7 @@ fn sort_groups_by_mode(groups: &mut Vec<Vec<TreeNode>>, mode: DiagcommSortMode) 
     }
 }
 
-/// Sort DiagComm sections with the given mode.
+/// Sort `DiagComm` sections with the given mode.
 fn sort_diagcomm_nodes(nodes: &mut Vec<TreeNode>, mode: DiagcommSortMode) {
     let sections: Vec<(usize, usize)> = nodes
         .iter()
@@ -584,8 +585,7 @@ fn sort_diagcomm_nodes(nodes: &mut Vec<TreeNode>, mode: DiagcommSortMode) {
                 services.sort_by_key(|n| extract_service_id(&n.text));
             }
             DiagcommSortMode::IdDesc => {
-                services
-                    .sort_by(|a, b| extract_service_id(&b.text).cmp(&extract_service_id(&a.text)));
+                services.sort_by_key(|b| std::cmp::Reverse(extract_service_id(&b.text)));
             }
             DiagcommSortMode::NameAsc => {
                 services.sort_by(|a, b| {
@@ -841,9 +841,8 @@ pub fn get_recent_files(app: AppHandle) -> Result<RecentFilesResult, String> {
     let path = get_recent_files_path(&app)?;
 
     // Read recent files from cache
-    let content = match fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(_) => return Ok(RecentFilesResult { files: Vec::new() }),
+    let Ok(content) = fs::read_to_string(&path) else {
+        return Ok(RecentFilesResult { files: Vec::new() });
     };
 
     let mut files: Vec<RecentFile> = serde_json::from_str(&content).unwrap_or_default();
@@ -886,8 +885,9 @@ pub fn add_recent_file(path: String, app: AppHandle) -> Result<(), String> {
     // Add the file to the top with current timestamp
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+        .expect("system time is before UNIX epoch")
+        .as_secs()
+        .cast_signed();
     files.insert(0, RecentFile { path, timestamp });
 
     // Keep only the most recent 10 files
