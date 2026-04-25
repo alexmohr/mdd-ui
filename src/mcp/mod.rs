@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use rmcp::{handler::server::wrapper::Parameters, schemars, tool, tool_router};
 use serde::Deserialize;
 
-use crate::{
+use mdd_core::{
     database, diff,
     tree::{self, DetailContent, DiffStatus, NodeType, TreeNode},
 };

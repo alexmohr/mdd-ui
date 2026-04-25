@@ -6,7 +6,7 @@
 use std::fmt::Write;
 
 use super::App;
-use crate::tree::{DetailContent, DetailRow, DetailSectionData};
+use mdd_core::tree::{DetailContent, DetailRow, DetailSectionData};
 
 impl App {
     /// Copy the current table in the detail pane to the clipboard as markdown.

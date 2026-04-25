@@ -4,7 +4,7 @@
  */
 
 use super::{App, FocusState, SortDirection, TableSortState};
-use crate::tree::TreeNode;
+use mdd_core::tree::TreeNode;
 
 impl App {
     pub(crate) fn toggle_expand(&mut self) {
@@ -100,12 +100,12 @@ impl App {
         };
 
         let is_diagcomms =
-            Self::is_service_list_type(sort_node, crate::tree::ServiceListType::DiagComms);
+            Self::is_service_list_type(sort_node, mdd_core::tree::ServiceListType::DiagComms);
 
         if is_diagcomms {
             self.tree.diagcomm_sort_by_id = !self.tree.diagcomm_sort_by_id;
             self.sort_diagcomm_nodes_in_place();
-            crate::tree::resolve_all_indices(&mut self.tree.all_nodes);
+            mdd_core::tree::resolve_all_indices(&mut self.tree.all_nodes);
             self.rebuild_visible();
             if self.tree.diagcomm_sort_by_id {
                 self.status = "Sort: by ID".into();
@@ -114,7 +114,7 @@ impl App {
             }
         } else if sort_node.has_children {
             self.sort_children_by_name(sort_idx);
-            crate::tree::resolve_all_indices(&mut self.tree.all_nodes);
+            mdd_core::tree::resolve_all_indices(&mut self.tree.all_nodes);
             self.rebuild_visible();
         } else {
             self.status = "No sortable section found".into();
@@ -223,7 +223,7 @@ impl App {
             .all_nodes
             .iter()
             .enumerate()
-            .filter(|(_, n)| Self::is_service_list_type(n, crate::tree::ServiceListType::DiagComms))
+            .filter(|(_, n)| Self::is_service_list_type(n, mdd_core::tree::ServiceListType::DiagComms))
             .map(|(i, n)| {
                 let section_depth = n.depth;
                 let section_start = i.saturating_add(1);

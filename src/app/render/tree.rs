@@ -13,10 +13,8 @@ use ratatui::{
 };
 
 use super::{border_style, expand_icon, render_scrollbar, row_style};
-use crate::{
-    app::{App, FocusState},
-    tree::{DiffStatus, NodeTextPrefix, NodeType},
-};
+use crate::app::{App, FocusState};
+use mdd_core::tree::{DiffStatus, NodeTextPrefix, NodeType};
 
 impl App {
     pub(in crate::app) fn draw_tree(&mut self, frame: &mut Frame, area: Rect) {

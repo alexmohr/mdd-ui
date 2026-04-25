@@ -4,14 +4,14 @@
  */
 
 use super::{App, SearchScope};
-use crate::tree::{DiffStatus, NodeType, TreeNode};
+use mdd_core::tree::{DiffStatus, NodeType, TreeNode};
 
 impl App {
     /// Check if a node at index i is under a specific section type
     fn is_under_section_type(
         &self,
         node_idx: usize,
-        section_type: crate::tree::SectionType,
+        section_type: mdd_core::tree::SectionType,
     ) -> bool {
         if node_idx == 0 {
             return false;
@@ -206,44 +206,44 @@ impl App {
         let matches_scope = match scope {
             SearchScope::All => true,
             SearchScope::Variants => {
-                node.section_type() == Some(crate::tree::SectionType::Variants)
+                node.section_type() == Some(mdd_core::tree::SectionType::Variants)
                     || (matches!(node.node_type, NodeType::Container)
                         && node_idx > 0
-                        && self.is_under_section_type(node_idx, crate::tree::SectionType::Variants))
+                        && self.is_under_section_type(node_idx, mdd_core::tree::SectionType::Variants))
             }
             SearchScope::FunctionalGroups => {
-                node.section_type() == Some(crate::tree::SectionType::FunctionalGroups)
+                node.section_type() == Some(mdd_core::tree::SectionType::FunctionalGroups)
                     || (matches!(node.node_type, NodeType::Container)
                         && node_idx > 0
                         && self.is_under_section_type(
                             node_idx,
-                            crate::tree::SectionType::FunctionalGroups,
+                            mdd_core::tree::SectionType::FunctionalGroups,
                         ))
             }
             SearchScope::EcuSharedData => {
-                node.section_type() == Some(crate::tree::SectionType::EcuSharedData)
+                node.section_type() == Some(mdd_core::tree::SectionType::EcuSharedData)
                     || (matches!(node.node_type, NodeType::Container)
                         && node_idx > 0
                         && self.is_under_section_type(
                             node_idx,
-                            crate::tree::SectionType::EcuSharedData,
+                            mdd_core::tree::SectionType::EcuSharedData,
                         ))
             }
             SearchScope::Services => node.node_type.is_service(),
             SearchScope::DiagComms => {
-                Self::is_service_list_type(node, crate::tree::ServiceListType::DiagComms)
+                Self::is_service_list_type(node, mdd_core::tree::ServiceListType::DiagComms)
                     || matches!(
                         node.node_type,
                         NodeType::Service | NodeType::ParentRefService | NodeType::Job
                     )
             }
             SearchScope::Requests => {
-                Self::is_service_list_type(node, crate::tree::ServiceListType::Requests)
+                Self::is_service_list_type(node, mdd_core::tree::ServiceListType::Requests)
                     || matches!(node.node_type, NodeType::Request)
             }
             SearchScope::Responses => {
-                Self::is_service_list_type(node, crate::tree::ServiceListType::PosResponses)
-                    || Self::is_service_list_type(node, crate::tree::ServiceListType::NegResponses)
+                Self::is_service_list_type(node, mdd_core::tree::ServiceListType::PosResponses)
+                    || Self::is_service_list_type(node, mdd_core::tree::ServiceListType::NegResponses)
                     || matches!(
                         node.node_type,
                         NodeType::PosResponse | NodeType::NegResponse

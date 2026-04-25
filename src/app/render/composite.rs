@@ -11,10 +11,8 @@ use ratatui::{
 };
 
 use super::render_scrollbar;
-use crate::{
-    app::{App, COLUMN_SPACING},
-    tree::{DetailContent, DetailRow, DetailSectionData},
-};
+use crate::app::{App, COLUMN_SPACING};
+use mdd_core::tree::{DetailContent, DetailRow, DetailSectionData};
 
 /// Shared table fields used by both `TitledTable` and `Table` composite blocks.
 /// Extracting them into a struct means adding a new field (e.g., `use_row_selection`)
@@ -22,7 +20,7 @@ use crate::{
 pub(super) struct TableBlock<'a> {
     pub header: &'a DetailRow,
     pub rows: &'a [DetailRow],
-    pub constraints: &'a [crate::tree::ColumnConstraint],
+    pub constraints: &'a [mdd_core::tree::ColumnConstraint],
 }
 
 /// A visual block inside a Composite section — either a titled table
@@ -100,7 +98,7 @@ impl App {
         &mut self,
         frame: &mut Frame,
         area: Rect,
-        subsections: &[crate::tree::DetailSectionData],
+        subsections: &[mdd_core::tree::DetailSectionData],
         section_idx: usize,
     ) {
         if subsections.is_empty() {
@@ -279,7 +277,7 @@ impl App {
         area: Rect,
         header: &DetailRow,
         rows: &[DetailRow],
-        constraints: &[crate::tree::ColumnConstraint],
+        constraints: &[mdd_core::tree::ColumnConstraint],
     ) {
         let max_columns = rows
             .iter()
@@ -320,8 +318,8 @@ impl App {
         let ratatui_constraints: Vec<Constraint> = constraints
             .iter()
             .map(|c| match c {
-                crate::tree::ColumnConstraint::Percentage(p) => Constraint::Percentage(*p),
-                crate::tree::ColumnConstraint::Fixed(a) => Constraint::Length(*a),
+                mdd_core::tree::ColumnConstraint::Percentage(p) => Constraint::Percentage(*p),
+                mdd_core::tree::ColumnConstraint::Fixed(a) => Constraint::Length(*a),
             })
             .collect();
 

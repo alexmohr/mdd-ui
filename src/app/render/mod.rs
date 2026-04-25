@@ -18,10 +18,8 @@ use ratatui::{
 };
 
 use super::{App, BreadcrumbSegment, FocusState};
-use crate::{
-    app::config::ResolvedTheme,
-    tree::{DiffStatus, NodeType, TreeNode},
-};
+use crate::app::config::ResolvedTheme;
+use mdd_core::tree::{DiffStatus, NodeType, TreeNode};
 
 const BREADCRUMB_SEPARATOR: &str = " > ";
 const BREADCRUMB_SEPARATOR_LEN: u16 = 3;

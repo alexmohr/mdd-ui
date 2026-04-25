@@ -13,10 +13,8 @@ use ratatui::{
 };
 
 use super::{border_style, table::TableContentParams};
-use crate::{
-    app::{App, FocusState, TableSortState},
-    tree::{DetailContent, DetailSectionData},
-};
+use crate::app::{App, FocusState, TableSortState};
+use mdd_core::tree::{DetailContent, DetailSectionData};
 
 impl App {
     pub(in crate::app) fn draw_detail(&mut self, frame: &mut Frame, area: Rect) {
@@ -55,7 +53,7 @@ impl App {
             let help_message = if self.is_diff_mode {
                 // In diff mode, show message about no differences
                 if let Some(status) = selected_node.diff_status {
-                    use crate::tree::DiffStatus;
+                    use mdd_core::tree::DiffStatus;
                     match status {
                         DiffStatus::Unchanged => vec![
                             "",

@@ -4,7 +4,7 @@
  */
 
 use super::{App, COLUMN_SPACING, ColumnWidthCacheKey};
-use crate::tree::DetailSectionType;
+use mdd_core::tree::DetailSectionType;
 
 impl App {
     /// Build a cache key for persisting column widths by section identity
@@ -155,16 +155,16 @@ impl App {
 
     fn initialize_column_widths(
         &mut self,
-        constraints: &[crate::tree::ColumnConstraint],
+        constraints: &[mdd_core::tree::ColumnConstraint],
         section_idx: usize,
     ) {
         let mut widths: Vec<u16> = constraints
             .iter()
             .map(|c| match c {
-                crate::tree::ColumnConstraint::Fixed(w) => {
+                mdd_core::tree::ColumnConstraint::Fixed(w) => {
                     w.saturating_mul(3).saturating_div(2).clamp(3, 15)
                 }
-                crate::tree::ColumnConstraint::Percentage(p) => *p,
+                mdd_core::tree::ColumnConstraint::Percentage(p) => *p,
             })
             .collect();
 

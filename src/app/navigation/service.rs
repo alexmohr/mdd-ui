@@ -3,10 +3,8 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use crate::{
-    app::App,
-    tree::{CellJumpTarget, CellJumpTargetType, DetailSectionType, NodeType, TreeNode},
-};
+use crate::app::App;
+use mdd_core::tree::{CellJumpTarget, CellJumpTargetType, DetailSectionType, NodeType, TreeNode};
 
 impl App {
     /// Handle Enter key for service nodes
@@ -46,7 +44,7 @@ impl App {
             let sorted_rows = self.sort_rows(rows, section_idx);
 
             if let Some(selected_row) = sorted_rows.get(row_cursor)
-                && selected_row.row_type == crate::tree::DetailRowType::InheritedFrom
+                && selected_row.row_type == mdd_core::tree::DetailRowType::InheritedFrom
             {
                 self.try_navigate_to_inherited_parent();
                 return;
@@ -139,7 +137,7 @@ impl App {
         let parent_depth = parent_node.depth;
         let is_functional_class = Self::is_service_list_type(
             parent_node,
-            crate::tree::ServiceListType::FunctionalClasses,
+            mdd_core::tree::ServiceListType::FunctionalClasses,
         );
 
         // Search all_nodes in parent's subtree (not just visible) so collapsed
@@ -186,7 +184,7 @@ impl App {
         let target = self
             .find_by_section_path(
                 container_idx,
-                crate::tree::ServiceListType::DiagComms,
+                mdd_core::tree::ServiceListType::DiagComms,
                 service_name,
             )
             .unwrap_or(container_idx);

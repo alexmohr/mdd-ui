@@ -9,11 +9,9 @@ mod parent_ref;
 mod service;
 mod variant;
 
-use crate::{
-    app::App,
-    tree::{
-        CellJumpTarget, CellJumpTargetType, DetailSectionType, NodeType, RowMetadata, SectionType,
-    },
+use crate::app::App;
+use mdd_core::tree::{
+    CellJumpTarget, CellJumpTargetType, DetailSectionType, NodeType, RowMetadata, SectionType,
 };
 
 impl App {
