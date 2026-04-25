@@ -5,11 +5,11 @@ const store = useAppStore();
 </script>
 
 <template>
-  <div class="px-3 py-0.5 bg-gray-900 border-t border-gray-800 text-xs text-gray-500 flex items-center gap-3">
-    <span>{{ store.status }}</span>
+  <div class="flex items-center h-6 px-3 bg-[#0a0c12] border-t border-gray-800/40 text-[11px] text-gray-600 shrink-0">
+    <span v-if="store.loading" class="text-blue-400 animate-pulse mr-2">Loading...</span>
+    <span v-if="store.status" class="mr-3">{{ store.status }}</span>
     <span class="flex-1" />
-    <span v-if="store.nodes.length">{{ store.nodes.length }} visible</span>
-    <span v-if="store.isDiff" class="text-yellow-600">DIFF</span>
-    <span v-if="store.loading" class="text-blue-400 animate-pulse">Loading...</span>
+    <span v-if="store.nodes.length" class="mr-3">{{ store.nodes.length }} visible</span>
+    <span v-if="store.isDiff" class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500/80 text-[10px] font-medium">DIFF</span>
   </div>
 </template>
