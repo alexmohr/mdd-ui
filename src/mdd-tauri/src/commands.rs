@@ -422,9 +422,55 @@ pub fn cycle_search_scope(state: State<'_, AppState>) -> Result<String, String> 
 pub fn toggle_sort(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
     core.diagcomm_sort_by_id = !core.diagcomm_sort_by_id;
-    // Re-sort would require more logic; for now just rebuild visible
+    let by_id = core.diagcomm_sort_by_id;
+    sort_diagcomm_nodes(&mut core.all_nodes, by_id);
+    mdd_core::tree::resolve_all_indices(&mut core.all_nodes);
     core.visible = build_visible(&core);
     Ok(to_visible_nodes(&core))
+}
+
+fn sort_diagcomm_nodes(nodes: &mut Vec<TreeNode>, by_id: bool) {
+    let sections: Vec<(usize, usize)> = nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| {
+            n.service_list_type()
+                == Some(mdd_core::tree::ServiceListType::DiagComms)
+        })
+        .map(|(i, n)| {
+            let depth = n.depth;
+            let start = i.saturating_add(1);
+            let end = nodes
+                .iter()
+                .skip(start)
+                .position(|m| m.depth <= depth)
+                .map_or(nodes.len(), |pos| start.saturating_add(pos));
+            (start, end)
+        })
+        .collect();
+
+    for (start, end) in sections.into_iter().rev() {
+        if end <= start {
+            continue;
+        }
+        let mut services: Vec<TreeNode> = nodes.drain(start..end).collect();
+        if by_id {
+            services.sort_by_key(|n| extract_service_id(&n.text));
+        } else {
+            services.sort_by(|a, b| {
+                let a_name = a.service_short_name().unwrap_or_default();
+                let b_name = b.service_short_name().unwrap_or_default();
+                a_name.cmp(b_name)
+            });
+        }
+        nodes.splice(start..start, services);
+    }
+}
+
+fn extract_service_id(text: &str) -> Option<u32> {
+    let hex_part = text.strip_prefix("0x")?;
+    let dash_pos = hex_part.find(" - ")?;
+    u32::from_str_radix(hex_part[..dash_pos].trim(), 16).ok()
 }
 
 #[tauri::command]

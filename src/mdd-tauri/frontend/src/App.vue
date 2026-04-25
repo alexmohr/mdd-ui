@@ -45,6 +45,8 @@ function handleKeydown(e: KeyboardEvent) {
     case "c": store.collapseAll(); break;
     case "u": if (store.isDiff) store.toggleHideUnchanged(); break;
     case "x": store.clearSearch(); break;
+    case "+": case "=": store.increaseFontSize(); break;
+    case "-": store.decreaseFontSize(); break;
   }
 }
 
@@ -69,8 +71,9 @@ function onSplitMouseDown() {
 
 <template>
   <div
-    class="flex flex-col h-screen bg-[#0c0e14] text-gray-300 text-[13px] antialiased"
+    class="flex flex-col h-screen bg-[#0c0e14] text-gray-300 antialiased"
     :class="{ 'select-none': dragging }"
+    :style="{ fontSize: store.fontSize + 'px' }"
   >
     <!-- Welcome screen -->
     <template v-if="!store.fileLoaded">
@@ -146,6 +149,19 @@ function onSplitMouseDown() {
           >
             Hide unchanged
           </button>
+          <div class="flex items-center gap-0.5 mr-1">
+            <button
+              class="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 hover:bg-gray-800 transition-colors text-[11px] font-bold"
+              title="Decrease font size (-)"
+              @click="store.decreaseFontSize()"
+            >A-</button>
+            <span class="text-[10px] text-gray-600 w-5 text-center">{{ store.fontSize }}</span>
+            <button
+              class="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 hover:bg-gray-800 transition-colors text-[11px] font-bold"
+              title="Increase font size (+)"
+              @click="store.increaseFontSize()"
+            >A+</button>
+          </div>
           <button
             class="p-1.5 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
             title="Open file"
