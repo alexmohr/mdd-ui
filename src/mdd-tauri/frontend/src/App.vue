@@ -40,6 +40,7 @@ function handleKeydown(e: KeyboardEvent) {
   switch (e.key) {
     case "/": e.preventDefault(); store.searchActive = true; break;
     case "Backspace": e.preventDefault(); store.goBack(); break;
+    case "s": store.toggleSort(); break;
     case "e": store.expandAll(); break;
     case "c": store.collapseAll(); break;
     case "u": if (store.isDiff) store.toggleHideUnchanged(); break;
