@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Alexander Mohr
 
-use std::fs;
-use std::path::PathBuf;
-use std::sync::Mutex;
+use std::{fs, path::PathBuf, sync::Mutex};
 
-use mdd_core::tree::{
-    DiffStatus, DetailSectionData, NodeType, TreeNode,
-};
+use mdd_core::tree::{DetailSectionData, DiffStatus, NodeType, TreeNode};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -24,6 +20,7 @@ pub struct VisibleNode {
     pub has_children: bool,
     pub node_type: NodeType,
     pub diff_status: Option<DiffStatus>,
+    pub is_sortable: bool,
 }
 
 #[derive(Serialize)]
@@ -48,6 +45,12 @@ pub struct NavigateResult {
     pub detail: Vec<DetailSectionData>,
 }
 
+#[derive(Serialize)]
+pub struct ToggleSortResult {
+    pub nodes: Vec<VisibleNode>,
+    pub sort_label: String,
+}
+
 #[derive(Deserialize)]
 pub struct JumpTarget {
     pub target_type: JumpTargetType,
@@ -64,6 +67,35 @@ pub enum JumpTargetType {
 // Shared app state behind a Mutex
 // ---------------------------------------------------------------------------
 
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum DiagcommSortMode {
+    #[default]
+    IdAsc,
+    IdDesc,
+    NameAsc,
+    NameDesc,
+}
+
+impl DiagcommSortMode {
+    pub fn next(self) -> Self {
+        match self {
+            Self::IdAsc => Self::IdDesc,
+            Self::IdDesc => Self::NameAsc,
+            Self::NameAsc => Self::NameDesc,
+            Self::NameDesc => Self::IdAsc,
+        }
+    }
+
+    pub const fn status_label(self) -> &'static str {
+        match self {
+            Self::IdAsc => "Sort: ID \u{25b2}",
+            Self::IdDesc => "Sort: ID \u{25bc}",
+            Self::NameAsc => "Sort: Name \u{25b2}",
+            Self::NameDesc => "Sort: Name \u{25bc}",
+        }
+    }
+}
+
 pub struct CoreState {
     pub all_nodes: Vec<TreeNode>,
     pub visible: Vec<usize>,
@@ -72,7 +104,7 @@ pub struct CoreState {
     pub hide_unchanged: bool,
     pub search_stack: Vec<SearchEntry>,
     pub search_scope: SearchScope,
-    pub diagcomm_sort_by_id: bool,
+    pub diagcomm_sort: DiagcommSortMode,
 }
 
 #[derive(Clone)]
@@ -119,7 +151,7 @@ impl Default for CoreState {
             hide_unchanged: false,
             search_stack: Vec::new(),
             search_scope: SearchScope::default(),
-            diagcomm_sort_by_id: true,
+            diagcomm_sort: DiagcommSortMode::IdAsc,
         }
     }
 }
@@ -234,7 +266,9 @@ fn apply_search_filter(
 
         if new_include.get(i).copied().unwrap_or(false) && node.depth > 0 {
             for d in (0..node.depth).rev() {
-                let Some(&ancestor) = parent_at_depth.get(d) else { break };
+                let Some(&ancestor) = parent_at_depth.get(d) else {
+                    break;
+                };
                 if new_include.get(ancestor).copied().unwrap_or(false) {
                     break;
                 }
@@ -259,7 +293,10 @@ fn node_matches_scope(node: &TreeNode, scope: &SearchScope) -> bool {
             NodeType::PosResponse | NodeType::NegResponse
         ),
         SearchScope::Variants | SearchScope::FunctionalGroups | SearchScope::EcuSharedData => {
-            matches!(node.node_type, NodeType::Container | NodeType::SectionHeader)
+            matches!(
+                node.node_type,
+                NodeType::Container | NodeType::SectionHeader
+            )
         }
     }
 }
@@ -277,6 +314,7 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
                 has_children: node.has_children,
                 node_type: node.node_type,
                 diff_status: node.diff_status,
+                is_sortable: node.service_list_type().is_some(),
             })
         })
         .collect()
@@ -288,8 +326,7 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
 
 #[tauri::command]
 pub fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, String> {
-    let db = mdd_core::database::load_mdd(&path)
-        .map_err(|e| format!("Failed to load: {e:#}"))?;
+    let db = mdd_core::database::load_mdd(&path).map_err(|e| format!("Failed to load: {e:#}"))?;
     let (nodes, ecu_name) = mdd_core::tree::build_tree(&db, &path);
     let node_count = nodes.len();
 
@@ -299,7 +336,7 @@ pub fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, 
     core.is_diff_mode = false;
     core.hide_unchanged = false;
     core.search_stack.clear();
-    core.diagcomm_sort_by_id = true;
+    core.diagcomm_sort = DiagcommSortMode::IdAsc;
     core.visible = build_visible(&core);
 
     Ok(LoadResult {
@@ -360,10 +397,7 @@ pub fn get_node_detail(
 }
 
 #[tauri::command]
-pub fn toggle_expand(
-    index: usize,
-    state: State<'_, AppState>,
-) -> Result<Vec<VisibleNode>, String> {
+pub fn toggle_expand(index: usize, state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
     if let Some(node) = core.all_nodes.get_mut(index) {
         if node.has_children {
@@ -379,10 +413,7 @@ pub fn search(query: String, state: State<'_, AppState>) -> Result<SearchResult,
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
     if !query.is_empty() {
         let scope = core.search_scope.clone();
-        core.search_stack.push(SearchEntry {
-            query,
-            scope,
-        });
+        core.search_stack.push(SearchEntry { query, scope });
     }
     let visible = build_visible(&core);
     core.visible = visible;
@@ -424,7 +455,7 @@ pub fn cycle_search_scope(state: State<'_, AppState>) -> Result<String, String> 
 pub fn toggle_sort(
     node_index: Option<usize>,
     state: State<'_, AppState>,
-) -> Result<Vec<VisibleNode>, String> {
+) -> Result<ToggleSortResult, String> {
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
 
     if let Some(idx) = node_index {
@@ -432,22 +463,14 @@ pub fn toggle_sort(
         let Some(parent) = core.all_nodes.get(idx) else {
             return Err(format!("Node index {idx} out of range"));
         };
-        let is_diagcomm = parent.service_list_type()
-            == Some(mdd_core::tree::ServiceListType::DiagComms);
+        let is_diagcomm =
+            parent.service_list_type() == Some(mdd_core::tree::ServiceListType::DiagComms);
 
         if is_diagcomm {
-            core.diagcomm_sort_by_id = !core.diagcomm_sort_by_id;
-            let by_id = core.diagcomm_sort_by_id;
+            core.diagcomm_sort = core.diagcomm_sort.next();
+            let mode = core.diagcomm_sort;
             sort_children_of(idx, &mut core.all_nodes, |groups| {
-                if by_id {
-                    groups.sort_by_key(|g| g.first().and_then(|n| extract_service_id(&n.text)));
-                } else {
-                    groups.sort_by(|a, b| {
-                        let a_name = a.first().and_then(|n| n.service_short_name()).unwrap_or_default();
-                        let b_name = b.first().and_then(|n| n.service_short_name()).unwrap_or_default();
-                        a_name.cmp(b_name)
-                    });
-                }
+                sort_groups_by_mode(groups, mode);
             });
         } else {
             sort_children_of(idx, &mut core.all_nodes, |children| {
@@ -459,26 +482,69 @@ pub fn toggle_sort(
             });
         }
     } else {
-        // No node specified: toggle DiagComm sort globally
-        core.diagcomm_sort_by_id = !core.diagcomm_sort_by_id;
-        let by_id = core.diagcomm_sort_by_id;
-        sort_diagcomm_nodes(&mut core.all_nodes, by_id);
+        // No node specified: cycle DiagComm sort globally
+        core.diagcomm_sort = core.diagcomm_sort.next();
+        let mode = core.diagcomm_sort;
+        sort_diagcomm_nodes(&mut core.all_nodes, mode);
     }
 
     mdd_core::tree::resolve_all_indices(&mut core.all_nodes);
     core.visible = build_visible(&core);
-    Ok(to_visible_nodes(&core))
+    let sort_label = core.diagcomm_sort.status_label().to_owned();
+    Ok(ToggleSortResult {
+        nodes: to_visible_nodes(&core),
+        sort_label,
+    })
 }
 
-/// Sort DiagComm sections by ID or name.
-fn sort_diagcomm_nodes(nodes: &mut Vec<TreeNode>, by_id: bool) {
+/// Sort DiagComm children using the given mode.
+fn sort_groups_by_mode(groups: &mut Vec<Vec<TreeNode>>, mode: DiagcommSortMode) {
+    match mode {
+        DiagcommSortMode::IdAsc => {
+            groups.sort_by_key(|g| g.first().and_then(|n| extract_service_id(&n.text)));
+        }
+        DiagcommSortMode::IdDesc => {
+            groups.sort_by(|a, b| {
+                let a_id = a.first().and_then(|n| extract_service_id(&n.text));
+                let b_id = b.first().and_then(|n| extract_service_id(&n.text));
+                b_id.cmp(&a_id)
+            });
+        }
+        DiagcommSortMode::NameAsc => {
+            groups.sort_by(|a, b| {
+                let a_name = a
+                    .first()
+                    .and_then(|n| n.service_short_name())
+                    .unwrap_or_default();
+                let b_name = b
+                    .first()
+                    .and_then(|n| n.service_short_name())
+                    .unwrap_or_default();
+                a_name.cmp(b_name)
+            });
+        }
+        DiagcommSortMode::NameDesc => {
+            groups.sort_by(|a, b| {
+                let a_name = a
+                    .first()
+                    .and_then(|n| n.service_short_name())
+                    .unwrap_or_default();
+                let b_name = b
+                    .first()
+                    .and_then(|n| n.service_short_name())
+                    .unwrap_or_default();
+                b_name.cmp(a_name)
+            });
+        }
+    }
+}
+
+/// Sort DiagComm sections with the given mode.
+fn sort_diagcomm_nodes(nodes: &mut Vec<TreeNode>, mode: DiagcommSortMode) {
     let sections: Vec<(usize, usize)> = nodes
         .iter()
         .enumerate()
-        .filter(|(_, n)| {
-            n.service_list_type()
-                == Some(mdd_core::tree::ServiceListType::DiagComms)
-        })
+        .filter(|(_, n)| n.service_list_type() == Some(mdd_core::tree::ServiceListType::DiagComms))
         .map(|(i, n)| {
             let depth = n.depth;
             let start = i.saturating_add(1);
@@ -496,14 +562,28 @@ fn sort_diagcomm_nodes(nodes: &mut Vec<TreeNode>, by_id: bool) {
             continue;
         }
         let mut services: Vec<TreeNode> = nodes.drain(start..end).collect();
-        if by_id {
-            services.sort_by_key(|n| extract_service_id(&n.text));
-        } else {
-            services.sort_by(|a, b| {
-                let a_name = a.service_short_name().unwrap_or_default();
-                let b_name = b.service_short_name().unwrap_or_default();
-                a_name.cmp(b_name)
-            });
+        match mode {
+            DiagcommSortMode::IdAsc => {
+                services.sort_by_key(|n| extract_service_id(&n.text));
+            }
+            DiagcommSortMode::IdDesc => {
+                services
+                    .sort_by(|a, b| extract_service_id(&b.text).cmp(&extract_service_id(&a.text)));
+            }
+            DiagcommSortMode::NameAsc => {
+                services.sort_by(|a, b| {
+                    a.service_short_name()
+                        .unwrap_or_default()
+                        .cmp(b.service_short_name().unwrap_or_default())
+                });
+            }
+            DiagcommSortMode::NameDesc => {
+                services.sort_by(|a, b| {
+                    b.service_short_name()
+                        .unwrap_or_default()
+                        .cmp(a.service_short_name().unwrap_or_default())
+                });
+            }
         }
         nodes.splice(start..start, services);
     }
@@ -516,7 +596,9 @@ fn sort_children_of(
     nodes: &mut Vec<TreeNode>,
     sort_fn: impl FnOnce(&mut Vec<Vec<TreeNode>>),
 ) {
-    let Some(parent) = nodes.get(parent_idx) else { return };
+    let Some(parent) = nodes.get(parent_idx) else {
+        return;
+    };
     let parent_depth = parent.depth;
     let children_start = parent_idx.saturating_add(1);
     let children_end = nodes
@@ -636,14 +718,15 @@ fn resolve_jump_target(nodes: &[TreeNode], target: &JumpTargetType) -> Option<us
             }
         }
         JumpTargetType::Dop { index, name } => {
-            if nodes.get(*index).is_some_and(|n| {
-                n.short_name().is_some_and(|sn| sn == name) || n.text == *name
-            }) {
+            if nodes
+                .get(*index)
+                .is_some_and(|n| n.short_name().is_some_and(|sn| sn == name) || n.text == *name)
+            {
                 Some(*index)
             } else {
-                nodes.iter().position(|n| {
-                    n.short_name().is_some_and(|sn| sn == name) || n.text == *name
-                })
+                nodes
+                    .iter()
+                    .position(|n| n.short_name().is_some_and(|sn| sn == name) || n.text == *name)
             }
         }
         JumpTargetType::Parameter { param_id } => {
@@ -683,6 +766,36 @@ fn expand_ancestors(nodes: &mut [TreeNode], target_idx: usize) {
     }
 }
 
+#[tauri::command]
+pub fn get_node_path(index: usize, state: State<'_, AppState>) -> Result<String, String> {
+    let core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let node = core
+        .all_nodes
+        .get(index)
+        .ok_or_else(|| format!("Node index {index} out of range"))?;
+
+    let mut parts = vec![node.text.clone()];
+    let mut depth_needed = node.depth;
+
+    if depth_needed > 0 {
+        for i in (0..index).rev() {
+            let Some(ancestor) = core.all_nodes.get(i) else {
+                continue;
+            };
+            if ancestor.depth < depth_needed {
+                parts.push(ancestor.text.clone());
+                depth_needed = ancestor.depth;
+                if depth_needed == 0 {
+                    break;
+                }
+            }
+        }
+    }
+
+    parts.reverse();
+    Ok(parts.join(" / "))
+}
+
 // ---------------------------------------------------------------------------
 // Recent files management
 // ---------------------------------------------------------------------------
@@ -699,7 +812,9 @@ pub struct RecentFilesResult {
 }
 
 fn get_recent_files_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let cache_dir = app.path().cache_dir()
+    let cache_dir = app
+        .path()
+        .cache_dir()
         .map_err(|e| format!("Failed to get cache directory: {e}"))?;
     Ok(cache_dir.join("mdd-ui").join("recent-files.json"))
 }
@@ -707,42 +822,38 @@ fn get_recent_files_path(app: &AppHandle) -> Result<PathBuf, String> {
 #[tauri::command]
 pub fn get_recent_files(app: AppHandle) -> Result<RecentFilesResult, String> {
     let path = get_recent_files_path(&app)?;
-    
+
     // Read recent files from cache
     let content = match fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return Ok(RecentFilesResult { files: Vec::new() }),
     };
-    
-    let mut files: Vec<RecentFile> = serde_json::from_str(&content)
-        .unwrap_or_default();
-    
+
+    let mut files: Vec<RecentFile> = serde_json::from_str(&content).unwrap_or_default();
+
     // Filter out files that don't exist
     files.retain(|f| PathBuf::from(&f.path).exists());
-    
+
     // Write back the filtered list
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create cache directory: {e}"))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create cache directory: {e}"))?;
     }
     let json = serde_json::to_string(&files)
         .map_err(|e| format!("Failed to serialize recent files: {e}"))?;
-    fs::write(&path, json)
-        .map_err(|e| format!("Failed to write recent files: {e}"))?;
-    
+    fs::write(&path, json).map_err(|e| format!("Failed to write recent files: {e}"))?;
+
     Ok(RecentFilesResult { files })
 }
 
 #[tauri::command]
 pub fn add_recent_file(path: String, app: AppHandle) -> Result<(), String> {
     let cache_path = get_recent_files_path(&app)?;
-    
+
     // Create cache directory if it doesn't exist
     if let Some(parent) = cache_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create cache directory: {e}"))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create cache directory: {e}"))?;
     }
-    
+
     // Read existing recent files
     let mut files: Vec<RecentFile> = if cache_path.exists() {
         let content = fs::read_to_string(&cache_path)
@@ -751,37 +862,96 @@ pub fn add_recent_file(path: String, app: AppHandle) -> Result<(), String> {
     } else {
         Vec::new()
     };
-    
+
     // Remove the file if it already exists (to move it to the top)
     files.retain(|f| f.path != path);
-    
+
     // Add the file to the top with current timestamp
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
     files.insert(0, RecentFile { path, timestamp });
-    
+
     // Keep only the most recent 10 files
     files.truncate(10);
-    
+
     // Write back to cache
     let json = serde_json::to_string(&files)
         .map_err(|e| format!("Failed to serialize recent files: {e}"))?;
-    fs::write(&cache_path, json)
-        .map_err(|e| format!("Failed to write recent files: {e}"))?;
-    
+    fs::write(&cache_path, json).map_err(|e| format!("Failed to write recent files: {e}"))?;
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn clear_recent_files(app: AppHandle) -> Result<(), String> {
     let path = get_recent_files_path(&app)?;
-    
+
     if path.exists() {
-        fs::remove_file(&path)
-            .map_err(|e| format!("Failed to remove recent files: {e}"))?;
+        fs::remove_file(&path).map_err(|e| format!("Failed to remove recent files: {e}"))?;
     }
-    
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn remove_recent_file(path: String, app: AppHandle) -> Result<(), String> {
+    let cache_path = get_recent_files_path(&app)?;
+    if !cache_path.exists() {
+        return Ok(());
+    }
+    let content =
+        fs::read_to_string(&cache_path).map_err(|e| format!("Failed to read recent files: {e}"))?;
+    let mut files: Vec<RecentFile> = serde_json::from_str(&content).unwrap_or_default();
+    files.retain(|f| f.path != path);
+    let json = serde_json::to_string(&files)
+        .map_err(|e| format!("Failed to serialize recent files: {e}"))?;
+    fs::write(&cache_path, json).map_err(|e| format!("Failed to write recent files: {e}"))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// UI preferences (font size, etc.)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UiPrefs {
+    pub font_size: u8,
+}
+
+impl Default for UiPrefs {
+    fn default() -> Self {
+        Self { font_size: 13 }
+    }
+}
+
+fn get_prefs_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let cache_dir = app
+        .path()
+        .cache_dir()
+        .map_err(|e| format!("Failed to get cache directory: {e}"))?;
+    Ok(cache_dir.join("mdd-ui").join("prefs.json"))
+}
+
+#[tauri::command]
+pub fn get_ui_prefs(app: AppHandle) -> Result<UiPrefs, String> {
+    let path = get_prefs_path(&app)?;
+    if !path.exists() {
+        return Ok(UiPrefs::default());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read prefs: {e}"))?;
+    Ok(serde_json::from_str(&content).unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn save_ui_prefs(prefs: UiPrefs, app: AppHandle) -> Result<(), String> {
+    let path = get_prefs_path(&app)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create cache directory: {e}"))?;
+    }
+    let json =
+        serde_json::to_string(&prefs).map_err(|e| format!("Failed to serialize prefs: {e}"))?;
+    fs::write(&path, json).map_err(|e| format!("Failed to write prefs: {e}"))?;
     Ok(())
 }

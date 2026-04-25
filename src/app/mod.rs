@@ -25,12 +25,11 @@ use std::{
 use config::ResolvedTheme;
 use crossterm::event::{self, Event, KeyEventKind, KeyModifiers};
 use input::Action;
+use mdd_core::tree::{DetailSectionType, NodeType, TreeNode};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Direction, Layout, Rect},
 };
-
-use mdd_core::tree::{DetailSectionType, NodeType, TreeNode};
 
 // -----------------------------------------------------------------------
 // Layout & interaction constants
@@ -177,6 +176,35 @@ impl std::fmt::Display for SearchScope {
     }
 }
 
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Default)]
+pub(crate) enum DiagcommSortMode {
+    #[default]
+    IdAsc,
+    IdDesc,
+    NameAsc,
+    NameDesc,
+}
+
+impl DiagcommSortMode {
+    pub(crate) fn next(self) -> Self {
+        match self {
+            Self::IdAsc => Self::IdDesc,
+            Self::IdDesc => Self::NameAsc,
+            Self::NameAsc => Self::NameDesc,
+            Self::NameDesc => Self::IdAsc,
+        }
+    }
+
+    pub(crate) const fn status_label(self) -> &'static str {
+        match self {
+            Self::IdAsc => "Sort: ID \u{25b2}",
+            Self::IdDesc => "Sort: ID \u{25bc}",
+            Self::NameAsc => "Sort: Name \u{25b2}",
+            Self::NameDesc => "Sort: Name \u{25bc}",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub(crate) enum SortDirection {
     Ascending,
@@ -232,7 +260,7 @@ pub(crate) struct TreeState {
     pub visible: Vec<usize>,
     pub cursor: usize,
     pub scroll_offset: usize,
-    pub diagcomm_sort_by_id: bool, // true = sort by ID (default), false = sort by name
+    pub diagcomm_sort: DiagcommSortMode,
     /// Explicit sort direction per parent-node index for `sort_children_by_name`.
     /// Absent means the next sort will be ascending (first press).
     pub children_sort_dirs: HashMap<usize, SortDirection>,
@@ -429,7 +457,7 @@ impl App {
         let mut app = Self {
             tree: TreeState {
                 all_nodes: nodes,
-                diagcomm_sort_by_id: true,
+                diagcomm_sort: DiagcommSortMode::IdAsc,
                 ..TreeState::default()
             },
             search: SearchState::default(),

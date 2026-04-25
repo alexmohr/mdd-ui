@@ -24,9 +24,13 @@ fn main() {
             commands::collapse_all,
             commands::toggle_hide_unchanged,
             commands::navigate_to,
+            commands::get_node_path,
             commands::get_recent_files,
             commands::add_recent_file,
             commands::clear_recent_files,
+            commands::remove_recent_file,
+            commands::get_ui_prefs,
+            commands::save_ui_prefs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

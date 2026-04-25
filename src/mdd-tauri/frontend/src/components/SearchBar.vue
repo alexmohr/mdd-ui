@@ -33,13 +33,13 @@ async function onClear() {
     <input
       ref="input"
       v-model="store.searchQuery"
-      class="flex-1 bg-transparent text-neutral-200 text-[12px] outline-none placeholder-neutral-600"
+      class="flex-1 bg-transparent text-neutral-200 text-[1em] outline-none placeholder-neutral-600"
       placeholder="Search nodes..."
       @keydown.enter="onSubmit"
       @keydown.escape="onCancel"
     />
     <button
-      class="px-2 py-0.5 rounded text-[11px] text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
+      class="px-2 py-0.5 rounded text-[0.85em] text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
       @click="store.cycleScope()"
     >{{ store.searchScope }}</button>
     <button

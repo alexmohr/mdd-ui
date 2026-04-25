@@ -8,7 +8,7 @@ use cda_database::datatypes::{DiagService, Parameter};
 use super::{
     dops::parse_dop_name,
     format_service_id,
-    services::{extract_coded_value, extract_dop_name},
+    services::{extract_coded_value, extract_dop_badge, extract_dop_name},
 };
 use crate::tree::types::{
     BIT_POSITION_UNSET, CellJumpTarget, CellJumpTargetType, CellType, ColumnConstraint, DetailCell,
@@ -500,6 +500,7 @@ where
             let bit_pos = param.bit_position();
             let value = extract_coded_value(&param);
             let dop_name = extract_dop_name(&param);
+            let dop_badge = extract_dop_badge(&param);
             let semantic = param.semantic().unwrap_or_default().to_owned();
             let has_dop = !dop_name.is_empty();
             let param_id = param.id();
@@ -519,7 +520,12 @@ where
                 } else {
                     CellType::Text
                 };
-                let mut dop_cell = DetailCell::new(dop_name, dop_cell_type);
+                let dop_display = if has_dop {
+                    format!("{dop_badge}{dop_name}")
+                } else {
+                    dop_name
+                };
+                let mut dop_cell = DetailCell::new(dop_display, dop_cell_type);
                 if let Some(jump) = dop_jump {
                     dop_cell = dop_cell.with_jump(jump);
                 }

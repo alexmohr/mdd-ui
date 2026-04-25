@@ -47,6 +47,7 @@ struct MergedNode {
 /// databases.
 ///
 /// Returns `(nodes, ecu_label)` where `ecu_label` is `"old_name vs new_name"`.
+#[must_use]
 pub fn build_diff_tree(
     db_old: &DiagnosticDatabase,
     db_new: &DiagnosticDatabase,

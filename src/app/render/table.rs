@@ -5,6 +5,7 @@
 
 use std::borrow::Cow;
 
+use mdd_core::tree::{CellType, DetailRow, DiffStatus};
 use ratatui::{
     Frame,
     layout::{Constraint, Rect},
@@ -15,7 +16,6 @@ use ratatui::{
 
 use super::{render_horizontal_scrollbar, render_scrollbar};
 use crate::app::{App, COLUMN_SPACING, FocusState, SortDirection, TableSortState};
-use mdd_core::tree::{CellType, DetailRow, DiffStatus};
 
 /// Describes how a particular cell should be highlighted.
 #[derive(Clone, Copy)]
@@ -497,8 +497,10 @@ impl App {
                 let is_selected_row =
                     (self.focus_state == FocusState::Detail) && absolute_row_idx == cursor_pos;
 
-                let is_child_element =
-                    matches!(row_data.row_type, mdd_core::tree::DetailRowType::ChildElement);
+                let is_child_element = matches!(
+                    row_data.row_type,
+                    mdd_core::tree::DetailRowType::ChildElement
+                );
                 let row_diff = row_data.diff_status;
                 let mut cells: Vec<Cell> = row_data
                     .cells

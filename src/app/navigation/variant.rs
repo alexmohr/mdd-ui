@@ -3,8 +3,9 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use crate::app::App;
 use mdd_core::tree::{DetailSectionType, RowMetadata};
+
+use crate::app::App;
 
 impl App {
     /// Navigate to a variant from the Variants overview table

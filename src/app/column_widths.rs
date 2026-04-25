@@ -3,8 +3,9 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use super::{App, COLUMN_SPACING, ColumnWidthCacheKey};
 use mdd_core::tree::DetailSectionType;
+
+use super::{App, COLUMN_SPACING, ColumnWidthCacheKey};
 
 impl App {
     /// Build a cache key for persisting column widths by section identity

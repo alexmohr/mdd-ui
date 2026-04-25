@@ -8,6 +8,7 @@ export interface VisibleNode {
   has_children: boolean;
   node_type: string;
   diff_status: string | null;
+  is_sortable: boolean;
 }
 
 export interface LoadResult {
@@ -71,6 +72,11 @@ export interface NavigateResult {
   detail: DetailSection[];
 }
 
+export interface ToggleSortResult {
+  nodes: VisibleNode[];
+  sort_label: string;
+}
+
 export interface RecentFile {
   path: string;
   timestamp: number;
@@ -119,8 +125,8 @@ export async function cycleSearchScope(): Promise<string> {
   return invoke<string>("cycle_search_scope");
 }
 
-export async function toggleSort(nodeIndex?: number): Promise<VisibleNode[]> {
-  return invoke<VisibleNode[]>("toggle_sort", { nodeIndex: nodeIndex ?? null });
+export async function toggleSort(nodeIndex?: number): Promise<ToggleSortResult> {
+  return invoke<ToggleSortResult>("toggle_sort", { nodeIndex: nodeIndex ?? null });
 }
 
 export async function expandAll(): Promise<VisibleNode[]> {
@@ -141,6 +147,10 @@ export async function navigateTo(
   return invoke<NavigateResult>("navigate_to", { target });
 }
 
+export async function getNodePath(index: number): Promise<string> {
+  return invoke<string>("get_node_path", { index });
+}
+
 export async function getRecentFiles(): Promise<RecentFilesResult> {
   return invoke<RecentFilesResult>("get_recent_files");
 }
@@ -151,4 +161,20 @@ export async function addRecentFile(path: string): Promise<void> {
 
 export async function clearRecentFiles(): Promise<void> {
   return invoke("clear_recent_files");
+}
+
+export async function removeRecentFile(path: string): Promise<void> {
+  return invoke("remove_recent_file", { path });
+}
+
+export interface UiPrefs {
+  font_size: number;
+}
+
+export async function getUiPrefs(): Promise<UiPrefs> {
+  return invoke<UiPrefs>("get_ui_prefs");
+}
+
+export async function saveUiPrefs(prefs: UiPrefs): Promise<void> {
+  return invoke("save_ui_prefs", { prefs });
 }

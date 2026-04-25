@@ -5,11 +5,12 @@
 
 use std::{borrow::Cow, collections::HashSet};
 
-use crate::app::{App, FocusState, SCROLL_CONTEXT_LINES};
 use mdd_core::tree::{
     ChildElementType, DetailRow, DetailSectionData, DetailSectionType, NodeType, ServiceListType,
     TreeNode,
 };
+
+use crate::app::{App, FocusState, SCROLL_CONTEXT_LINES};
 
 /// Resolved state of the currently selected detail-table row.
 /// All references borrow from the owning [`App`], so the context must be

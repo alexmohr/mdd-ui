@@ -7,12 +7,12 @@ use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, KeyCode},
     execute,
 };
+use mdd_core::tree::DiffStatus;
 
 use super::{
     App, COMPOSITE_SCROLL_STEP, DIVIDER_MAX_PCT, DIVIDER_MIN_PCT, FocusState, PAGE_SIZE,
     TREE_WIDTH_STEP,
 };
-use mdd_core::tree::DiffStatus;
 
 /// Result of processing a key press.
 pub enum Action {

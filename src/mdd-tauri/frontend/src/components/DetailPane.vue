@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, nextTick } from "vue";
 import { useAppStore } from "../stores/app";
 import type { DetailSection, DetailContent, DetailRow, JumpTarget } from "../api/commands";
+import { getNodePath } from "../api/commands";
 
 const store = useAppStore();
 
@@ -32,6 +33,44 @@ function diffCls(s: string | null): string {
 
 async function nav(t: JumpTarget | null) { if (t) await store.navigateTo(t); }
 
+// --- Cell badge parsing ---
+// Detects embedded prefix badges such as "[DOP] name" or "[Struct] name" in cell text.
+const TEXT_BADGE_RE = /^\[([A-Za-z][A-Za-z0-9_]*)\] /;
+
+type Badge = { label: string; bg: string; fg: string };
+
+const CELL_BADGES: Record<string, Badge> = {
+  // DOP variant types (pink – matches tree DOP badges)
+  DOP:      { label: "DOP",  bg: "bg-pink-500/20",    fg: "text-pink-300" },
+  DTC:      { label: "DTC",  bg: "bg-red-500/20",     fg: "text-red-300" },
+  Struct:   { label: "STRC", bg: "bg-fuchsia-500/20", fg: "text-fuchsia-300" },
+  SField:   { label: "SF",   bg: "bg-purple-500/20",  fg: "text-purple-300" },
+  DynLen:   { label: "DYN",  bg: "bg-yellow-500/20",  fg: "text-yellow-300" },
+  EoPdu:    { label: "EOP",  bg: "bg-emerald-500/20", fg: "text-emerald-300" },
+  Mux:      { label: "MUX",  bg: "bg-orange-500/20",  fg: "text-orange-300" },
+  EnvData:  { label: "ENV",  bg: "bg-teal-500/20",    fg: "text-teal-300" },
+  EnvDesc:  { label: "EDD",  bg: "bg-sky-500/20",     fg: "text-sky-300" },
+  // ComParam classes (sky – matches tree CP child badges)
+  TIMING:   { label: "TMG",  bg: "bg-sky-500/20",     fg: "text-sky-300" },
+  BUSCOM:   { label: "BUS",  bg: "bg-orange-500/20",  fg: "text-orange-300" },
+  TPCOM:    { label: "TPC",  bg: "bg-teal-500/20",    fg: "text-teal-300" },
+  COM:      { label: "COM",  bg: "bg-violet-500/20",  fg: "text-violet-300" },
+  ECU_COMM: { label: "ECUC", bg: "bg-lime-500/20",    fg: "text-lime-300" },
+  ERRH:     { label: "ERR",  bg: "bg-rose-500/20",    fg: "text-rose-300" },
+  TEST:     { label: "TEST", bg: "bg-cyan-500/20",    fg: "text-cyan-300" },
+  UNIQ:     { label: "UNQ",  bg: "bg-indigo-500/20",  fg: "text-indigo-300" },
+  Audience: { label: "AUD",  bg: "bg-amber-500/20",   fg: "text-amber-300" },
+};
+
+/** Split a cell text value into an optional badge + display text. */
+function cellParts(raw: string): { badge: Badge | null; text: string } {
+  const m = TEXT_BADGE_RE.exec(raw);
+  if (!m) return { badge: null, text: raw };
+  const cls = m[1];
+  const badge = CELL_BADGES[cls] ?? { label: cls.slice(0, 4).toUpperCase(), bg: "bg-sky-500/20", fg: "text-sky-300" };
+  return { badge, text: raw.slice(m[0].length) };
+}
+
 // --- Column sorting (persisted per section key) ---
 type SortState = { col: number; asc: boolean };
 const sortStates = ref<Map<string, SortState>>(new Map());
@@ -55,6 +94,11 @@ function toggleSort(colIdx: number) {
   }
 }
 
+function parseNum(s: string): number {
+  if (/^0x[0-9a-fA-F]+$/i.test(s)) return parseInt(s, 16);
+  return parseFloat(s);
+}
+
 function sortedRows(rows: DetailRow[]): DetailRow[] {
   const s = currentSort();
   if (!s) return rows;
@@ -62,23 +106,20 @@ function sortedRows(rows: DetailRow[]): DetailRow[] {
   return [...rows].sort((a, b) => {
     const at = a.cells[col]?.text ?? "";
     const bt = b.cells[col]?.text ?? "";
-    const an = parseFloat(at), bn = parseFloat(bt);
+    const an = parseNum(at), bn = parseNum(bt);
     const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : at.localeCompare(bt);
     return asc ? cmp : -cmp;
   });
 }
 
 // --- Column resize (persisted per section key) ---
-const colWidths = computed(() => colWidthMap.value.get(sectionKey()) ?? []);
-
-function onColResize(e: MouseEvent, colIdx: number) {
+function onColResize(e: MouseEvent, colIdx: number, key: string) {
   e.preventDefault();
   const startX = e.clientX;
-  const startW = colWidths.value[colIdx] || 120;
+  const startW = (colWidthMap.value.get(key) ?? [])[colIdx] || 120;
   const onMove = (ev: MouseEvent) => {
     const delta = ev.clientX - startX;
     const newW = Math.max(40, startW + delta);
-    const key = sectionKey();
     const arr = [...(colWidthMap.value.get(key) ?? [])];
     arr[colIdx] = newW;
     colWidthMap.value.set(key, arr);
@@ -91,9 +132,98 @@ function onColResize(e: MouseEvent, colIdx: number) {
   window.addEventListener("mouseup", onUp);
 }
 
-function colStyle(colIdx: number): Record<string, string> {
-  const w = colWidths.value[colIdx];
+function colStyle(colIdx: number, key: string): Record<string, string> {
+  const w = (colWidthMap.value.get(key) ?? [])[colIdx];
   return w ? { width: w + "px", minWidth: w + "px" } : {};
+}
+
+// --- Tab context menu ---
+interface TabCtx { x: number; y: number; section: DetailSection }
+const tabCtxMenu = ref<TabCtx | null>(null);
+
+function onTabContextMenu(e: MouseEvent, section: DetailSection) {
+  e.preventDefault();
+  tabCtxMenu.value = { x: e.clientX, y: e.clientY, section };
+  nextTick(() => window.addEventListener("click", closeTabCtx, { once: true }));
+}
+function closeTabCtx() { tabCtxMenu.value = null; }
+
+function sectionToMarkdown(section: DetailSection): string {
+  const parts: string[] = [`## ${section.title}`, ""];
+  const t = text(section.content);
+  const tbl = getTable(section.content);
+  const comp = composite(section.content);
+  if (t) {
+    parts.push(...t);
+  } else if (tbl) {
+    parts.push(tableToMarkdown(tbl.header, tbl.rows));
+  } else if (comp) {
+    for (const sub of comp) {
+      parts.push(`### ${sub.title}`, "");
+      const st = text(sub.content);
+      const stbl = getTable(sub.content);
+      if (st) parts.push(...st, "");
+      else if (stbl) parts.push(tableToMarkdown(stbl.header, stbl.rows), "");
+    }
+  }
+  return parts.join("\n");
+}
+
+async function tabCtxAction(action: string) {
+  const ctx = tabCtxMenu.value;
+  tabCtxMenu.value = null;
+  if (!ctx) return;
+  if (action === "copyMarkdown") {
+    await navigator.clipboard.writeText(sectionToMarkdown(ctx.section));
+  }
+}
+
+// --- Table context menu ---
+interface TableCtx {
+  x: number;
+  y: number;
+  header: DetailRow;
+  rows: DetailRow[];
+}
+const tableCtxMenu = ref<TableCtx | null>(null);
+
+function onTableContextMenu(e: MouseEvent, header: DetailRow, rows: DetailRow[]) {
+  e.preventDefault();
+  tableCtxMenu.value = { x: e.clientX, y: e.clientY, header, rows };
+  nextTick(() => window.addEventListener("click", closeTableCtx, { once: true }));
+}
+function closeTableCtx() { tableCtxMenu.value = null; }
+
+function tableToMarkdown(header: DetailRow, rows: DetailRow[]): string {
+  const hCells = header.cells.map(c => c.text);
+  const sep = hCells.map(h => "-".repeat(Math.max(3, h.length)));
+  const lines = [
+    "| " + hCells.join(" | ") + " |",
+    "| " + sep.join(" | ") + " |",
+  ];
+  for (const row of rows) {
+    const cells = row.cells.map(c => c.text.replace(/\|/g, "\\|"));
+    lines.push("| " + cells.join(" | ") + " |");
+  }
+  return lines.join("\n");
+}
+
+async function tableCtxAction(action: string) {
+  const ctx = tableCtxMenu.value;
+  tableCtxMenu.value = null;
+  if (!ctx) return;
+  switch (action) {
+    case "copyMarkdown":
+      await navigator.clipboard.writeText(tableToMarkdown(ctx.header, ctx.rows));
+      break;
+    case "copyPath": {
+      if (store.selectedIndex !== null) {
+        const path = await getNodePath(store.selectedIndex);
+        await navigator.clipboard.writeText(path);
+      }
+      break;
+    }
+  }
 }
 </script>
 
@@ -116,7 +246,7 @@ function colStyle(colIdx: number): Record<string, string> {
         <div
           v-for="(line, i) in text(headerSection.content)"
           :key="i"
-          class="text-[12px] text-neutral-400 leading-relaxed"
+          class="text-[1em] text-neutral-400 leading-relaxed"
         >{{ line }}</div>
       </div>
 
@@ -125,11 +255,12 @@ function colStyle(colIdx: number): Record<string, string> {
         <button
           v-for="(section, i) in tabSections"
           :key="i"
-          class="px-4 py-2 text-[12px] whitespace-nowrap border-b-2 transition-colors"
+          class="px-4 py-2 text-[1em] whitespace-nowrap border-b-2 transition-colors"
           :class="i === store.selectedTab
             ? 'border-blue-500 text-neutral-100'
             : 'border-transparent text-neutral-500 hover:text-neutral-300'"
           @click="store.selectedTab = i"
+          @contextmenu.prevent="onTabContextMenu($event, section)"
         >{{ section.title }}</button>
       </div>
 
@@ -140,12 +271,12 @@ function colStyle(colIdx: number): Record<string, string> {
           <p
             v-for="(line, i) in text(activeSection.content)"
             :key="i"
-            class="text-[12px] text-neutral-300 leading-relaxed"
+            class="text-[1em] text-neutral-300 leading-relaxed"
           >{{ line || "\u00A0" }}</p>
         </div>
 
         <!-- Table -->
-        <div v-else-if="getTable(activeSection.content)" class="overflow-x-auto">
+        <div v-else-if="getTable(activeSection.content)" @contextmenu="onTableContextMenu($event, getTable(activeSection.content)!.header, sortedRows(getTable(activeSection.content)!.rows))">
           <table class="text-[1em]" style="table-layout: fixed;">
             <thead class="sticky top-0 bg-neutral-950 z-10">
               <tr class="border-b border-gray-800/80">
@@ -153,14 +284,14 @@ function colStyle(colIdx: number): Record<string, string> {
                   v-for="(cell, ci) in getTable(activeSection.content)!.header.cells"
                   :key="ci"
                   class="text-left px-3 py-2 text-[0.85em] text-neutral-500 font-medium uppercase tracking-wider cursor-pointer hover:text-neutral-200 select-none relative group"
-                  :style="colStyle(ci)"
+                  :style="colStyle(ci, sectionKey())"
                   @click="toggleSort(ci)"
                 >
                   <span>{{ cell.text }}</span>
                   <span v-if="currentSort()?.col === ci" class="ml-1 text-blue-400">{{ currentSort()?.asc ? '▲' : '▼' }}</span>
                   <span
                     class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/40 opacity-0 group-hover:opacity-100"
-                    @mousedown="onColResize($event, ci)"
+                    @mousedown="onColResize($event, ci, sectionKey())"
                     @click.stop
                   />
                 </th>
@@ -181,9 +312,13 @@ function colStyle(colIdx: number): Record<string, string> {
                     'text-blue-400 cursor-pointer hover:text-blue-300 hover:underline': cell.jump_target,
                     'text-neutral-100 font-medium': cell.cell_type === 'ParameterName',
                   }"
-                  :style="{ ...(ci === 0 && row.indent > 0 ? { paddingLeft: `${row.indent * 10 + 12}px` } : {}), ...colStyle(ci) }"
+                  :style="{ ...(ci === 0 && row.indent > 0 ? { paddingLeft: `${row.indent * 10 + 12}px` } : {}), ...colStyle(ci, sectionKey()) }"
                   @click="nav(cell.jump_target)"
-                >{{ cell.text }}</td>
+                >
+                  <template v-for="p in [cellParts(cell.text)]" :key="0">
+                    <span v-if="p.badge" class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none mr-1 shrink-0" :class="`${p.badge.bg} ${p.badge.fg}`">{{ p.badge.label }}</span>{{ p.text }}
+                  </template>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -196,24 +331,32 @@ function colStyle(colIdx: number): Record<string, string> {
             :key="si"
             class="rounded-lg border border-neutral-800/50 overflow-hidden"
           >
-            <div class="px-3 py-1.5 bg-neutral-800/20 text-[11px] text-neutral-400 font-medium uppercase tracking-wider">
+            <div class="px-3 py-1.5 bg-neutral-800/20 text-[0.85em] text-neutral-400 font-medium uppercase tracking-wider">
               {{ sub.title }}
             </div>
             <div v-if="text(sub.content)" class="px-3 py-2">
               <p
                 v-for="(line, li) in text(sub.content)"
                 :key="li"
-                class="text-[12px] text-neutral-300"
+                class="text-[1em] text-neutral-300"
               >{{ line || "\u00A0" }}</p>
             </div>
-            <table v-else-if="getTable(sub.content)" class="w-full text-[12px]">
+            <table v-else-if="getTable(sub.content)" class="w-full text-[1em]" style="table-layout: fixed;" @contextmenu="onTableContextMenu($event, getTable(sub.content)!.header, getTable(sub.content)!.rows)">
               <thead>
                 <tr class="border-b border-neutral-800/50">
                   <th
                     v-for="(cell, ci) in getTable(sub.content)!.header.cells"
                     :key="ci"
-                    class="text-left px-3 py-1.5 text-[11px] text-neutral-500 font-medium"
-                  >{{ cell.text }}</th>
+                    class="text-left px-3 py-1.5 text-[0.85em] text-neutral-500 font-medium relative group select-none"
+                    :style="colStyle(ci, sectionKey() + '-' + si)"
+                  >
+                    {{ cell.text }}
+                    <span
+                      class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/40 opacity-0 group-hover:opacity-100"
+                      @mousedown="onColResize($event, ci, sectionKey() + '-' + si)"
+                      @click.stop
+                    />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -229,7 +372,11 @@ function colStyle(colIdx: number): Record<string, string> {
                     class="px-3 py-1 text-neutral-300"
                     :class="{ 'text-blue-400 cursor-pointer hover:underline': cell.jump_target }"
                     @click="nav(cell.jump_target)"
-                  >{{ cell.text }}</td>
+                  >
+                    <template v-for="p in [cellParts(cell.text)]" :key="0">
+                      <span v-if="p.badge" class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none mr-1 shrink-0" :class="`${p.badge.bg} ${p.badge.fg}`">{{ p.badge.label }}</span>{{ p.text }}
+                    </template>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -241,5 +388,32 @@ function colStyle(colIdx: number): Record<string, string> {
         No details available
       </div>
     </template>
+    <!-- Tab context menu -->
+    <Teleport to="body">
+      <div
+        v-if="tabCtxMenu"
+        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-[1em]"
+        :style="{ left: tabCtxMenu.x + 'px', top: tabCtxMenu.y + 'px' }"
+      >
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="tabCtxAction('copyMarkdown')">
+          Copy as Markdown
+        </button>
+      </div>
+    </Teleport>
+    <!-- Table context menu -->
+    <Teleport to="body">
+      <div
+        v-if="tableCtxMenu"
+        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-[1em]"
+        :style="{ left: tableCtxMenu.x + 'px', top: tableCtxMenu.y + 'px' }"
+      >
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="tableCtxAction('copyMarkdown')">
+          Copy table as Markdown
+        </button>
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="tableCtxAction('copyPath')">
+          Copy path
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>

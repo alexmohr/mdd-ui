@@ -12,6 +12,10 @@ use cda_interfaces::datatypes::FlatbBufConfig;
 pub use reader::{extract_data, get_ecu_summary};
 
 /// Load an MDD file and return a `DiagnosticDatabase`.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or the database cannot be parsed.
 pub fn load_mdd(path: &str) -> Result<DiagnosticDatabase> {
     let (ecu_name, blob) = load_ecudata(path)
         .map_err(|e| anyhow::anyhow!("{e}"))

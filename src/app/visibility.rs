@@ -3,8 +3,9 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use super::{App, SearchScope};
 use mdd_core::tree::{DiffStatus, NodeType, TreeNode};
+
+use super::{App, SearchScope};
 
 impl App {
     /// Check if a node at index i is under a specific section type
@@ -209,7 +210,8 @@ impl App {
                 node.section_type() == Some(mdd_core::tree::SectionType::Variants)
                     || (matches!(node.node_type, NodeType::Container)
                         && node_idx > 0
-                        && self.is_under_section_type(node_idx, mdd_core::tree::SectionType::Variants))
+                        && self
+                            .is_under_section_type(node_idx, mdd_core::tree::SectionType::Variants))
             }
             SearchScope::FunctionalGroups => {
                 node.section_type() == Some(mdd_core::tree::SectionType::FunctionalGroups)
@@ -243,7 +245,10 @@ impl App {
             }
             SearchScope::Responses => {
                 Self::is_service_list_type(node, mdd_core::tree::ServiceListType::PosResponses)
-                    || Self::is_service_list_type(node, mdd_core::tree::ServiceListType::NegResponses)
+                    || Self::is_service_list_type(
+                        node,
+                        mdd_core::tree::ServiceListType::NegResponses,
+                    )
                     || matches!(
                         node.node_type,
                         NodeType::PosResponse | NodeType::NegResponse

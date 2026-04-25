@@ -11,13 +11,12 @@
 use std::{collections::HashMap, fmt::Write as _, sync::Mutex};
 
 use anyhow::{Context, Result};
-use rmcp::{handler::server::wrapper::Parameters, schemars, tool, tool_router};
-use serde::Deserialize;
-
 use mdd_core::{
     database, diff,
     tree::{self, DetailContent, DiffStatus, NodeType, TreeNode},
 };
+use rmcp::{handler::server::wrapper::Parameters, schemars, tool, tool_router};
+use serde::Deserialize;
 
 // Cached data: we load the MDD, build the tree, and store only Send-safe data.
 

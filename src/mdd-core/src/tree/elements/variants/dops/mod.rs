@@ -77,6 +77,21 @@ impl DopCategory {
             dtc_dops::add_dtc_dop_children(b, dop_info, depth);
         }
     }
+
+    /// Return the [`NodeType`] used for individual DOP items in this category
+    fn node_type(self) -> NodeType {
+        match self {
+            Self::DtcDops => NodeType::DopDtc,
+            Self::EnvDataDescs => NodeType::DopEnvDataDesc,
+            Self::EnvDatas => NodeType::DopEnvData,
+            Self::DataObjectProps => NodeType::DopNormal,
+            Self::Structures => NodeType::DopStructure,
+            Self::StaticFields => NodeType::DopStaticField,
+            Self::DynamicLengthFields => NodeType::DopDynamic,
+            Self::EndOfPduFields => NodeType::DopEndOfPdu,
+            Self::MuxDops => NodeType::DopMux,
+        }
+    }
 }
 
 impl std::fmt::Display for DopCategory {
@@ -289,7 +304,7 @@ pub fn add_dops_section<'a>(b: &mut TreeBuilder, layer: &DiagLayer<'a>, depth: u
             false,
             true,
             cat_detail,
-            NodeType::Default,
+            cat.node_type(),
         );
 
         let expandable = cat.has_dop_children();
@@ -308,7 +323,7 @@ pub fn add_dops_section<'a>(b: &mut TreeBuilder, layer: &DiagLayer<'a>, depth: u
                 false,
                 expandable,
                 detail_sections,
-                NodeType::Default,
+                cat.node_type(),
             );
 
             if expandable {

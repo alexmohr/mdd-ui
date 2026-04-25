@@ -21,6 +21,7 @@ pub enum NodeTextPrefix {
 }
 
 impl NodeTextPrefix {
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             NodeTextPrefix::Service => "[Service] ",
@@ -92,6 +93,24 @@ pub enum NodeType {
     Dop,
     /// A Special Data Group node.
     Sdg,
+    /// An individual normal (value-type) Data Object Property item.
+    DopNormal,
+    /// An individual DTC-DOP item.
+    DopDtc,
+    /// An individual Structure DOP item.
+    DopStructure,
+    /// An individual Static Field DOP item.
+    DopStaticField,
+    /// An individual Dynamic Length Field DOP item.
+    DopDynamic,
+    /// An individual End-of-PDU Field DOP item.
+    DopEndOfPdu,
+    /// An individual MUX DOP item.
+    DopMux,
+    /// An individual Env-Data DOP item.
+    DopEnvData,
+    /// An individual Env-Data-Desc DOP item.
+    DopEnvDataDesc,
     /// Fallback node type with default styling.
     #[default]
     Default,
@@ -101,6 +120,7 @@ impl NodeType {
     /// Returns `true` for diagnostic-communication node types that represent a
     /// service entry (Service, `ParentRefService`, Request, `PosResponse`,
     /// `NegResponse`). Does **not** include `Job`.
+    #[must_use]
     pub const fn is_service(self) -> bool {
         matches!(
             self,
@@ -114,6 +134,7 @@ impl NodeType {
 
     /// Returns `true` for nodes that live inside a Diag-Comms section:
     /// all [`is_service`](Self::is_service) types **plus** `Job`.
+    #[must_use]
     pub const fn is_diagcomm(self) -> bool {
         self.is_service() || matches!(self, NodeType::Job)
     }
@@ -209,6 +230,7 @@ pub struct TreeNode {
 
 impl TreeNode {
     /// Returns the [`SectionType`] if this is a `SectionHeader` node.
+    #[must_use]
     pub fn section_type(&self) -> Option<SectionType> {
         match &self.payload {
             NodePayload::SectionHeader { section_type } => Some(*section_type),
@@ -217,6 +239,7 @@ impl TreeNode {
     }
 
     /// Returns the [`ServiceListType`] if this is a service-list header.
+    #[must_use]
     pub fn service_list_type(&self) -> Option<ServiceListType> {
         match &self.payload {
             NodePayload::ServiceListHeader { service_list_type } => Some(*service_list_type),
@@ -225,6 +248,7 @@ impl TreeNode {
     }
 
     /// Returns the parameter ID if this is a `Parameter` node.
+    #[must_use]
     pub fn param_id(&self) -> Option<u32> {
         match &self.payload {
             NodePayload::Parameter { param_id, .. } => Some(*param_id),
@@ -233,6 +257,7 @@ impl TreeNode {
     }
 
     /// Returns the resolved parent-ref container tree indices.
+    #[must_use]
     pub fn parent_ref_indices(&self) -> &[usize] {
         match &self.payload {
             NodePayload::Container {
@@ -244,6 +269,7 @@ impl TreeNode {
 
     /// Returns the canonical short name for nodes that carry one
     /// (`Container`, `FunctionalClass`, `Parameter`).
+    #[must_use]
     pub fn short_name(&self) -> Option<&str> {
         match &self.payload {
             NodePayload::Container { short_name, .. }
@@ -254,6 +280,7 @@ impl TreeNode {
     }
 
     /// Returns the canonical short name for diagcomm nodes.
+    #[must_use]
     pub fn service_short_name(&self) -> Option<&str> {
         match &self.payload {
             NodePayload::DiagComm {
@@ -342,6 +369,7 @@ impl fmt::Display for ChildElementType {
 
 impl ChildElementType {
     /// Return the display name as a static string without allocating.
+    #[must_use]
     pub const fn as_str(&self) -> &'static str {
         match self {
             ChildElementType::ComParamRefs => "ComParam Refs",
@@ -356,6 +384,7 @@ impl ChildElementType {
     }
 
     /// Map this element type to the corresponding [`ServiceListType`].
+    #[must_use]
     pub const fn to_service_list_type(&self) -> ServiceListType {
         match self {
             ChildElementType::ComParamRefs => ServiceListType::ComParamRefs,
@@ -370,6 +399,7 @@ impl ChildElementType {
     }
 
     /// Check if a tree node's service-list type matches this element type.
+    #[must_use]
     pub fn matches_node(&self, node: &TreeNode) -> bool {
         node.service_list_type() == Some(self.to_service_list_type())
     }
@@ -426,6 +456,7 @@ pub struct CellJumpTarget {
 
 impl CellJumpTarget {
     /// Create a new jump target.
+    #[must_use]
     pub fn new(target_type: CellJumpTargetType) -> Self {
         Self { target_type }
     }
@@ -458,6 +489,7 @@ impl DetailCell {
     }
 
     /// Attach a jump target to this cell (builder pattern).
+    #[must_use]
     pub fn with_jump(mut self, target: CellJumpTarget) -> Self {
         self.jump_target = Some(target);
         self
@@ -521,22 +553,26 @@ impl DetailContent {
     }
 
     /// Get a reference to the table rows, looking through `Composite` to find the first `Table`.
+    #[must_use]
     pub fn table_rows(&self) -> Option<&[DetailRow]> {
         self.first_table().map(|(_, rows, _, _)| rows)
     }
 
     /// Get the table constraints, looking through `Composite` to find the first `Table`.
+    #[must_use]
     pub fn table_constraints(&self) -> Option<&[ColumnConstraint]> {
         self.first_table().map(|(_, _, constraints, _)| constraints)
     }
 
     /// Get `use_row_selection`, looking through `Composite` to find the first `Table`.
+    #[must_use]
     pub fn table_use_row_selection(&self) -> Option<bool> {
         self.first_table()
             .map(|(_, _, _, use_row_selection)| use_row_selection)
     }
 
     /// Get the table header, looking through `Composite` to find the first `Table`.
+    #[must_use]
     pub fn table_header(&self) -> Option<&DetailRow> {
         self.first_table().map(|(header, _, _, _)| header)
     }
@@ -557,6 +593,7 @@ pub struct DetailSectionData {
 
 impl DetailSectionData {
     /// Create a new `DetailSectionData` with Custom type by default
+    #[must_use]
     pub fn new(title: String, content: DetailContent, render_as_header: bool) -> Self {
         Self {
             title,
@@ -567,6 +604,7 @@ impl DetailSectionData {
     }
 
     /// Create with a specific section type
+    #[must_use]
     pub fn with_type(mut self, section_type: DetailSectionType) -> Self {
         self.section_type = section_type;
         self
@@ -575,6 +613,7 @@ impl DetailSectionData {
 
 impl DetailRow {
     /// Create a normal data row from pre-built cells.
+    #[must_use]
     pub fn normal(cells: Vec<DetailCell>, indent: usize) -> Self {
         Self {
             cells,
@@ -586,6 +625,7 @@ impl DetailRow {
     }
 
     /// Create a table header row from pre-built cells.
+    #[must_use]
     pub fn header(cells: Vec<DetailCell>) -> Self {
         Self {
             cells,
@@ -599,6 +639,7 @@ impl DetailRow {
     /// Create an "Inherited From" navigation row.
     /// `container_index` is the tree index of the parent container, or
     /// `None` when the container has not been pushed yet.
+    #[must_use]
     pub fn inherited_from(layer_name: String, container_index: Option<usize>) -> Self {
         let jump = CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
             index: container_index.unwrap_or(usize::MAX),
@@ -617,6 +658,7 @@ impl DetailRow {
     }
 
     /// Convenience: get the text of cell at `idx`, or `""` if out of bounds.
+    #[must_use]
     pub fn cell_text(&self, idx: usize) -> &str {
         self.cells.get(idx).map_or("", |c| c.text.as_str())
     }
@@ -626,6 +668,7 @@ impl DetailRow {
 ///
 /// Centralised here so that every call-site (tree building, snapshot
 /// extraction, etc.) uses the same mapping.
+#[must_use]
 pub fn param_type_label(pt: &cda_database::datatypes::ParamType) -> &'static str {
     use cda_database::datatypes::ParamType;
     match pt {
@@ -645,6 +688,7 @@ pub fn param_type_label(pt: &cda_database::datatypes::ParamType) -> &'static str
 }
 
 /// Helper to create a plain text detail section
+#[must_use]
 pub fn lines_to_single_section(title: &str, lines: Vec<String>) -> DetailSectionData {
     DetailSectionData::new(title.to_owned(), DetailContent::PlainText(lines), false)
 }

@@ -3,8 +3,9 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use crate::app::App;
 use mdd_core::tree::{CellJumpTargetType, DetailRowType, NodeType, RowMetadata};
+
+use crate::app::App;
 
 impl App {
     /// Navigate to an inherited parent layer in the tree

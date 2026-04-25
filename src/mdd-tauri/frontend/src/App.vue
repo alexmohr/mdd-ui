@@ -9,9 +9,10 @@ import StatusBar from "./components/StatusBar.vue";
 
 const store = useAppStore();
 const dragging = ref(false);
+const isMac = navigator.platform.toLowerCase().includes('mac');
 
 onMounted(async () => {
-  await store.loadRecentFiles();
+  await Promise.all([store.loadRecentFiles(), store.loadPrefs()]);
   window.addEventListener("keydown", handleKeydown);
 });
 
@@ -36,17 +37,26 @@ function getFileName(path: string): string {
 }
 
 async function openDiff() {
-  const oldPath = await open({
-    title: "Select OLD MDD File",
-    filters: [{ name: "MDD Files", extensions: ["mdd"] }],
-  });
-  if (!oldPath) return;
-  const newPath = await open({
-    title: "Select NEW MDD File",
-    filters: [{ name: "MDD Files", extensions: ["mdd"] }],
-  });
-  if (!newPath) return;
-  await store.loadDiff(oldPath as string, newPath as string);
+  if (store.fileLoaded && store.filePath) {
+    const newPath = await open({
+      title: "Select NEW MDD File to Compare",
+      filters: [{ name: "MDD Files", extensions: ["mdd"] }],
+    });
+    if (!newPath) return;
+    await store.loadDiff(store.filePath, newPath as string);
+  } else {
+    const oldPath = await open({
+      title: "Select OLD MDD File",
+      filters: [{ name: "MDD Files", extensions: ["mdd"] }],
+    });
+    if (!oldPath) return;
+    const newPath = await open({
+      title: "Select NEW MDD File",
+      filters: [{ name: "MDD Files", extensions: ["mdd"] }],
+    });
+    if (!newPath) return;
+    await store.loadDiff(oldPath as string, newPath as string);
+  }
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -91,10 +101,12 @@ function onSplitMouseDown() {
   >
     <!-- Welcome screen -->
     <template v-if="!store.fileLoaded">
-      <div class="flex-1 flex items-center justify-center">
+      <div class="flex-1 flex items-center justify-center" data-tauri-drag-region>
         <div class="text-center space-y-6">
-          <div class="text-4xl font-light text-neutral-400 tracking-tight">MDD UI</div>
-          <p class="text-neutral-600 text-sm">Diagnostic database browser</p>
+          <div class="flex flex-col items-center gap-3">
+            <h1 class="text-2xl font-semibold text-neutral-200 tracking-wide" style="font-family: Helvetica, Arial, sans-serif;">MDD UI</h1>
+            <p class="text-neutral-600 text-sm">Diagnostic database browser</p>
+          </div>
           <div class="flex gap-3 justify-center mt-4">
             <button
               class="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors shadow-lg shadow-blue-600/20"
@@ -112,16 +124,26 @@ function onSplitMouseDown() {
           <div v-if="store.recentFiles.length > 0" class="mt-8">
             <div class="text-neutral-500 text-xs uppercase tracking-wider mb-3">Recent Files</div>
             <div class="flex flex-col gap-2 items-center">
-              <button
+              <div
                 v-for="file in store.recentFiles"
                 :key="file.path"
-                class="w-80 px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-sm text-left transition-colors border border-neutral-800 hover:border-neutral-700 flex items-center gap-3 group"
-                @click="openRecentFile(file.path)"
+                class="w-80 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-colors flex items-center group"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500 group-hover:text-neutral-400 flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>
-                <span class="truncate flex-1">{{ getFileName(file.path) }}</span>
-                <span class="text-neutral-600 text-xs">{{ file.path }}</span>
-              </button>
+                <button
+                  class="flex-1 px-4 py-2 text-neutral-300 text-sm text-left flex items-center gap-3 min-w-0"
+                  @click="openRecentFile(file.path)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500 group-hover:text-neutral-400 flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>
+                  <span class="truncate">{{ getFileName(file.path) }}</span>
+                </button>
+                <button
+                  class="p-2 mr-1 rounded text-neutral-700 hover:text-red-400 transition-colors flex-shrink-0"
+                  title="Remove from recent"
+                  @click.stop="store.removeRecentFile(file.path)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
             </div>
           </div>
           <div class="text-neutral-600 text-xs mt-8">
@@ -140,7 +162,20 @@ function onSplitMouseDown() {
     <!-- Main app layout -->
     <template v-else>
       <!-- Top bar -->
-      <div class="flex items-center h-10 px-3 bg-neutral-900 border-b border-neutral-800/60 gap-2 shrink-0">
+      <div
+        class="flex items-center h-10 bg-neutral-900 border-b border-neutral-800/60 gap-2 shrink-0"
+        :class="isMac ? 'pl-20 pr-3' : 'px-3'"
+        data-tauri-drag-region
+      >
+        <!-- Close file / back to home -->
+        <button
+          class="p-1.5 rounded-md text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors"
+          title="Close file"
+          @click="store.closeFile()"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </button>
+
         <!-- Back -->
         <button
           class="p-1.5 rounded-md transition-colors"
@@ -153,7 +188,7 @@ function onSplitMouseDown() {
         </button>
 
         <!-- Breadcrumbs -->
-        <div class="flex items-center gap-1 text-xs text-neutral-500 overflow-hidden min-w-0 flex-1">
+        <div class="flex items-center gap-1 text-xs text-neutral-500 overflow-hidden min-w-0 flex-1" data-tauri-drag-region>
           <template v-for="(crumb, i) in store.breadcrumbs" :key="crumb.index">
             <span v-if="i > 0" class="text-neutral-700">/</span>
             <button
@@ -168,7 +203,7 @@ function onSplitMouseDown() {
         </div>
 
         <!-- Actions -->
-        <div class="flex items-center gap-1">
+        <div class="flex items-center gap-1" data-tauri-drag-region>
           <button
             v-if="store.isDiff"
             class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
@@ -178,7 +213,7 @@ function onSplitMouseDown() {
           >
             Hide unchanged
           </button>
-          <div class="flex items-center gap-0.5 mr-1">
+          <div class="flex items-center gap-0.5 mr-1" data-tauri-drag-region>
             <button
               class="w-5 h-5 flex items-center justify-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors text-[11px] font-bold"
               title="Decrease font size (-)"

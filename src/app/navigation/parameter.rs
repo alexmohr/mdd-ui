@@ -3,8 +3,9 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use crate::app::{App, FocusState, SCROLL_CONTEXT_LINES};
 use mdd_core::tree::{CellJumpTarget, CellJumpTargetType, CellType, DetailCell, ServiceListType};
+
+use crate::app::{App, FocusState, SCROLL_CONTEXT_LINES};
 
 impl App {
     /// Navigate from a parameter table based on the focused cell.

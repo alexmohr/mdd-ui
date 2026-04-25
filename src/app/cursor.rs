@@ -11,20 +11,8 @@ impl App {
         self.table.jump_buffer.clear();
         self.table.jump_buffer_time = None;
 
-        // Determine if current node is a diagcomm node
-        let is_diagcomm = self
-            .tree
-            .visible
-            .get(self.tree.cursor)
-            .and_then(|&node_idx| self.tree.all_nodes.get(node_idx))
-            .is_some_and(|node| node.node_type.is_diagcomm());
-
         // Restore tab selection based on section type
-        if is_diagcomm {
-            self.detail.selected_tab = self.detail.last_diagcomm_tab;
-        } else {
-            self.restore_tab_from_section_type();
-        }
+        self.restore_tab_from_section_type();
 
         // Reset focus and clear per-section state
         self.table.focused_column = 0;
