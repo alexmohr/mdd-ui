@@ -30,6 +30,7 @@ export const useAppStore = defineStore("app", () => {
   const fileLoaded = ref(false);
   const filePath = ref("");
   const hideUnchanged = ref(false);
+  const fontSize = ref(13);
 
   const selectedNode = computed(() =>
     nodes.value.find((n: VisibleNode) => n.index === selectedIndex.value) ?? null,
@@ -176,6 +177,9 @@ export const useAppStore = defineStore("app", () => {
     try { nodes.value = await api.collapseAll(); } catch (e) { status.value = `Error: ${e}`; }
   }
 
+  function increaseFontSize() { fontSize.value = Math.min(20, fontSize.value + 1); }
+  function decreaseFontSize() { fontSize.value = Math.max(9, fontSize.value - 1); }
+
   async function toggleSort() {
     try {
       nodes.value = await api.toggleSort();
@@ -214,9 +218,10 @@ export const useAppStore = defineStore("app", () => {
     nodes, ecuName, nodeCount, isDiff, selectedIndex, selectedNode,
     detailSections, selectedTab, searchQuery, searchScope, searchActive,
     status, loading, history, canGoBack, breadcrumbs, splitPct,
-    fileLoaded, filePath, hideUnchanged,
+    fileLoaded, filePath, hideUnchanged, fontSize,
     loadFile, loadDiff, selectNode, goBack, toggleExpand, search,
     clearSearch, cycleScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
+    increaseFontSize, decreaseFontSize,
     navigateTo,
   };
 });
