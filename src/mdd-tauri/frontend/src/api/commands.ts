@@ -53,7 +53,22 @@ export interface DetailRow {
 export interface DetailCell {
   text: string;
   cell_type: string;
-  jump_target: unknown | null;
+  jump_target: JumpTarget | null;
+}
+
+export interface JumpTarget {
+  target_type: JumpTargetType;
+}
+
+export type JumpTargetType =
+  | { Parameter: { param_id: number } }
+  | { Dop: { index: number; name: string } }
+  | { TreeNodeByIndex: { index: number; short_name: string } };
+
+export interface NavigateResult {
+  visible: VisibleNode[];
+  target_index: number;
+  detail: DetailSection[];
 }
 
 export async function loadMdd(path: string): Promise<LoadResult> {
@@ -109,4 +124,10 @@ export async function collapseAll(): Promise<VisibleNode[]> {
 
 export async function toggleHideUnchanged(): Promise<VisibleNode[]> {
   return invoke<VisibleNode[]>("toggle_hide_unchanged");
+}
+
+export async function navigateTo(
+  target: JumpTarget,
+): Promise<NavigateResult> {
+  return invoke<NavigateResult>("navigate_to", { target });
 }

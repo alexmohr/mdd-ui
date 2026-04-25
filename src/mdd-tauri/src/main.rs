@@ -22,6 +22,7 @@ fn main() {
             commands::expand_all,
             commands::collapse_all,
             commands::toggle_hide_unchanged,
+            commands::navigate_to,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
