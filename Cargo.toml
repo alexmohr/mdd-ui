@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 [workspace]
-members = ["src/mdd-core", "src/mdd-tauri"]
+members = ["src/mdd-core"]
 default-members = ["."]
 
 [package]
@@ -12,10 +12,18 @@ edition = "2024"
 license = "Apache-2.0"
 
 [features]
-mcp = ["dep:rmcp", "dep:tokio", "dep:serde_json"]
+mcp = ["dep:rmcp", "dep:tokio"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 mdd-core = { path = "src/mdd-core" }
+
+# Desktop UI
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
@@ -25,6 +33,7 @@ anyhow = "1"
 
 # Configuration
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # MCP server (optional)
 rmcp = { version = "1.5", features = [
@@ -33,7 +42,6 @@ rmcp = { version = "1.5", features = [
   "macros",
 ], optional = true }
 tokio = { version = "1", features = ["rt", "macros"], optional = true }
-serde_json = { version = "1", optional = true }
 
 [patch.crates-io]
 flatbuffers = { git = "https://github.com/alexmohr/flatbuffers.git", rev = "0ba3307d" }
