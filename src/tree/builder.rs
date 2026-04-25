@@ -5,8 +5,9 @@
 
 use std::sync::Arc;
 
-use super::types::{
-    DetailSectionData, NodePayload, NodeType, SectionType, ServiceListType, TreeNode,
+use super::{
+    resolve_all_indices,
+    types::{DetailSectionData, NodePayload, NodeType, SectionType, ServiceListType, TreeNode},
 };
 
 /// Configuration for a single tree node, used to avoid repeating the full
@@ -109,6 +110,7 @@ impl TreeBuilder {
             payload: NodePayload::Container {
                 short_name,
                 parent_ref_names,
+                parent_ref_indices: Vec::new(),
             },
             ..NodeConfig::default()
         });
@@ -179,8 +181,37 @@ impl TreeBuilder {
         });
     }
 
+    /// Returns the index that the next pushed node will receive.
+    pub(crate) fn next_index(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Replace the detail sections of a previously pushed node.
+    ///
+    /// Used to patch a service-list header after its children have been
+    /// pushed, so the header table can store direct tree-node indices.
+    pub(crate) fn set_detail_sections(
+        &mut self,
+        node_idx: usize,
+        sections: Vec<DetailSectionData>,
+    ) {
+        if let Some(node) = self.nodes.get_mut(node_idx) {
+            node.detail_sections = Arc::from(sections);
+        }
+    }
+
+    /// Find a `Container` node whose `short_name` matches `name`.
+    /// Returns the tree index, or `None` if not found.
+    pub(crate) fn find_container_index(&self, name: &str) -> Option<usize> {
+        self.nodes.iter().position(|n| {
+            matches!(n.node_type, NodeType::Container)
+                && n.short_name().is_some_and(|sn| sn == name)
+        })
+    }
+
     pub(crate) fn finish(mut self) -> Vec<TreeNode> {
         Self::compute_parent_indices(&mut self.nodes);
+        resolve_all_indices(&mut self.nodes);
         self.nodes
     }
 

@@ -58,15 +58,14 @@ pub fn add_functional_classes<'a>(
 
     let count = funct_class_data.len();
 
-    // Build table section for the Functional Classes header
-    let detail_section = build_functional_classes_table_section(&funct_class_data);
-
+    // Push header first (empty details — patched below with indices).
+    let header_idx = b.next_index();
     b.push_service_list_header(
         depth,
         format!("Functional Classes ({count})"),
         false,
         true,
-        vec![detail_section],
+        vec![],
         crate::tree::ServiceListType::FunctionalClasses,
     );
 
@@ -76,7 +75,8 @@ pub fn add_functional_classes<'a>(
         .map(std::iter::Iterator::collect)
         .unwrap_or_default();
 
-    // Add each functional class as a child node with its services/jobs from ALL variants
+    // Push children, collecting (name → tree index).
+    let mut node_indices = std::collections::HashMap::new();
     for name in &funct_class_data {
         // Collect services and jobs for this functional class
         let (mut all_services, mut all_job_info) = if variants_vec.is_empty() {
@@ -101,6 +101,7 @@ pub fn add_functional_classes<'a>(
         // Build detailed view for this functional class
         let details = build_functional_class_detail(name, &all_services, &all_job_info);
 
+        node_indices.insert(name.clone(), b.next_index());
         b.push_details_structured(
             depth.saturating_add(1),
             name.clone(),
@@ -110,20 +111,25 @@ pub fn add_functional_classes<'a>(
             NodeType::FunctionalClass,
         );
     }
+
+    // Build table with tree-node indices and patch header.
+    let detail_section = build_functional_classes_table_section(&funct_class_data, &node_indices);
+    b.set_detail_sections(header_idx, vec![detail_section]);
 }
 
 /// Build a table section for the Functional Classes header showing all class definitions
-fn build_functional_classes_table_section(items: &[String]) -> DetailSectionData {
+fn build_functional_classes_table_section(
+    items: &[String],
+    node_indices: &std::collections::HashMap<String, usize>,
+) -> DetailSectionData {
     let header = DetailRow::header(vec![DetailCell::text("Short Name")]);
 
     let rows: Vec<_> = items
         .iter()
         .map(|name| {
+            let jump = make_index_jump(name, node_indices);
             DetailRow::normal(
-                vec![
-                    DetailCell::new(name.clone(), CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
-                ],
+                vec![DetailCell::new(name.clone(), CellType::ParameterName).with_jump(jump)],
                 0,
             )
         })
@@ -140,6 +146,17 @@ fn build_functional_classes_table_section(items: &[String]) -> DetailSectionData
         false,
     )
     .with_type(DetailSectionType::FunctionalClass)
+}
+
+fn make_index_jump(
+    short_name: &str,
+    node_indices: &std::collections::HashMap<String, usize>,
+) -> CellJumpTarget {
+    let index = node_indices.get(short_name).copied().unwrap_or(usize::MAX);
+    CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+        index,
+        short_name: short_name.to_owned(),
+    })
 }
 
 /// Collect services and jobs for a specific functional class from a single layer
@@ -245,14 +262,22 @@ fn build_service_row(service: &DiagService<'_>, layer_name: &str) -> Option<Deta
 
     Some(DetailRow::normal(
         vec![
-            DetailCell::new(short_name, CellType::ParameterName)
-                .with_jump(CellJumpTarget::new(CellJumpTargetType::ServiceOrJobByName)),
+            DetailCell::new(short_name.clone(), CellType::ParameterName).with_jump(
+                CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                    index: usize::MAX,
+                    short_name,
+                }),
+            ),
             DetailCell::text(service_type),
             DetailCell::text(sid_rq),
             DetailCell::text(semantic),
             DetailCell::text(addressing),
-            DetailCell::new(layer_name, CellType::ParameterName)
-                .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+            DetailCell::new(layer_name, CellType::ParameterName).with_jump(CellJumpTarget::new(
+                CellJumpTargetType::TreeNodeByIndex {
+                    index: usize::MAX,
+                    short_name: layer_name.to_owned(),
+                },
+            )),
         ],
         0,
     ))
@@ -261,14 +286,22 @@ fn build_service_row(service: &DiagService<'_>, layer_name: &str) -> Option<Deta
 fn build_job_row(job_name: &str, layer_name: &str) -> DetailRow {
     DetailRow::normal(
         vec![
-            DetailCell::new(job_name, CellType::ParameterName)
-                .with_jump(CellJumpTarget::new(CellJumpTargetType::ServiceOrJobByName)),
+            DetailCell::new(job_name, CellType::ParameterName).with_jump(CellJumpTarget::new(
+                CellJumpTargetType::TreeNodeByIndex {
+                    index: usize::MAX,
+                    short_name: job_name.to_owned(),
+                },
+            )),
             DetailCell::text("Job"),
             DetailCell::text("-"),
             DetailCell::text("-"),
             DetailCell::text("-"),
-            DetailCell::new(layer_name, CellType::ParameterName)
-                .with_jump(CellJumpTarget::new(CellJumpTargetType::ContainerByName)),
+            DetailCell::new(layer_name, CellType::ParameterName).with_jump(CellJumpTarget::new(
+                CellJumpTargetType::TreeNodeByIndex {
+                    index: usize::MAX,
+                    short_name: layer_name.to_owned(),
+                },
+            )),
         ],
         0,
     )

@@ -70,17 +70,20 @@ pub fn add_diag_comms<'a>(
             .unwrap_or_default();
 
         job_names.sort_by_key(|name| name.to_lowercase());
-        let detail_section =
-            build_diag_comms_table_section(&own_services, &parent_services, &job_names);
 
+        // Push header first (empty details — patched below with indices).
+        let header_idx = b.next_index();
         b.push_service_list_header(
             depth,
             format!("Diag-Comms ({service_count} services, {job_count} jobs)"),
             false,
             true,
-            vec![detail_section],
+            vec![],
             crate::tree::ServiceListType::DiagComms,
         );
+
+        // Push children, collecting (short_name → tree index).
+        let mut node_indices = std::collections::HashMap::new();
 
         for ds in &own_services {
             let Some(display_name) = format_service_display_name(ds) else {
@@ -91,7 +94,8 @@ pub fn add_diag_comms<'a>(
                 .and_then(|dc| dc.short_name())
                 .unwrap_or("?")
                 .to_owned();
-            let sections = build_diag_comm_details_with_parent(ds, None);
+            node_indices.insert(short_name.clone(), b.next_index());
+            let sections = build_diag_comm_details_with_parent(ds, None, None);
 
             b.push_service_node(
                 depth.saturating_add(1),
@@ -113,8 +117,13 @@ pub fn add_diag_comms<'a>(
                 .and_then(|dc| dc.short_name())
                 .unwrap_or("?")
                 .to_owned();
-            let sections =
-                build_diag_comm_details_with_parent(ds, Some(source_layer_name.as_str()));
+            node_indices.insert(short_name.clone(), b.next_index());
+            let parent_idx = b.find_container_index(source_layer_name);
+            let sections = build_diag_comm_details_with_parent(
+                ds,
+                Some(source_layer_name.as_str()),
+                parent_idx,
+            );
 
             b.push_service_node(
                 depth.saturating_add(1),
@@ -127,11 +136,25 @@ pub fn add_diag_comms<'a>(
             );
         }
 
-        add_single_ecu_jobs(b, layer, depth);
+        add_single_ecu_jobs(b, layer, depth, &mut node_indices);
+
+        // Build table with tree-node indices and patch the header.
+        let detail_section = build_diag_comms_table_section(
+            &own_services,
+            &parent_services,
+            &job_names,
+            &node_indices,
+        );
+        b.set_detail_sections(header_idx, vec![detail_section]);
     }
 }
 
-fn add_single_ecu_jobs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
+fn add_single_ecu_jobs(
+    b: &mut TreeBuilder,
+    layer: &DiagLayer<'_>,
+    depth: usize,
+    node_indices: &mut std::collections::HashMap<String, usize>,
+) {
     let Some(jobs) = layer.single_ecu_jobs() else {
         return;
     };
@@ -202,6 +225,7 @@ fn add_single_ecu_jobs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize)
             DiagComm(dc),
         )));
 
+        node_indices.insert(short_name.to_owned(), b.next_index());
         b.push_service_node(
             depth.saturating_add(1),
             format!("{}{short_name}", NodeTextPrefix::Job.as_str()),

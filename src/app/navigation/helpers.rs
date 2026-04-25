@@ -199,9 +199,8 @@ impl App {
     }
 
     /// Walk the database inheritance chain starting from a container node.
-    /// Uses the `parent_ref_names` stored on each Container node (populated
-    /// at build time from the database) to look up matching containers by
-    /// exact short name, then searches each container's subtree.
+    /// Uses the `parent_ref_indices` resolved at build time to directly index
+    /// into `all_nodes`, then searches each parent container's subtree.
     ///
     /// `visited` prevents infinite loops when the parent ref graph has cycles.
     fn walk_parent_refs(
@@ -211,10 +210,9 @@ impl App {
         visited: &mut HashSet<usize>,
     ) -> Option<usize> {
         let container = self.tree.all_nodes.get(container_idx)?;
-        let parent_names = container.parent_ref_names();
+        let parent_indices = container.parent_ref_indices().to_vec();
 
-        parent_names.iter().find_map(|parent_name| {
-            let pc_idx = self.find_container_by_name(parent_name)?;
+        parent_indices.iter().find_map(|&pc_idx| {
             if !visited.insert(pc_idx) {
                 return None;
             }
@@ -365,7 +363,9 @@ impl App {
         let section = self.tree.all_nodes.get(section_idx)?;
         let target_depth = section.depth.saturating_add(1);
         let (s_start, s_end) = self.subtree_range(section_idx);
-        self.find_at_depth(s_start, s_end, target_depth, &|n| n.text == service_name)
+        self.find_at_depth(s_start, s_end, target_depth, &|n| {
+            n.service_short_name().is_some_and(|sn| sn == service_name) || n.text == service_name
+        })
     }
 
     /// Walk a path: container → section header (by `ServiceListType`) →
@@ -411,10 +411,9 @@ impl App {
         visited: &mut HashSet<usize>,
     ) -> Option<usize> {
         let container = self.tree.all_nodes.get(container_idx)?;
-        let parent_names = container.parent_ref_names();
+        let parent_indices = container.parent_ref_indices().to_vec();
 
-        parent_names.iter().find_map(|parent_name| {
-            let pc_idx = self.find_container_by_name(parent_name)?;
+        parent_indices.iter().find_map(|&pc_idx| {
             if !visited.insert(pc_idx) {
                 return None;
             }
@@ -501,21 +500,10 @@ impl App {
         self.status = format!("Element '{target_short_name}' not found in tree");
     }
 
-    /// Navigate to a tree node whose text matches the given name.
-    /// Scoped to the enclosing section via `find_in_hierarchy`.
-    pub(super) fn navigate_to_tree_node_by_text(&mut self, target_name: &str) {
-        if let Some(idx) = self.find_in_hierarchy(|node| node.text == target_name) {
-            self.navigate_to_node(idx);
-            self.status = format!("Navigated to: {target_name}");
-        } else {
-            self.status = format!("'{target_name}' not found in tree");
-        }
-    }
-
     /// Navigate to a specific node by its index in `all_nodes`.
     pub(crate) fn navigate_to_node(&mut self, target_node_idx: usize) {
-        // Capture current path BEFORE clearing search (visible list will change)
-        let current_path = self.capture_current_path();
+        // Capture current node index BEFORE clearing search (visible list will change)
+        let current_node_idx = self.capture_current_node_idx();
 
         // Clear search stack so navigation target is always reachable
         if !self.search.stack.is_empty() {
@@ -535,8 +523,8 @@ impl App {
             return;
         };
 
-        if let Some(path) = current_path {
-            self.push_path_to_history(path);
+        if let Some(idx) = current_node_idx {
+            self.push_node_to_history(idx);
         }
         self.focus_state = FocusState::Tree;
         self.tree.cursor = visible_pos;

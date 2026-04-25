@@ -6,86 +6,24 @@
 use super::{App, FocusState, HistoryEntry, SCROLL_CONTEXT_LINES};
 
 impl App {
-    /// Build the path from root to the given node index as a list of
-    /// `(depth, text)` pairs. Walking backwards from `node_idx`, we collect
-    /// each ancestor (first node at each successively lower depth).
-    fn build_node_path(&self, node_idx: usize) -> Vec<(usize, String)> {
-        let Some(target) = self.tree.all_nodes.get(node_idx) else {
-            return vec![];
-        };
-
-        let mut path: Vec<(usize, String)> = (0..node_idx)
-            .rev()
-            .filter_map(|i| self.tree.all_nodes.get(i))
-            .scan(target.depth, |cur_depth, node| {
-                if *cur_depth == 0 {
-                    None
-                } else if node.depth < *cur_depth {
-                    *cur_depth = node.depth;
-                    Some(Some((node.depth, node.text.clone())))
-                } else {
-                    Some(None)
-                }
-            })
-            .flatten()
-            .collect();
-
-        path.reverse();
-        path.push((target.depth, target.text.clone()));
-        path
-    }
-
-    /// Resolve a stored path back to a `node_idx` by walking the tree.
-    /// Does not expand ancestors or rebuild visible — callers must call
-    /// `ensure_node_visible` afterwards.
-    fn resolve_path(&self, path: &[(usize, String)]) -> Option<usize> {
-        let mut last_found_idx: Option<usize> = None;
-
-        for (target_depth, target_text) in path {
-            let search_start = last_found_idx.map_or(0, |i| i.saturating_add(1));
-
-            let found = self
-                .tree
-                .all_nodes
-                .iter()
-                .enumerate()
-                .skip(search_start)
-                .find(|(_, node)| node.depth == *target_depth && node.text == *target_text)
-                .map(|(i, _)| i);
-
-            let Some(idx) = found else {
-                return last_found_idx;
-            };
-
-            last_found_idx = Some(idx);
-        }
-
-        last_found_idx
-    }
-
-    /// Add current node to navigation history, storing the full path for
-    /// robust lookup even after expand/collapse changes.
+    /// Add current node to navigation history.
     pub(crate) fn push_to_history(&mut self) {
         let Some(&node_idx) = self.tree.visible.get(self.tree.cursor) else {
             return;
         };
-        let path = self.build_node_path(node_idx);
-        self.push_path_to_history(path);
+        self.push_node_to_history(node_idx);
     }
 
-    /// Build and return the path for the current cursor position.
-    /// Call this BEFORE any operation that changes the visible list.
-    pub(crate) fn capture_current_path(&self) -> Option<Vec<(usize, String)>> {
-        let &node_idx = self.tree.visible.get(self.tree.cursor)?;
-        Some(self.build_node_path(node_idx))
+    /// Capture the current cursor's node index for deferred history push.
+    pub(crate) fn capture_current_node_idx(&self) -> Option<usize> {
+        self.tree.visible.get(self.tree.cursor).copied()
     }
 
-    /// Add a pre-captured path to navigation history.
-    /// Use this when the visible list may change before `push_to_history` would be called.
-    pub(crate) fn push_path_to_history(&mut self, path: Vec<(usize, String)>) {
+    /// Add a node index to navigation history.
+    pub(crate) fn push_node_to_history(&mut self, node_idx: usize) {
         const MAX_HISTORY: usize = 100;
 
-        if path.is_empty() {
+        if node_idx >= self.tree.all_nodes.len() {
             return;
         }
 
@@ -94,7 +32,7 @@ impl App {
             .history
             .entries
             .back()
-            .is_some_and(|e| e.node_path == path)
+            .is_some_and(|e| e.node_idx == node_idx)
         {
             return;
         }
@@ -104,9 +42,7 @@ impl App {
             self.history.entries.truncate(self.history.position);
         }
 
-        let entry = HistoryEntry { node_path: path };
-
-        self.history.entries.push_back(entry);
+        self.history.entries.push_back(HistoryEntry { node_idx });
         if self.history.entries.len() > MAX_HISTORY {
             self.history.entries.pop_front();
         }
@@ -126,15 +62,17 @@ impl App {
         }
 
         self.history.position = self.history.position.saturating_sub(1);
-        let Some(entry) = self.history.entries.get(self.history.position).cloned() else {
+        let Some(entry) = self.history.entries.get(self.history.position) else {
             self.status = "History access failed".into();
             return;
         };
+        let target_node_idx = entry.node_idx;
 
-        let Some(target_node_idx) = self.resolve_path(&entry.node_path) else {
+        if target_node_idx >= self.tree.all_nodes.len() {
             self.status = "Previous element no longer reachable".into();
             return;
-        };
+        }
+
         self.ensure_node_visible(target_node_idx);
 
         let Some(cursor_pos) = self

@@ -49,23 +49,20 @@ pub fn add_requests_section<'a>(
     let total_count = own_services.len().saturating_add(parent_services.len());
 
     if total_count > 0 {
-        let detail_section = build_service_list_table_section(
-            &own_services,
-            &parent_services,
-            "Requests",
-            DetailSectionType::Requests,
-        );
-
+        // Push header first (empty details — patched below with indices).
+        let header_idx = b.next_index();
         b.push_service_list_header(
             depth,
             format!("Requests ({total_count})"),
             false,
             true,
-            vec![detail_section],
+            vec![],
             crate::tree::ServiceListType::Requests,
         );
 
-        // Add own and parent ref services using the same display logic
+        // Push children, collecting (short_name → tree index).
+        let mut node_indices = std::collections::HashMap::new();
+
         let all_services: Vec<(&DiagService<'_>, Option<&str>)> = own_services
             .iter()
             .map(|ds| (ds, None))
@@ -86,7 +83,9 @@ pub fn add_requests_section<'a>(
                 .and_then(|dc| dc.short_name())
                 .unwrap_or("?")
                 .to_owned();
-            let sections = build_request_view_sections(ds, source_layer);
+            node_indices.insert(short_name.clone(), b.next_index());
+            let container_idx = source_layer.and_then(|name| b.find_container_index(name));
+            let sections = build_request_view_sections(ds, source_layer, container_idx);
 
             let has_params = ds
                 .request()
@@ -121,6 +120,16 @@ pub fn add_requests_section<'a>(
                     );
                 });
         }
+
+        // Build table with tree-node indices and patch the header.
+        let detail_section = build_service_list_table_section(
+            &own_services,
+            &parent_services,
+            "Requests",
+            DetailSectionType::Requests,
+            &node_indices,
+        );
+        b.set_detail_sections(header_idx, vec![detail_section]);
     }
 }
 
@@ -143,6 +152,7 @@ pub fn build_request_section(ds: &DiagService<'_>) -> DetailSectionData {
 fn build_request_view_sections(
     ds: &DiagService<'_>,
     parent_layer_name: Option<&str>,
+    container_index: Option<usize>,
 ) -> Vec<DetailSectionData> {
     let mut sections = Vec::new();
 
@@ -160,7 +170,11 @@ fn build_request_view_sections(
         section_type: DetailSectionType::Header,
         content: DetailContent::PlainText(vec![]),
     });
-    sections.push(build_service_overview_section(ds, parent_layer_name));
+    sections.push(build_service_overview_section(
+        ds,
+        parent_layer_name,
+        container_index,
+    ));
     sections.push(build_request_section(ds));
 
     sections

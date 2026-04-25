@@ -678,8 +678,12 @@ fn build_dops_overview_table(
         .map(|(cat, dops)| {
             DetailRow::normal(
                 vec![
-                    DetailCell::new(cat.label(), CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::new(cat.label(), CellType::ParameterName).with_jump(
+                        CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                            index: usize::MAX,
+                            short_name: cat.label().to_owned(),
+                        }),
+                    ),
                     DetailCell::new(dops.len().to_string(), CellType::NumericValue),
                 ],
                 0,
@@ -720,8 +724,12 @@ fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData
             };
             DetailRow::normal(
                 vec![
-                    DetailCell::new(name, CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::new(name.clone(), CellType::ParameterName).with_jump(
+                        CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                            index: usize::MAX,
+                            short_name: name,
+                        }),
+                    ),
                 ],
                 0,
             )
@@ -773,8 +781,12 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
             };
             DetailRow::normal(
                 vec![
-                    DetailCell::new(name, CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::new(name.clone(), CellType::ParameterName).with_jump(
+                        CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                            index: usize::MAX,
+                            short_name: name,
+                        }),
+                    ),
                     DetailCell::text(dop_info.category.as_deref().unwrap_or("")),
                     DetailCell::text(dop_info.internal_unit.as_deref().unwrap_or("")),
                     DetailCell::text(dop_info.phys_unit.as_deref().unwrap_or("")),

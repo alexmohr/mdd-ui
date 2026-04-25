@@ -31,14 +31,14 @@ pub fn add_com_params(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) 
         return;
     }
 
-    let overview = build_com_params_overview(layer);
-
+    // Push header first (empty details — patched below with indices).
+    let header_idx = b.next_index();
     b.push_details_structured(
         depth,
         format!("ComParam Refs ({})", cp_refs.len()),
         false,
         true,
-        overview,
+        vec![],
         NodeType::SectionHeader,
     );
 
@@ -54,20 +54,30 @@ pub fn add_com_params(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) 
         .collect();
     sorted_refs.sort_by(|a, b| a.1.cmp(&b.1));
 
-    for (idx, cp_name) in sorted_refs {
-        let sections = build_com_param_ref_detail(layer, idx);
+    // Push children, collecting (name → tree index).
+    let mut node_indices = std::collections::HashMap::new();
+    for (idx, cp_name) in &sorted_refs {
+        node_indices.insert(cp_name.clone(), b.next_index());
+        let sections = build_com_param_ref_detail(layer, *idx);
         b.push_details_structured(
             depth.saturating_add(1),
-            cp_name,
+            cp_name.clone(),
             false,
             false,
             sections,
             NodeType::Default,
         );
     }
+
+    // Build overview with tree-node indices and patch header.
+    let overview = build_com_params_overview(layer, &node_indices);
+    b.set_detail_sections(header_idx, overview);
 }
 
-fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
+fn build_com_params_overview(
+    layer: &DiagLayer<'_>,
+    node_indices: &std::collections::HashMap<String, usize>,
+) -> Vec<DetailSectionData> {
     let Some(cp_refs) = layer.com_param_refs() else {
         return vec![];
     };
@@ -83,10 +93,10 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
             let cp = cpr.com_param()?;
             let name = cp.short_name().unwrap_or("?").to_owned();
             let cp_type = format!("{:?}", cp.com_param_type());
+            let jump = make_index_jump(&name, node_indices);
             Some(DetailRow::normal(
                 vec![
-                    DetailCell::new(name, CellType::ParameterName)
-                        .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                    DetailCell::new(name, CellType::ParameterName).with_jump(jump),
                     DetailCell::text(cp_type),
                 ],
                 0,
@@ -115,6 +125,17 @@ fn build_com_params_overview(layer: &DiagLayer<'_>) -> Vec<DetailSectionData> {
         )
         .with_type(DetailSectionType::Overview),
     ]
+}
+
+fn make_index_jump(
+    short_name: &str,
+    node_indices: &std::collections::HashMap<String, usize>,
+) -> CellJumpTarget {
+    let index = node_indices.get(short_name).copied().unwrap_or(usize::MAX);
+    CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+        index,
+        short_name: short_name.to_owned(),
+    })
 }
 
 /// Helper to create a simple key-value row without jump target.

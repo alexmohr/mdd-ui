@@ -565,11 +565,16 @@ where
 /// Build a service-list table section (the header table showing all services
 /// with Short Name / ID / Inherited columns).  Used by both the Requests and
 /// Responses list headers.
+///
+/// `node_indices` maps each service short name to its tree-node index so
+/// that table rows carry direct [`CellJumpTargetType::TreeNodeByIndex`]
+/// targets for O(1) navigation.
 pub fn build_service_list_table_section(
     own_services: &[DiagService<'_>],
     parent_services: &[(DiagService<'_>, String)],
     label: &str,
     section_type: DetailSectionType,
+    node_indices: &std::collections::HashMap<String, usize>,
 ) -> DetailSectionData {
     let header = DetailRow::header(vec![
         DetailCell::text("Short Name"),
@@ -585,10 +590,14 @@ pub fn build_service_list_table_section(
         } else {
             id_str
         };
+        let index = node_indices.get(&name).copied().unwrap_or(usize::MAX);
+        let jump = CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+            index,
+            short_name: name.clone(),
+        });
         Some(DetailRow::normal(
             vec![
-                DetailCell::new(name, CellType::ParameterName)
-                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                DetailCell::new(name, CellType::ParameterName).with_jump(jump),
                 DetailCell::text(id),
                 DetailCell::text(inherited),
             ],

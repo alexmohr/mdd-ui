@@ -21,6 +21,7 @@ use crate::tree::{
 pub fn build_diag_comm_details_with_parent(
     ds: &DiagService<'_>,
     parent_layer_name: Option<&str>,
+    container_index: Option<usize>,
 ) -> Vec<DetailSectionData> {
     let mut sections: Vec<DetailSectionData> = Vec::new();
 
@@ -39,7 +40,11 @@ pub fn build_diag_comm_details_with_parent(
         section_type: DetailSectionType::Header,
     });
 
-    sections.push(build_overview_section(ds, parent_layer_name));
+    sections.push(build_overview_section(
+        ds,
+        parent_layer_name,
+        container_index,
+    ));
 
     sections.push(build_request_section(ds));
 
@@ -57,10 +62,15 @@ pub fn build_diag_comm_details_with_parent(
 }
 
 /// Build the Diag-Comms header table showing all services and jobs.
+///
+/// `node_indices` maps each service/job short name to its tree-node index
+/// so that table rows carry direct [`CellJumpTargetType::TreeNodeByIndex`]
+/// targets for O(1) navigation.
 pub(super) fn build_diag_comms_table_section(
     own_services: &[DiagService<'_>],
     parent_services: &[(DiagService<'_>, String)],
     job_names: &[String],
+    node_indices: &std::collections::HashMap<String, usize>,
 ) -> DetailSectionData {
     let header = DetailRow::header(vec![
         DetailCell::text("Short Name"),
@@ -89,10 +99,11 @@ pub(super) fn build_diag_comms_table_section(
             .unwrap_or("-")
             .to_owned();
 
+        let jump = make_index_jump(&name, node_indices);
+
         Some(DetailRow::normal(
             vec![
-                DetailCell::new(name, CellType::ParameterName)
-                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                DetailCell::new(name, CellType::ParameterName).with_jump(jump),
                 DetailCell::text(id),
                 DetailCell::text(funct_class),
                 DetailCell::text("Service"),
@@ -115,10 +126,10 @@ pub(super) fn build_diag_comms_table_section(
     );
 
     rows.extend(job_names.iter().map(|job_name| {
+        let jump = make_index_jump(job_name, node_indices);
         DetailRow::normal(
             vec![
-                DetailCell::new(job_name.clone(), CellType::ParameterName)
-                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                DetailCell::new(job_name.clone(), CellType::ParameterName).with_jump(jump),
                 DetailCell::text("-"),
                 DetailCell::text("-"),
                 DetailCell::text("Job"),
@@ -151,11 +162,28 @@ pub(super) fn build_diag_comms_table_section(
     }
 }
 
+/// Build a [`CellJumpTarget`] for a service/job tree node.
+///
+/// Produces a [`CellJumpTargetType::TreeNodeByIndex`] when the short name is
+/// found in `node_indices`, otherwise uses a `usize::MAX` sentinel that the
+/// `finish()` resolution pass will replace with the real index.
+fn make_index_jump(
+    short_name: &str,
+    node_indices: &std::collections::HashMap<String, usize>,
+) -> CellJumpTarget {
+    let index = node_indices.get(short_name).copied().unwrap_or(usize::MAX);
+    CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+        index,
+        short_name: short_name.to_owned(),
+    })
+}
+
 /// Build the common property/value overview rows shared by all service views
 /// (`DiagComms`, Requests, Responses).
 pub(crate) fn build_service_overview_rows(
     ds: &DiagService<'_>,
     parent_layer_name: Option<&str>,
+    container_index: Option<usize>,
 ) -> Vec<DetailRow> {
     let mut rows = Vec::new();
 
@@ -210,7 +238,10 @@ pub(crate) fn build_service_overview_rows(
     ));
 
     if let Some(parent_name) = parent_layer_name {
-        rows.push(DetailRow::inherited_from(parent_name.to_owned()));
+        rows.push(DetailRow::inherited_from(
+            parent_name.to_owned(),
+            container_index,
+        ));
     }
 
     rows
@@ -220,8 +251,9 @@ pub(crate) fn build_service_overview_rows(
 pub(crate) fn build_service_overview_section(
     ds: &DiagService<'_>,
     parent_layer_name: Option<&str>,
+    container_index: Option<usize>,
 ) -> DetailSectionData {
-    let rows = build_service_overview_rows(ds, parent_layer_name);
+    let rows = build_service_overview_rows(ds, parent_layer_name, container_index);
 
     DetailSectionData::new(
         "Overview".to_owned(),
@@ -245,8 +277,9 @@ pub(crate) fn build_service_overview_section(
 fn build_overview_section(
     ds: &DiagService<'_>,
     parent_layer_name: Option<&str>,
+    container_index: Option<usize>,
 ) -> DetailSectionData {
-    let mut rows = build_service_overview_rows(ds, parent_layer_name);
+    let mut rows = build_service_overview_rows(ds, parent_layer_name, container_index);
 
     if let Some(dc) = ds.diag_comm() {
         let states: Vec<String> = dc
@@ -274,8 +307,12 @@ fn build_overview_section(
         rows.push(DetailRow::normal(
             vec![
                 DetailCell::text("Functional Class"),
-                DetailCell::new(funct_class_name, CellType::ParameterName)
-                    .with_jump(CellJumpTarget::new(CellJumpTargetType::TreeNodeByName)),
+                DetailCell::new(funct_class_name, CellType::ParameterName).with_jump(
+                    CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                        index: usize::MAX,
+                        short_name: funct_class_name.to_owned(),
+                    }),
+                ),
             ],
             0,
         ));

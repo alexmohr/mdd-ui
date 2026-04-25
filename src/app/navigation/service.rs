@@ -4,8 +4,8 @@
  */
 
 use crate::{
-    app::{App, FocusState, SCROLL_CONTEXT_LINES},
-    tree::{DetailSectionType, NodeType, TreeNode},
+    app::App,
+    tree::{CellJumpTarget, CellJumpTargetType, DetailSectionType, NodeType, TreeNode},
 };
 
 impl App {
@@ -72,10 +72,25 @@ impl App {
             return;
         }
 
-        // Get service name from table or return early
-        let Some(service_name) = self.extract_service_name_from_table(node_idx) else {
+        let Some((service_name, jump_target)) = self.extract_service_jump_from_table(node_idx)
+        else {
             return;
         };
+
+        // Prefer direct index navigation when available.
+        if let Some(CellJumpTarget {
+            target_type: CellJumpTargetType::TreeNodeByIndex { index, short_name },
+        }) = &jump_target
+            && self
+                .tree
+                .all_nodes
+                .get(*index)
+                .and_then(|n| n.service_short_name())
+                .is_some_and(|sn| sn == short_name)
+        {
+            self.navigate_to_node(*index);
+            return;
+        }
 
         // Expand service list section if collapsed
         if let Some(node_at_idx) = self.tree.all_nodes.get(node_idx)
@@ -84,12 +99,16 @@ impl App {
             self.expand_and_update_cursor(node_idx);
         }
 
-        // Find and navigate to service
+        // Fallback: name-based search
         self.find_and_navigate_to_service(&service_name, node_idx);
     }
 
-    /// Extract service name from the current table row
-    pub(super) fn extract_service_name_from_table(&mut self, node_idx: usize) -> Option<String> {
+    /// Extract the jump target and short name from the selected service-list
+    /// table row (column 0).
+    fn extract_service_jump_from_table(
+        &mut self,
+        node_idx: usize,
+    ) -> Option<(String, Option<CellJumpTarget>)> {
         let node = self.tree.all_nodes.get(node_idx)?;
         let section = node.detail_sections.first()?;
 
@@ -103,15 +122,9 @@ impl App {
         let sorted_rows = self.sort_rows(rows, section_index);
         let selected_row = sorted_rows.get(row_cursor)?;
 
-        // Determine name column index based on node type
-        let is_functional_class =
-            Self::is_service_list_type(node, crate::tree::ServiceListType::FunctionalClasses);
-        let name_column_index = usize::from(!is_functional_class);
-
-        selected_row
-            .cells
-            .get(name_column_index)
-            .map(|c| c.text.clone())
+        // Column 0 is always the short name across all service-list tables.
+        let cell = selected_row.cells.first()?;
+        Some((cell.text.clone(), cell.jump_target.clone()))
     }
 
     /// Find and navigate to a service by name
@@ -249,37 +262,6 @@ impl App {
                 .map(|(offset, _)| diagcomm_idx.saturating_add(1).saturating_add(offset))
         } else {
             None
-        }
-    }
-
-    /// Helper function to navigate to a service or job by name.
-    /// Searches within the current container's hierarchy first, then globally.
-    pub(super) fn navigate_to_service_or_job(&mut self, target_short_name: &str) {
-        let matches_service = |n: &TreeNode| -> bool {
-            n.node_type.is_diagcomm()
-                && n.service_short_name()
-                    .is_some_and(|sn| sn == target_short_name)
-        };
-
-        let Some(service_node_idx) = self.find_in_hierarchy(matches_service) else {
-            self.status = format!("Service/Job '{target_short_name}' not found in tree");
-            return;
-        };
-
-        self.ensure_node_visible(service_node_idx);
-
-        if let Some(new_cursor) = self
-            .tree
-            .visible
-            .iter()
-            .position(|&idx| idx == service_node_idx)
-        {
-            self.push_to_history();
-            self.focus_state = FocusState::Tree;
-            self.tree.cursor = new_cursor;
-            self.reset_detail_state();
-            self.tree.scroll_offset = self.tree.cursor.saturating_sub(SCROLL_CONTEXT_LINES);
-            self.status = format!("Navigated to: {target_short_name}");
         }
     }
 }
