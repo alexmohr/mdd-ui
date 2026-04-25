@@ -17,22 +17,14 @@ mcp = ["dep:rmcp", "dep:tokio", "dep:serde_json"]
 [dependencies]
 mdd-core = { path = "src/mdd-core" }
 
-# TUI
-ratatui = "0.30.0"
-crossterm = "0.29.0"
-
 # CLI
 clap = { version = "4", features = ["derive"] }
 
 # Error handling
 anyhow = "1"
 
-# Clipboard
-arboard = "3"
-
 # Configuration
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
 
 # MCP server (optional)
 rmcp = { version = "1.5", features = [
