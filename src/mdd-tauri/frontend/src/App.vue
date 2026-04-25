@@ -71,7 +71,7 @@ function onSplitMouseDown() {
 
 <template>
   <div
-    class="flex flex-col h-screen bg-[#0c0e14] text-gray-300 antialiased"
+    class="flex flex-col h-screen bg-neutral-950 text-neutral-200 antialiased"
     :class="{ 'select-none': dragging }"
     :style="{ fontSize: store.fontSize + 'px' }"
   >
@@ -79,8 +79,8 @@ function onSplitMouseDown() {
     <template v-if="!store.fileLoaded">
       <div class="flex-1 flex items-center justify-center">
         <div class="text-center space-y-6">
-          <div class="text-4xl font-light text-gray-500 tracking-tight">MDD UI</div>
-          <p class="text-gray-600 text-sm">Diagnostic database browser</p>
+          <div class="text-4xl font-light text-neutral-400 tracking-tight">MDD UI</div>
+          <p class="text-neutral-600 text-sm">Diagnostic database browser</p>
           <div class="flex gap-3 justify-center mt-4">
             <button
               class="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors shadow-lg shadow-blue-600/20"
@@ -89,20 +89,20 @@ function onSplitMouseDown() {
               Open File
             </button>
             <button
-              class="px-5 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium transition-colors border border-gray-700"
+              class="px-5 py-2.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors border border-neutral-700"
               @click="openDiff"
             >
               Compare Files
             </button>
           </div>
-          <div class="text-gray-700 text-xs mt-8">
-            <kbd class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 text-[11px]">/</kbd> search
+          <div class="text-neutral-600 text-xs mt-8">
+            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">/</kbd> search
             &nbsp;&middot;&nbsp;
-            <kbd class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 text-[11px]">Backspace</kbd> back
+            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">Backspace</kbd> back
             &nbsp;&middot;&nbsp;
-            <kbd class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 text-[11px]">e</kbd> expand all
+            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">e</kbd> expand all
             &nbsp;&middot;&nbsp;
-            <kbd class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 text-[11px]">c</kbd> collapse all
+            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">c</kbd> collapse all
           </div>
         </div>
       </div>
@@ -111,11 +111,11 @@ function onSplitMouseDown() {
     <!-- Main app layout -->
     <template v-else>
       <!-- Top bar -->
-      <div class="flex items-center h-10 px-3 bg-[#10131a] border-b border-gray-800/60 gap-2 shrink-0">
+      <div class="flex items-center h-10 px-3 bg-neutral-900 border-b border-neutral-800/60 gap-2 shrink-0">
         <!-- Back -->
         <button
           class="p-1.5 rounded-md transition-colors"
-          :class="store.canGoBack ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-700 cursor-default'"
+          :class="store.canGoBack ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-700 cursor-default'"
           :disabled="!store.canGoBack"
           title="Back (Backspace)"
           @click="store.goBack()"
@@ -124,18 +124,18 @@ function onSplitMouseDown() {
         </button>
 
         <!-- Breadcrumbs -->
-        <div class="flex items-center gap-1 text-xs text-gray-500 overflow-hidden min-w-0 flex-1">
+        <div class="flex items-center gap-1 text-xs text-neutral-500 overflow-hidden min-w-0 flex-1">
           <template v-for="(crumb, i) in store.breadcrumbs" :key="crumb.index">
-            <span v-if="i > 0" class="text-gray-700">/</span>
+            <span v-if="i > 0" class="text-neutral-700">/</span>
             <button
               class="truncate max-w-48 hover:text-gray-300 transition-colors"
-              :class="i === store.breadcrumbs.length - 1 ? 'text-gray-300 font-medium' : 'text-gray-500'"
+              :class="i === store.breadcrumbs.length - 1 ? 'text-neutral-200 font-medium' : 'text-neutral-500'"
               @click="store.selectNode(crumb.index)"
             >
               {{ crumb.text }}
             </button>
           </template>
-          <span v-if="store.breadcrumbs.length === 0" class="text-gray-600">{{ store.ecuName }}</span>
+          <span v-if="store.breadcrumbs.length === 0" class="text-neutral-500">{{ store.ecuName }}</span>
         </div>
 
         <!-- Actions -->
@@ -143,7 +143,7 @@ function onSplitMouseDown() {
           <button
             v-if="store.isDiff"
             class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
-            :class="store.hideUnchanged ? 'bg-amber-600/20 text-amber-400' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'"
+            :class="store.hideUnchanged ? 'bg-amber-600/20 text-amber-400' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'"
             title="Toggle unchanged (u)"
             @click="store.toggleHideUnchanged()"
           >
@@ -151,26 +151,26 @@ function onSplitMouseDown() {
           </button>
           <div class="flex items-center gap-0.5 mr-1">
             <button
-              class="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 hover:bg-gray-800 transition-colors text-[11px] font-bold"
+              class="w-5 h-5 flex items-center justify-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors text-[11px] font-bold"
               title="Decrease font size (-)"
               @click="store.decreaseFontSize()"
             >A-</button>
-            <span class="text-[10px] text-gray-600 w-5 text-center">{{ store.fontSize }}</span>
+            <span class="text-[10px] text-neutral-600 w-5 text-center">{{ store.fontSize }}</span>
             <button
-              class="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 hover:bg-gray-800 transition-colors text-[11px] font-bold"
+              class="w-5 h-5 flex items-center justify-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors text-[11px] font-bold"
               title="Increase font size (+)"
               @click="store.increaseFontSize()"
             >A+</button>
           </div>
           <button
-            class="p-1.5 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
+            class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
             title="Open file"
             @click="openFile"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
           </button>
           <button
-            class="p-1.5 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
+            class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
             title="Compare files"
             @click="openDiff"
           >
@@ -186,7 +186,7 @@ function onSplitMouseDown() {
       <div class="flex flex-1 min-h-0">
         <TreePane :style="{ width: store.splitPct + '%' }" class="shrink-0" />
         <div
-          class="w-1 cursor-col-resize bg-gray-800/40 hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors shrink-0"
+          class="w-1 cursor-col-resize bg-neutral-800/40 hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors shrink-0"
           @mousedown.prevent="onSplitMouseDown"
         />
         <DetailPane class="flex-1 min-w-0" />

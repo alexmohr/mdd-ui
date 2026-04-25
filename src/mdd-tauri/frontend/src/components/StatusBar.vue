@@ -5,7 +5,7 @@ const store = useAppStore();
 </script>
 
 <template>
-  <div class="flex items-center h-6 px-3 bg-[#0a0c12] border-t border-gray-800/40 text-[11px] text-gray-600 shrink-0">
+  <div class="flex items-center h-6 px-3 bg-neutral-900 border-t border-neutral-800/40 text-[11px] text-neutral-500 shrink-0">
     <span v-if="store.loading" class="text-blue-400 animate-pulse mr-2">Loading...</span>
     <span v-if="store.status" class="mr-3">{{ store.status }}</span>
     <span class="flex-1" />
