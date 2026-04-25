@@ -1,28 +1,83 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, nextTick } from "vue";
 import { useAppStore } from "../stores/app";
 import type { VisibleNode } from "../api/commands";
 
 const store = useAppStore();
 const showLegend = ref(false);
 
+// --- Context menu ---
+const ctxMenu = ref<{ x: number; y: number; node: VisibleNode } | null>(null);
+
+function onContextMenu(e: MouseEvent, node: VisibleNode) {
+  e.preventDefault();
+  ctxMenu.value = { x: e.clientX, y: e.clientY, node };
+  nextTick(() => window.addEventListener("click", closeCtx, { once: true }));
+}
+function closeCtx() { ctxMenu.value = null; }
+
+async function ctxAction(action: string) {
+  const node = ctxMenu.value?.node;
+  ctxMenu.value = null;
+  if (!node) return;
+  switch (action) {
+    case "select": await store.selectNode(node.index); break;
+    case "expand": if (node.has_children) await store.toggleExpand(node.index); break;
+    case "expandAll": await store.expandAll(); break;
+    case "collapseAll": await store.collapseAll(); break;
+    case "goToParent":
+      // Navigate to parent inherited-from (uses goBack as approximation for now)
+      await store.selectNode(node.index);
+      break;
+    case "copyName":
+      await navigator.clipboard.writeText(node.text);
+      break;
+    case "sort": await store.toggleSort(); break;
+  }
+}
+
+// --- Badges ---
 type Badge = { label: string; bg: string; fg: string };
 
 function nodeBadge(node: VisibleNode): Badge | null {
-  // No badges for containers/headers — they have children to explain themselves
-  if (node.has_children) return null;
-
+  // Node-type badges (both leaf and container)
   switch (node.node_type) {
     case "Service":          return { label: "SVC",  bg: "bg-violet-500/20",  fg: "text-violet-300" };
     case "Job":              return { label: "JOB",  bg: "bg-violet-500/15",  fg: "text-violet-300/70" };
-    case "ParentRefService": return { label: "INH",  bg: "bg-gray-500/15",    fg: "text-gray-500" };
+    case "ParentRefService": return { label: "INH",  bg: "bg-neutral-500/15", fg: "text-neutral-500" };
     case "Request":          return { label: "REQ",  bg: "bg-teal-500/20",    fg: "text-teal-300" };
     case "PosResponse":      return { label: "R+",   bg: "bg-emerald-500/20", fg: "text-emerald-300" };
     case "NegResponse":      return { label: "R-",   bg: "bg-rose-500/20",    fg: "text-rose-300" };
     case "FunctionalClass":  return { label: "FC",   bg: "bg-orange-500/20",  fg: "text-orange-300" };
     case "Sdg":              return { label: "SDG",  bg: "bg-lime-500/20",    fg: "text-lime-300" };
-    default:                 return null;
+    case "Dop":              return { label: "DOP",  bg: "bg-pink-500/20",    fg: "text-pink-300" };
+    case "ParentRefs":       return { label: "REF",  bg: "bg-cyan-500/20",    fg: "text-cyan-300" };
+    default: break;
   }
+
+  // Infer badge from text for DOP category children and service-list headers
+  const t = node.text.toLowerCase();
+  if (t.startsWith("diag-comms"))       return { label: "DC",  bg: "bg-violet-500/15", fg: "text-violet-300/70" };
+  if (t.startsWith("requests"))          return { label: "REQ", bg: "bg-teal-500/15",   fg: "text-teal-300/70" };
+  if (t.startsWith("pos-response") || t.startsWith("positive response"))
+                                          return { label: "R+",  bg: "bg-emerald-500/15", fg: "text-emerald-300/70" };
+  if (t.startsWith("neg-response") || t.startsWith("negative response"))
+                                          return { label: "R-",  bg: "bg-rose-500/15",   fg: "text-rose-300/70" };
+  if (t.startsWith("functional classes")) return { label: "FC",  bg: "bg-orange-500/15", fg: "text-orange-300/70" };
+  if (t.startsWith("comparam"))          return { label: "CP",  bg: "bg-sky-500/15",    fg: "text-sky-300/70" };
+  if (t.startsWith("state chart"))       return { label: "SC",  bg: "bg-indigo-500/15", fg: "text-indigo-300/70" };
+  if (t.startsWith("sdgs"))             return { label: "SDG", bg: "bg-lime-500/15",   fg: "text-lime-300/70" };
+  // DOP sub-categories
+  if (t.startsWith("structures"))        return { label: "STR", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+  if (t.startsWith("data object"))       return { label: "DOP", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+  if (t.startsWith("dtc dop"))           return { label: "DTC", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+  if (t.startsWith("env data"))          return { label: "ENV", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+  if (t.startsWith("static field"))      return { label: "SF",  bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+  if (t.startsWith("dynamic"))           return { label: "DYN", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+  if (t.startsWith("end of pdu"))        return { label: "EOP", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+  if (t.startsWith("mux"))              return { label: "MUX", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+
+  return null;
 }
 
 function diffBadge(status: string | null): Badge | null {
@@ -40,6 +95,7 @@ function nodeTextClass(node: VisibleNode): string {
   if (node.node_type === "SectionHeader") return "text-white font-semibold";
   if (node.node_type === "Container") return "text-neutral-100 font-medium";
   if (node.node_type === "ParentRefService") return "text-neutral-500 italic";
+  if (node.node_type === "ParentRefs" || node.node_type === "Dop") return "text-neutral-200 font-medium";
   return "text-neutral-300";
 }
 
@@ -50,12 +106,15 @@ const legendItems: Badge[] = [
   { label: "R+",  bg: "bg-emerald-500/20", fg: "text-emerald-300" },
   { label: "R-",  bg: "bg-rose-500/20",   fg: "text-rose-300" },
   { label: "FC",  bg: "bg-orange-500/20", fg: "text-orange-300" },
+  { label: "DOP", bg: "bg-pink-500/20",   fg: "text-pink-300" },
   { label: "SDG", bg: "bg-lime-500/20",   fg: "text-lime-300" },
-  { label: "INH", bg: "bg-gray-500/15",   fg: "text-gray-500" },
+  { label: "INH", bg: "bg-neutral-500/15", fg: "text-neutral-500" },
+  { label: "REF", bg: "bg-cyan-500/20",   fg: "text-cyan-300" },
 ];
 const legendLabels: Record<string, string> = {
   SVC: "Service", JOB: "Job", REQ: "Request", "R+": "Pos-Response", "R-": "Neg-Response",
-  FC: "Functional Class", SDG: "Special Data Group", INH: "Inherited",
+  FC: "Functional Class", DOP: "DOP / Structure", SDG: "Special Data Group",
+  INH: "Inherited", REF: "Parent References",
 };
 
 async function onClick(node: VisibleNode) {
@@ -126,6 +185,7 @@ async function onChevronClick(e: Event, node: VisibleNode) {
         :style="{ paddingLeft: `${node.depth * 14 + 6}px` }"
         @click="onClick(node)"
         @dblclick="onDblClick(node)"
+        @contextmenu="onContextMenu($event, node)"
       >
         <!-- Chevron -->
         <span
@@ -156,5 +216,46 @@ async function onChevronClick(e: Event, node: VisibleNode) {
         <span class="truncate text-[12px] leading-tight" :class="nodeTextClass(node)">{{ node.text }}</span>
       </div>
     </div>
+
+    <!-- Context menu -->
+    <Teleport to="body">
+      <div
+        v-if="ctxMenu"
+        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-[12px]"
+        :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+      >
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('select')">
+          View details
+        </button>
+        <button
+          v-if="ctxMenu.node.has_children"
+          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors"
+          @click="ctxAction('expand')"
+        >
+          {{ ctxMenu.node.expanded ? 'Collapse' : 'Expand' }}
+        </button>
+        <div class="h-px bg-neutral-800 my-1" />
+        <button
+          v-if="ctxMenu.node.node_type === 'ParentRefService'"
+          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors"
+          @click="ctxAction('goToParent')"
+        >
+          Go to parent definition
+        </button>
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('copyName')">
+          Copy name
+        </button>
+        <div class="h-px bg-neutral-800 my-1" />
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('sort')">
+          Sort tree
+        </button>
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('expandAll')">
+          Expand all
+        </button>
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('collapseAll')">
+          Collapse all
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
