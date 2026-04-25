@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useAppStore } from "../stores/app";
-import type { DetailSection, DetailContent } from "../api/commands";
+import type { DetailSection, DetailContent, JumpTarget } from "../api/commands";
 
 const store = useAppStore();
 
@@ -48,6 +48,12 @@ function diffRowClass(status: string | null): string {
   if (status === "Removed") return "bg-red-950/30 line-through";
   if (status === "Modified") return "bg-yellow-950/20";
   return "";
+}
+
+async function onCellClick(target: JumpTarget | null) {
+  if (target) {
+    await store.navigateTo(target);
+  }
 }
 </script>
 
@@ -135,6 +141,7 @@ function diffRowClass(status: string | null): string {
                       'font-semibold': cell.cell_type === 'ParameterName',
                     }"
                     :style="ci === 0 ? { paddingLeft: `${row.indent * 8 + 8}px` } : {}"
+                    @click="onCellClick(cell.jump_target)"
                   >
                     {{ cell.text }}
                   </td>
@@ -189,6 +196,10 @@ function diffRowClass(status: string | null): string {
                           v-for="(cell, ci) in row.cells"
                           :key="ci"
                           class="px-2 py-0.5 text-gray-300"
+                          :class="{
+                            'text-blue-400 cursor-pointer hover:underline': cell.jump_target,
+                          }"
+                          @click="onCellClick(cell.jump_target)"
                         >
                           {{ cell.text }}
                         </td>

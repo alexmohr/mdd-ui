@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use mdd_core::tree::{
     DiffStatus, DetailSectionData, NodeType, TreeNode,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 // ---------------------------------------------------------------------------
@@ -37,6 +37,25 @@ pub struct SearchResult {
     pub visible: Vec<VisibleNode>,
     pub match_count: usize,
     pub scope: String,
+}
+
+#[derive(Serialize)]
+pub struct NavigateResult {
+    pub visible: Vec<VisibleNode>,
+    pub target_index: usize,
+    pub detail: Vec<DetailSectionData>,
+}
+
+#[derive(Deserialize)]
+pub struct JumpTarget {
+    pub target_type: JumpTargetType,
+}
+
+#[derive(Deserialize)]
+pub enum JumpTargetType {
+    Parameter { param_id: u32 },
+    Dop { index: usize, name: String },
+    TreeNodeByIndex { index: usize, short_name: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -438,4 +457,99 @@ pub fn toggle_hide_unchanged(state: State<'_, AppState>) -> Result<Vec<VisibleNo
     core.hide_unchanged = !core.hide_unchanged;
     core.visible = build_visible(&core);
     Ok(to_visible_nodes(&core))
+}
+
+#[tauri::command]
+pub fn navigate_to(
+    target: JumpTarget,
+    state: State<'_, AppState>,
+) -> Result<NavigateResult, String> {
+    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+
+    let target_idx = resolve_jump_target(&core.all_nodes, &target.target_type)
+        .ok_or_else(|| "Could not resolve navigation target".to_owned())?;
+
+    // Expand all ancestors so the target becomes visible
+    expand_ancestors(&mut core.all_nodes, target_idx);
+    core.visible = build_visible(&core);
+
+    let detail = core
+        .all_nodes
+        .get(target_idx)
+        .map(|n| n.detail_sections.to_vec())
+        .unwrap_or_default();
+
+    Ok(NavigateResult {
+        visible: to_visible_nodes(&core),
+        target_index: target_idx,
+        detail,
+    })
+}
+
+/// Resolve a jump target to a concrete node index.
+fn resolve_jump_target(nodes: &[TreeNode], target: &JumpTargetType) -> Option<usize> {
+    match target {
+        JumpTargetType::TreeNodeByIndex { index, short_name } => {
+            // Verify the index still points to the right node; fallback to name search
+            if nodes.get(*index).is_some_and(|n| {
+                n.short_name().is_some_and(|sn| sn == short_name)
+                    || n.service_short_name().is_some_and(|sn| sn == short_name)
+                    || n.text == *short_name
+            }) {
+                Some(*index)
+            } else {
+                // Fallback: search by name
+                nodes.iter().position(|n| {
+                    n.short_name().is_some_and(|sn| sn == short_name)
+                        || n.service_short_name().is_some_and(|sn| sn == short_name)
+                        || n.text == *short_name
+                })
+            }
+        }
+        JumpTargetType::Dop { index, name } => {
+            if nodes.get(*index).is_some_and(|n| {
+                n.short_name().is_some_and(|sn| sn == name) || n.text == *name
+            }) {
+                Some(*index)
+            } else {
+                nodes.iter().position(|n| {
+                    n.short_name().is_some_and(|sn| sn == name) || n.text == *name
+                })
+            }
+        }
+        JumpTargetType::Parameter { param_id } => {
+            nodes.iter().position(|n| n.param_id() == Some(*param_id))
+        }
+    }
+}
+
+/// Expand all ancestor nodes so that `target_idx` becomes visible.
+fn expand_ancestors(nodes: &mut [TreeNode], target_idx: usize) {
+    let Some(target) = nodes.get(target_idx) else {
+        return;
+    };
+    let target_depth = target.depth;
+    if target_depth == 0 {
+        return;
+    }
+
+    // Walk backward to find ancestors at each decreasing depth level.
+    // Collect indices first, then mutate, to avoid borrow conflicts.
+    let mut ancestors = Vec::new();
+    let mut depth_needed = target_depth;
+    for i in (0..target_idx).rev() {
+        let Some(node) = nodes.get(i) else { continue };
+        if node.depth < depth_needed {
+            ancestors.push(i);
+            depth_needed = node.depth;
+            if depth_needed == 0 {
+                break;
+            }
+        }
+    }
+    for idx in ancestors {
+        if let Some(n) = nodes.get_mut(idx) {
+            n.expanded = true;
+        }
+    }
 }

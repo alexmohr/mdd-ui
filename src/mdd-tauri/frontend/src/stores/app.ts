@@ -3,6 +3,7 @@ import { ref, computed } from "vue";
 import type {
   VisibleNode,
   DetailSection,
+  JumpTarget,
 } from "../api/commands";
 import * as api from "../api/commands";
 
@@ -131,6 +132,18 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
+  async function navigateTo(target: JumpTarget) {
+    try {
+      const result = await api.navigateTo(target);
+      nodes.value = result.visible;
+      selectedIndex.value = result.target_index;
+      detailSections.value = result.detail;
+      selectedTab.value = 0;
+    } catch (e) {
+      status.value = `Navigation failed: ${e}`;
+    }
+  }
+
   return {
     nodes,
     ecuName,
@@ -155,5 +168,6 @@ export const useAppStore = defineStore("app", () => {
     expandAll,
     collapseAll,
     toggleHideUnchanged,
+    navigateTo,
   };
 });
