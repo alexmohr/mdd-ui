@@ -32,7 +32,7 @@ async function ctxAction(action: string) {
     case "copyName":
       await navigator.clipboard.writeText(node.text);
       break;
-    case "sort": await store.toggleSort(); break;
+    case "sort": await store.toggleSort(node.index); break;
   }
 }
 
@@ -44,7 +44,7 @@ function nodeBadge(node: VisibleNode): Badge | null {
   switch (node.node_type) {
     case "Service":          return { label: "SVC",  bg: "bg-violet-500/20",  fg: "text-violet-300" };
     case "Job":              return { label: "JOB",  bg: "bg-violet-500/15",  fg: "text-violet-300/70" };
-    case "ParentRefService": return { label: "INH",  bg: "bg-neutral-500/15", fg: "text-neutral-500" };
+    case "ParentRefService": return { label: "INH",  bg: "bg-amber-500/15",   fg: "text-amber-400" };
     case "Request":          return { label: "REQ",  bg: "bg-teal-500/20",    fg: "text-teal-300" };
     case "PosResponse":      return { label: "R+",   bg: "bg-emerald-500/20", fg: "text-emerald-300" };
     case "NegResponse":      return { label: "R-",   bg: "bg-rose-500/20",    fg: "text-rose-300" };
@@ -108,7 +108,7 @@ const legendItems: Badge[] = [
   { label: "FC",  bg: "bg-orange-500/20", fg: "text-orange-300" },
   { label: "DOP", bg: "bg-pink-500/20",   fg: "text-pink-300" },
   { label: "SDG", bg: "bg-lime-500/20",   fg: "text-lime-300" },
-  { label: "INH", bg: "bg-neutral-500/15", fg: "text-neutral-500" },
+  { label: "INH", bg: "bg-amber-500/15",   fg: "text-amber-400" },
   { label: "REF", bg: "bg-cyan-500/20",   fg: "text-cyan-300" },
 ];
 const legendLabels: Record<string, string> = {
