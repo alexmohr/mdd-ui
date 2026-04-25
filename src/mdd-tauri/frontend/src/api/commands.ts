@@ -110,8 +110,8 @@ export async function cycleSearchScope(): Promise<string> {
   return invoke<string>("cycle_search_scope");
 }
 
-export async function toggleSort(): Promise<VisibleNode[]> {
-  return invoke<VisibleNode[]>("toggle_sort");
+export async function toggleSort(nodeIndex?: number): Promise<VisibleNode[]> {
+  return invoke<VisibleNode[]>("toggle_sort", { nodeIndex: nodeIndex ?? null });
 }
 
 export async function expandAll(): Promise<VisibleNode[]> {

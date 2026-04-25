@@ -180,10 +180,11 @@ export const useAppStore = defineStore("app", () => {
   function increaseFontSize() { fontSize.value = Math.min(20, fontSize.value + 1); }
   function decreaseFontSize() { fontSize.value = Math.max(9, fontSize.value - 1); }
 
-  async function toggleSort() {
+  async function toggleSort(nodeIndex?: number) {
     try {
-      nodes.value = await api.toggleSort();
-      status.value = "Sort toggled";
+      const idx = nodeIndex ?? selectedIndex.value ?? undefined;
+      nodes.value = await api.toggleSort(idx);
+      status.value = "Sorted";
     } catch (e) {
       status.value = `Error: ${e}`;
     }
