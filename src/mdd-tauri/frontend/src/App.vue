@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useAppStore } from "./stores/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import TreePane from "./components/TreePane.vue";
@@ -39,13 +39,16 @@ function handleKeydown(e: KeyboardEvent) {
 
   switch (e.key) {
     case "/": e.preventDefault(); store.searchActive = true; break;
-    case "Backspace": store.goBack(); break;
+    case "Backspace": e.preventDefault(); store.goBack(); break;
     case "e": store.expandAll(); break;
     case "c": store.collapseAll(); break;
     case "u": if (store.isDiff) store.toggleHideUnchanged(); break;
     case "x": store.clearSearch(); break;
   }
 }
+
+onMounted(() => window.addEventListener("keydown", handleKeydown));
+onUnmounted(() => window.removeEventListener("keydown", handleKeydown));
 
 function onSplitMouseDown() {
   dragging.value = true;
@@ -67,8 +70,6 @@ function onSplitMouseDown() {
   <div
     class="flex flex-col h-screen bg-[#0c0e14] text-gray-300 text-[13px] antialiased"
     :class="{ 'select-none': dragging }"
-    @keydown="handleKeydown"
-    tabindex="0"
   >
     <!-- Welcome screen -->
     <template v-if="!store.fileLoaded">
