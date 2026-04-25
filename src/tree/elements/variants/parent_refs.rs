@@ -339,7 +339,10 @@ fn make_dop_row(name: &str) -> DetailRow {
     DetailRow::normal(
         vec![
             DetailCell::new(dop_name.clone(), CellType::DopReference).with_jump(
-                CellJumpTarget::new(CellJumpTargetType::Dop { index: usize::MAX, name: dop_name }),
+                CellJumpTarget::new(CellJumpTargetType::Dop {
+                    index: usize::MAX,
+                    name: dop_name,
+                }),
             ),
         ],
         0,

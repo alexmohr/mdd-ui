@@ -191,81 +191,18 @@ impl App {
             .to_owned()
     }
 
-    /// Navigate to parent service in the container
+    /// Navigate to parent service in the container.
+    /// Uses the path-based lookup (container → Diag-Comms section → service)
+    /// with automatic parent-ref fallback via `find_by_section_path`.
+    /// `navigate_to_node` handles ancestor expansion and visibility.
     pub(super) fn navigate_to_parent_service(&mut self, container_idx: usize, service_name: &str) {
-        // Expand ancestors and container
-        self.expand_node_ancestors(container_idx);
-
-        if let Some(node) = self.tree.all_nodes.get(container_idx)
-            && node.has_children
-            && let Some(node_mut) = self.tree.all_nodes.get_mut(container_idx)
-        {
-            node_mut.expanded = true;
-        }
-
-        // Find Diag-Comms section
-        let Some(dc_idx) = self.find_diagcomm_section(container_idx) else {
-            self.rebuild_visible();
-            self.navigate_to_node(container_idx);
-            return;
-        };
-
-        if let Some(node_mut) = self.tree.all_nodes.get_mut(dc_idx) {
-            node_mut.expanded = true;
-        }
-        self.rebuild_visible();
-
         let target = self
-            .find_service_in_diagcomm(dc_idx, service_name)
+            .find_by_section_path(
+                container_idx,
+                crate::tree::ServiceListType::DiagComms,
+                service_name,
+            )
             .unwrap_or(container_idx);
         self.navigate_to_node(target);
-    }
-
-    /// Find the Diag-Comms section within a container
-    pub(super) fn find_diagcomm_section(&self, container_idx: usize) -> Option<usize> {
-        let container = self.tree.all_nodes.get(container_idx)?;
-        let container_depth = container.depth;
-
-        if let Some(children_slice) = self.tree.all_nodes.get(container_idx.saturating_add(1)..) {
-            children_slice
-                .iter()
-                .enumerate()
-                .take_while(|(_, child)| child.depth > container_depth)
-                .find(|(_, child)| {
-                    child.depth == container_depth.saturating_add(1)
-                        && Self::is_service_list_type(
-                            child,
-                            crate::tree::ServiceListType::DiagComms,
-                        )
-                })
-                .map(|(offset, _)| container_idx.saturating_add(1).saturating_add(offset))
-        } else {
-            None
-        }
-    }
-
-    /// Find a service by name within a Diag-Comms section
-    pub(super) fn find_service_in_diagcomm(
-        &self,
-        diagcomm_idx: usize,
-        service_name: &str,
-    ) -> Option<usize> {
-        let diagcomm_node = self.tree.all_nodes.get(diagcomm_idx)?;
-        let diagcomm_depth = diagcomm_node.depth;
-
-        if let Some(children_slice) = self.tree.all_nodes.get(diagcomm_idx.saturating_add(1)..) {
-            children_slice
-                .iter()
-                .enumerate()
-                .take_while(|(_, node)| node.depth > diagcomm_depth)
-                .filter(|(_, node)| node.depth == diagcomm_depth.saturating_add(1))
-                .find(|(_, node)| {
-                    node.service_short_name()
-                        .is_some_and(|sn| sn == service_name)
-                })
-                .map(|(offset, _)| diagcomm_idx.saturating_add(1).saturating_add(offset))
-        } else {
-            None
-        }
     }
 }

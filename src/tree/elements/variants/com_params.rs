@@ -163,7 +163,10 @@ fn dop_row(key: &str, dop_name: &str) -> DetailRow {
         vec![
             DetailCell::text(key),
             DetailCell::new(value, CellType::DopReference).with_jump(CellJumpTarget::new(
-                CellJumpTargetType::Dop { index: usize::MAX, name: nav_name },
+                CellJumpTargetType::Dop {
+                    index: usize::MAX,
+                    name: nav_name,
+                },
             )),
         ],
         0,
