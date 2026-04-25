@@ -12,7 +12,7 @@ use super::{
     App, COMPOSITE_SCROLL_STEP, DIVIDER_MAX_PCT, DIVIDER_MIN_PCT, FocusState, PAGE_SIZE,
     TREE_WIDTH_STEP,
 };
-use crate::tree::DiffStatus;
+use mdd_core::tree::DiffStatus;
 
 /// Result of processing a key press.
 pub enum Action {

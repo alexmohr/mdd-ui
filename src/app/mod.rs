@@ -30,7 +30,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
 };
 
-use crate::tree::{DetailSectionType, NodeType, TreeNode};
+use mdd_core::tree::{DetailSectionType, NodeType, TreeNode};
 
 // -----------------------------------------------------------------------
 // Layout & interaction constants
@@ -453,7 +453,7 @@ impl App {
         };
         // Apply initial sort order (default is by ID)
         app.sort_diagcomm_nodes_in_place();
-        crate::tree::resolve_all_indices(&mut app.tree.all_nodes);
+        mdd_core::tree::resolve_all_indices(&mut app.tree.all_nodes);
         app.rebuild_visible();
         app
     }
@@ -466,17 +466,17 @@ impl App {
         matches!(
             node.service_list_type(),
             Some(
-                crate::tree::ServiceListType::DiagComms
-                    | crate::tree::ServiceListType::Requests
-                    | crate::tree::ServiceListType::PosResponses
-                    | crate::tree::ServiceListType::NegResponses
-                    | crate::tree::ServiceListType::FunctionalClasses
+                mdd_core::tree::ServiceListType::DiagComms
+                    | mdd_core::tree::ServiceListType::Requests
+                    | mdd_core::tree::ServiceListType::PosResponses
+                    | mdd_core::tree::ServiceListType::NegResponses
+                    | mdd_core::tree::ServiceListType::FunctionalClasses
             )
         )
     }
 
     /// Helper: Check if a node is a specific service list type
-    fn is_service_list_type(node: &TreeNode, list_type: crate::tree::ServiceListType) -> bool {
+    fn is_service_list_type(node: &TreeNode, list_type: mdd_core::tree::ServiceListType) -> bool {
         node.service_list_type() == Some(list_type)
     }
 
@@ -546,7 +546,7 @@ impl App {
             && first_section.render_as_header
             && matches!(
                 &first_section.content,
-                crate::tree::DetailContent::PlainText(_)
+                mdd_core::tree::DetailContent::PlainText(_)
             )
         {
             return 1;
@@ -565,7 +565,7 @@ impl App {
         let section_idx = self.get_section_index();
         node.detail_sections
             .get(section_idx)
-            .is_some_and(|s| matches!(s.content, crate::tree::DetailContent::Composite(_)))
+            .is_some_and(|s| matches!(s.content, mdd_core::tree::DetailContent::Composite(_)))
     }
 
     /// Update the selected tab and persist it generically for the current section type

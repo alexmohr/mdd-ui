@@ -14,10 +14,8 @@ use ratatui::{
 };
 
 use super::{render_horizontal_scrollbar, render_scrollbar};
-use crate::{
-    app::{App, COLUMN_SPACING, FocusState, SortDirection, TableSortState},
-    tree::{CellType, DetailRow, DiffStatus},
-};
+use crate::app::{App, COLUMN_SPACING, FocusState, SortDirection, TableSortState};
+use mdd_core::tree::{CellType, DetailRow, DiffStatus};
 
 /// Describes how a particular cell should be highlighted.
 #[derive(Clone, Copy)]
@@ -36,7 +34,7 @@ pub(super) struct TableContentParams<'a> {
     pub inner: Rect,
     pub header: &'a DetailRow,
     pub rows: &'a [DetailRow],
-    pub constraints: &'a [crate::tree::ColumnConstraint],
+    pub constraints: &'a [mdd_core::tree::ColumnConstraint],
     pub section_idx: usize,
     pub use_row_selection: bool,
 }
@@ -500,7 +498,7 @@ impl App {
                     (self.focus_state == FocusState::Detail) && absolute_row_idx == cursor_pos;
 
                 let is_child_element =
-                    matches!(row_data.row_type, crate::tree::DetailRowType::ChildElement);
+                    matches!(row_data.row_type, mdd_core::tree::DetailRowType::ChildElement);
                 let row_diff = row_data.diff_status;
                 let mut cells: Vec<Cell> = row_data
                     .cells
@@ -608,7 +606,7 @@ impl App {
     pub(super) fn get_column_widths(
         &mut self,
         section_idx: usize,
-        constraints: &[crate::tree::ColumnConstraint],
+        constraints: &[mdd_core::tree::ColumnConstraint],
     ) -> Vec<u16> {
         self.table.ensure_column_width_capacity(section_idx);
 
@@ -633,11 +631,11 @@ impl App {
                 let mut widths: Vec<u16> = constraints
                     .iter()
                     .map(|c| match c {
-                        crate::tree::ColumnConstraint::Fixed(w) => {
+                        mdd_core::tree::ColumnConstraint::Fixed(w) => {
                             // Convert fixed width to a reasonable percentage
                             w.saturating_mul(3).saturating_div(2).clamp(3, 15)
                         }
-                        crate::tree::ColumnConstraint::Percentage(p) => *p,
+                        mdd_core::tree::ColumnConstraint::Percentage(p) => *p,
                     })
                     .collect();
 

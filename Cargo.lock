@@ -1114,15 +1114,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "mdd-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cda-database",
+ "cda-interfaces",
+ "serde",
+]
+
+[[package]]
 name = "mdd-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "arboard",
- "cda-database",
- "cda-interfaces",
  "clap",
  "crossterm",
+ "mdd-core",
  "ratatui",
  "rmcp",
  "serde",

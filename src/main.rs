@@ -4,14 +4,12 @@
  */
 
 mod app;
-mod database;
-mod diff;
 #[cfg(feature = "mcp")]
 mod mcp;
-mod tree;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
+use mdd_core::{database, tree};
 
 #[derive(Parser)]
 #[command(name = "mdd-ui", about = "Browse and compare MDD diagnostic databases")]
@@ -131,7 +129,7 @@ fn run_browse(mdd_file: &str, theme_file: Option<&str>) -> Result<()> {
     let db = database::load_mdd(mdd_file).with_context(|| format!("Failed to load: {mdd_file}"))?;
 
     eprintln!("Building tree...");
-    let (nodes, ecu_name) = tree::build_tree(&db, mdd_file);
+    let (nodes, ecu_name) = mdd_core::tree::build_tree(&db, mdd_file);
     eprintln!("Loaded {} nodes. Starting UI...", nodes.len());
 
     run_tui(nodes, ecu_name, theme, false)
@@ -149,7 +147,7 @@ fn run_diff(old_file: &str, new_file: &str, theme_file: Option<&str>) -> Result<
         database::load_mdd(new_file).with_context(|| format!("Failed to load: {new_file}"))?;
 
     eprintln!("Building diff tree...");
-    let (nodes, ecu_name) = diff::diff_tree::build_diff_tree(&db_old, &db_new, old_file, new_file);
+    let (nodes, ecu_name) = mdd_core::diff::diff_tree::build_diff_tree(&db_old, &db_new, old_file, new_file);
     eprintln!("Built {} diff tree nodes. Starting UI...", nodes.len());
 
     run_tui(nodes, ecu_name, theme, true)
@@ -165,23 +163,23 @@ fn run_export_diff(old_file: &str, new_file: &str, output: Option<&str>) -> Resu
         database::load_mdd(new_file).with_context(|| format!("Failed to load: {new_file}"))?;
 
     eprintln!("Extracting snapshots...");
-    let snap_old = diff::snapshot::EcuSnapshot::from_database(&db_old)
+    let snap_old = mdd_core::diff::snapshot::EcuSnapshot::from_database(&db_old)
         .context("Failed to extract old database snapshot")?;
-    let snap_new = diff::snapshot::EcuSnapshot::from_database(&db_new)
+    let snap_new = mdd_core::diff::snapshot::EcuSnapshot::from_database(&db_new)
         .context("Failed to extract new database snapshot")?;
 
     eprintln!("Comparing...");
-    let diff_result = diff::compare::compare(&snap_old, &snap_new);
+    let diff_result = mdd_core::diff::compare::compare(&snap_old, &snap_new);
 
     if let Some(path) = output {
         let mut file = std::fs::File::create(path)
             .with_context(|| format!("Failed to create output file: {path}"))?;
-        diff::export::write_text_report(&mut file, &diff_result)
+        mdd_core::diff::export::write_text_report(&mut file, &diff_result)
             .context("Failed to write report")?;
         eprintln!("Report written to {path}");
     } else {
         let mut stdout = std::io::stdout().lock();
-        diff::export::write_text_report(&mut stdout, &diff_result)
+        mdd_core::diff::export::write_text_report(&mut stdout, &diff_result)
             .context("Failed to write report")?;
     }
 

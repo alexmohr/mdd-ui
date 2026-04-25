@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Alexander Mohr
 
+[workspace]
+members = ["crates/mdd-core"]
+
 [package]
 name = "mdd-ui"
 version = "0.1.0"
@@ -11,8 +14,7 @@ license = "Apache-2.0"
 mcp = ["dep:rmcp", "dep:tokio", "dep:serde_json"]
 
 [dependencies]
-cda-database = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "c1c9db5c9b95b790fa3e905ac1c04d38880a532e" }
-cda-interfaces = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", rev = "c1c9db5c9b95b790fa3e905ac1c04d38880a532e" }
+mdd-core = { path = "crates/mdd-core" }
 
 # TUI
 ratatui = "0.30.0"
