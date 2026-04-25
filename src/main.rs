@@ -147,7 +147,8 @@ fn run_diff(old_file: &str, new_file: &str, theme_file: Option<&str>) -> Result<
         database::load_mdd(new_file).with_context(|| format!("Failed to load: {new_file}"))?;
 
     eprintln!("Building diff tree...");
-    let (nodes, ecu_name) = mdd_core::diff::diff_tree::build_diff_tree(&db_old, &db_new, old_file, new_file);
+    let (nodes, ecu_name) =
+        mdd_core::diff::diff_tree::build_diff_tree(&db_old, &db_new, old_file, new_file);
     eprintln!("Built {} diff tree nodes. Starting UI...", nodes.len());
 
     run_tui(nodes, ecu_name, theme, true)

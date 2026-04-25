@@ -201,6 +201,10 @@ pub struct AudienceSnapshot {
 
 impl EcuSnapshot {
     /// Build an owned snapshot from a loaded `DiagnosticDatabase`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if ECU data cannot be read from the database.
     pub fn from_database(db: &DiagnosticDatabase) -> Result<Self> {
         let ecu = db.ecu_data().context("Failed to read ECU data")?;
         let name = db.ecu_name().unwrap_or_else(|_| "Unknown ECU".to_owned());
@@ -301,6 +305,7 @@ impl VariantSnapshot {
 }
 
 impl FunctionalGroupSnapshot {
+    #[must_use]
     pub fn from_functional_group(layer: &DiagLayer<'_>) -> Self {
         Self {
             diag_layer: DiagLayerSnapshot::from_layer(layer),
@@ -313,6 +318,7 @@ impl FunctionalGroupSnapshot {
 // ---------------------------------------------------------------------------
 
 impl DiagLayerSnapshot {
+    #[must_use]
     pub fn from_layer(layer: &DiagLayer<'_>) -> Self {
         let short_name = s(layer.short_name());
         let long_name = layer
@@ -438,6 +444,7 @@ impl DiagServiceSnapshot {
 // ---------------------------------------------------------------------------
 
 impl DiagCommSnapshot {
+    #[must_use]
     pub fn from_diag_comm(dc: &DiagComm<'_>) -> Self {
         let short_name = s(dc.short_name());
         let long_name = dc
@@ -486,6 +493,7 @@ impl DiagCommSnapshot {
 // ---------------------------------------------------------------------------
 
 impl ParamSnapshot {
+    #[must_use]
     pub fn from_param(param: &Parameter<'_>) -> Self {
         let short_name = s(param.short_name());
         let semantic = s(param.semantic());
@@ -558,6 +566,7 @@ fn build_specific_data_summary(param: &Parameter<'_>) -> String {
 // ---------------------------------------------------------------------------
 
 impl StateChartSnapshot {
+    #[must_use]
     pub fn from_chart(chart: &StateChart<'_>) -> Self {
         let short_name = s(chart.short_name());
         let semantic = s(chart.semantic());

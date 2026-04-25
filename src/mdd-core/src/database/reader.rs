@@ -12,6 +12,7 @@ pub struct DatabaseData<'a> {
 }
 
 /// Read and extract data from the database without building tree structure
+#[must_use]
 pub fn extract_data(db: &DiagnosticDatabase) -> DatabaseData<'_> {
     let ecu_name = db.ecu_name().unwrap_or_else(|_| "Unknown ECU".into());
     let ecu = db.ecu_data().ok().map(|ecu_data| EcuDb(*ecu_data));
@@ -20,6 +21,7 @@ pub fn extract_data(db: &DiagnosticDatabase) -> DatabaseData<'_> {
 }
 
 /// Get ECU summary lines
+#[must_use]
 pub fn get_ecu_summary(db: &DiagnosticDatabase, ecu_name: &str, file_path: &str) -> Vec<String> {
     let mut d = vec![
         format!("ECU Name: {ecu_name}"),

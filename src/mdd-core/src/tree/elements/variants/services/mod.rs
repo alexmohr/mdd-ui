@@ -60,3 +60,31 @@ pub fn extract_dop_name(param: &Parameter<'_>) -> String {
         .map(std::borrow::ToOwned::to_owned)
         .unwrap_or_default()
 }
+
+/// Extract a type badge string for the DOP referenced by a `Value`-type parameter.
+/// Returns an empty string if no DOP is found or the type cannot be determined.
+pub fn extract_dop_badge(param: &Parameter<'_>) -> &'static str {
+    use cda_database::datatypes::DataOperationVariant;
+
+    if !matches!(param.param_type(), Ok(ParamType::Value)) {
+        return "";
+    }
+
+    let Some(raw_dop) = param.specific_data_as_value().and_then(|vd| vd.dop()) else {
+        return "";
+    };
+    let dop = cda_database::datatypes::DataOperation(raw_dop);
+
+    match dop.variant() {
+        Ok(DataOperationVariant::Normal(_)) => "[DOP] ",
+        Ok(DataOperationVariant::Dtc(_)) => "[DTC] ",
+        Ok(DataOperationVariant::Structure(_)) => "[Struct] ",
+        Ok(DataOperationVariant::StaticField(_)) => "[SField] ",
+        Ok(DataOperationVariant::DynamicLengthField(_)) => "[DynLen] ",
+        Ok(DataOperationVariant::EndOfPdu(_)) => "[EoPdu] ",
+        Ok(DataOperationVariant::Mux(_)) => "[Mux] ",
+        Ok(DataOperationVariant::EnvData(_)) => "[EnvData] ",
+        Ok(DataOperationVariant::EnvDataDesc(_)) => "[EnvDesc] ",
+        _ => "",
+    }
+}

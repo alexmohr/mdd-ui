@@ -3,6 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
+use mdd_core::tree::{DetailContent, DetailRow, DetailSectionData};
 use ratatui::{
     Frame,
     layout::{Constraint, Rect},
@@ -12,7 +13,6 @@ use ratatui::{
 
 use super::render_scrollbar;
 use crate::app::{App, COLUMN_SPACING};
-use mdd_core::tree::{DetailContent, DetailRow, DetailSectionData};
 
 /// Shared table fields used by both `TitledTable` and `Table` composite blocks.
 /// Extracting them into a struct means adding a new field (e.g., `use_row_selection`)

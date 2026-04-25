@@ -156,26 +156,22 @@ mdd-ui also includes a desktop application built with [Tauri](https://tauri.app/
 
 - Rust **2024 edition** (1.85+)
 - [Bun](https://bun.sh/) (for the frontend build)
-- Node.js dependencies (installed via bun)
+- [Tauri CLI](https://tauri.app/start/create-project/#manual-setup-tauri-cli) (`cargo install tauri-cli --locked`)
 
 #### Running the Tauri UI (Development Mode)
 
 ```sh
-cd src/mdd-tauri
-bun install
-bun tauri dev
+cargo tauri dev
 ```
 
-This will start the development server with hot-reloading enabled.
+This will automatically install frontend dependencies, start the Vite dev server, and launch the Tauri window with hot-reloading enabled.
 
-#### Building the Tauri UI (Manual Release Build)
+#### Building the Tauri UI (Release Build)
 
 To build a release binary for your current platform:
 
 ```sh
-cd src/mdd-tauri
-bun install
-bun tauri build
+cargo tauri build
 ```
 
 The built application will be in `src/mdd-tauri/target/release/bundle/` with platform-specific installers:
@@ -186,8 +182,7 @@ The built application will be in `src/mdd-tauri/target/release/bundle/` with pla
 To build for a specific target platform, use the `--target` flag:
 
 ```sh
-# Example: Build for Windows from Linux
-bun tauri build --target x86_64-pc-windows-msvc
+cargo tauri build --target x86_64-pc-windows-msvc
 ```
 
 #### Automated Release Builds
@@ -292,47 +287,42 @@ See [config.example.toml](config.example.toml) for the full reference with all d
 
 ## Project Structure
 
+This is a Cargo workspace with three crates:
+
 ```
 src/
-├── main.rs              # CLI parsing, database loading, TUI bootstrap
-├── app/                 # Application state and TUI logic
-│   ├── mod.rs           #   Core App struct, event loop, state types
-│   ├── config.rs        #   Theme/colour configuration loading
-│   ├── cursor.rs        #   Cursor and scroll management
-│   ├── history.rs       #   Navigation history / breadcrumbs
-│   ├── input.rs         #   Keyboard input handling
-│   ├── mouse.rs         #   Mouse event handling
-│   ├── navigation.rs    #   Jump-target resolution and tree navigation
-│   ├── render.rs        #   Drawing: tree pane, detail pane, popups
-│   ├── search.rs        #   Search / filter stack logic
-│   ├── sort.rs          #   Sorting (DiagComms, table columns)
-│   ├── column_widths.rs #   Per-section column width management
-│   └── visibility.rs    #   Visible-node calculation after search/collapse
-├── database/            # MDD file loading and data extraction
-│   ├── mod.rs
-│   └── reader.rs
-├── diff/                # Diff functionality
-│   ├── mod.rs
-│   ├── snapshot.rs
-│   ├── compare.rs
-│   ├── diff_tree.rs
-│   └── export.rs
-├── mcp/                 # MCP server (optional, behind "mcp" feature)
+├── main.rs                  # CLI parsing, database loading, TUI bootstrap
+├── app/                     # TUI application state and logic
+│   ├── mod.rs               #   Core App struct, event loop, state types
+│   ├── clipboard.rs         #   Clipboard integration
+│   ├── column_widths.rs     #   Per-section column width management
+│   ├── config.rs            #   Theme/colour configuration loading
+│   ├── cursor.rs            #   Cursor and scroll management
+│   ├── history.rs           #   Navigation history / breadcrumbs
+│   ├── input.rs             #   Keyboard input handling
+│   ├── mouse/               #   Mouse event handling (areas, clicks, drag)
+│   ├── navigation/          #   Jump-target resolution and tree navigation
+│   ├── render/              #   Drawing: tree pane, detail pane, popups, tables
+│   ├── search.rs            #   Search / filter stack logic
+│   ├── sort.rs              #   Sorting (DiagComms, table columns)
+│   └── visibility.rs        #   Visible-node calculation after search/collapse
+├── mcp/                     # MCP server (optional, behind "mcp" feature)
 │   └── mod.rs
-└── tree/                # Tree model
-    ├── mod.rs           #   build_tree entry point
-    ├── builder.rs       #   TreeBuilder helper
-    ├── types.rs         #   TreeNode, NodeType, DetailSection, etc.
-    └── elements/        #   One module per database element type
-        ├── dtcs.rs
-        ├── layers.rs
-        └── variants/
-            ├── services.rs
-            ├── requests.rs
-            ├── responses.rs
-            ├── dops/
-            ├── ...
-            └── mod.rs
+├── mdd-core/                # Shared library crate
+│   └── src/
+│       ├── lib.rs
+│       ├── database/        #   MDD file loading and data extraction
+│       ├── diff/            #   Diff functionality (snapshot, compare, export)
+│       └── tree/            #   Tree model, builder, types, and element modules
+└── mdd-tauri/               # Tauri desktop application crate
+    ├── src/
+    │   ├── main.rs          #   Tauri entry point
+    │   └── commands.rs      #   Tauri IPC commands
+    ├── frontend/            #   Vue.js + Vite frontend
+    │   ├── src/
+    │   ├── package.json
+    │   └── vite.config.ts
+    └── tauri.conf.json
 ```
 
 ## Dependencies
@@ -347,6 +337,7 @@ src/
 | [serde](https://serde.rs) + [toml](https://docs.rs/toml) | Theme configuration deserialization |
 | [rmcp](https://github.com/modelcontextprotocol/rust-sdk) | MCP server SDK (optional, `mcp` feature) |
 | [tokio](https://tokio.rs) | Async runtime for MCP server (optional, `mcp` feature) |
+| [tauri](https://tauri.app) | Desktop application framework (mdd-tauri crate) |
 
 ## License
 

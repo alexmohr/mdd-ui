@@ -10,6 +10,7 @@ mod table;
 pub(in crate::app) mod tabs;
 mod tree;
 
+use mdd_core::tree::{DiffStatus, NodeType, TreeNode};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -19,7 +20,6 @@ use ratatui::{
 
 use super::{App, BreadcrumbSegment, FocusState};
 use crate::app::config::ResolvedTheme;
-use mdd_core::tree::{DiffStatus, NodeType, TreeNode};
 
 const BREADCRUMB_SEPARATOR: &str = " > ";
 const BREADCRUMB_SEPARATOR_LEN: u16 = 3;
@@ -56,6 +56,15 @@ fn node_style(node: &TreeNode, theme: &ResolvedTheme) -> Style {
         | NodeType::FunctionalClass
         | NodeType::Job
         | NodeType::Sdg
+        | NodeType::DopNormal
+        | NodeType::DopDtc
+        | NodeType::DopStructure
+        | NodeType::DopStaticField
+        | NodeType::DopDynamic
+        | NodeType::DopEndOfPdu
+        | NodeType::DopMux
+        | NodeType::DopEnvData
+        | NodeType::DopEnvDataDesc
         | NodeType::Default => Style::default().fg(theme.tree_default_node),
     }
 }

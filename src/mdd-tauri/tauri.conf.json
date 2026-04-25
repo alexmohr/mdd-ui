@@ -6,18 +6,20 @@
   "build": {
     "frontendDist": "frontend/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "bun run dev",
-    "beforeBuildCommand": "bun run build"
+    "beforeDevCommand": "cd mdd-tauri/frontend && bun install && bun run dev",
+    "beforeBuildCommand": "cd mdd-tauri/frontend && bun install && bun run build"
   },
   "app": {
     "windows": [
       {
-        "title": "MDD UI",
+        "title": "",
         "width": 1280,
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
-        "resizable": true
+        "resizable": true,
+        "theme": "Dark",
+        "titleBarStyle": "Overlay"
       }
     ],
     "security": {
@@ -26,6 +28,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
   }
 }

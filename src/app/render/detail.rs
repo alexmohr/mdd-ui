@@ -5,6 +5,7 @@
 
 use std::{rc::Rc, sync::Arc};
 
+use mdd_core::tree::{DetailContent, DetailSectionData};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -14,7 +15,6 @@ use ratatui::{
 
 use super::{border_style, table::TableContentParams};
 use crate::app::{App, FocusState, TableSortState};
-use mdd_core::tree::{DetailContent, DetailSectionData};
 
 impl App {
     pub(in crate::app) fn draw_detail(&mut self, frame: &mut Frame, area: Rect) {

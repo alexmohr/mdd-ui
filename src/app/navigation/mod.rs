@@ -9,10 +9,11 @@ mod parent_ref;
 mod service;
 mod variant;
 
-use crate::app::App;
 use mdd_core::tree::{
     CellJumpTarget, CellJumpTargetType, DetailSectionType, NodeType, RowMetadata, SectionType,
 };
+
+use crate::app::App;
 
 impl App {
     pub(crate) fn handle_enter_in_detail_pane(&mut self) {

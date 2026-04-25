@@ -99,6 +99,7 @@ fn resolve_sections(
 
 /// Walk the entire database and produce a flat list of tree nodes ready for
 /// the TUI to display, together with the ECU name.
+#[must_use]
 pub fn build_tree(db: &DiagnosticDatabase, file_path: &str) -> (Vec<TreeNode>, String) {
     let mut b = TreeBuilder::new();
 

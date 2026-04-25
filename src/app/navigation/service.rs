@@ -3,8 +3,9 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use crate::app::App;
 use mdd_core::tree::{CellJumpTarget, CellJumpTargetType, DetailSectionType, NodeType, TreeNode};
+
+use crate::app::App;
 
 impl App {
     /// Handle Enter key for service nodes

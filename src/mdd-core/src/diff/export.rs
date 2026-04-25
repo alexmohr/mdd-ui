@@ -9,6 +9,10 @@ use crate::tree::DiffStatus;
 /// Writes a plain-text diff report to the given writer.
 ///
 /// Unchanged elements are omitted to keep output focused on actual changes.
+///
+/// # Errors
+///
+/// Returns an `io::Error` if any write to `w` fails.
 pub fn write_text_report(w: &mut impl Write, diff: &DiffResult) -> std::io::Result<()> {
     writeln!(w, "Comparing: {} vs {}", diff.old_name, diff.new_name)?;
     writeln!(

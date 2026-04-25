@@ -3,8 +3,9 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use super::{App, FocusState, SortDirection, TableSortState};
 use mdd_core::tree::TreeNode;
+
+use super::{App, DiagcommSortMode, FocusState, SortDirection, TableSortState};
 
 impl App {
     pub(crate) fn toggle_expand(&mut self) {
@@ -103,15 +104,11 @@ impl App {
             Self::is_service_list_type(sort_node, mdd_core::tree::ServiceListType::DiagComms);
 
         if is_diagcomms {
-            self.tree.diagcomm_sort_by_id = !self.tree.diagcomm_sort_by_id;
+            self.tree.diagcomm_sort = self.tree.diagcomm_sort.next();
             self.sort_diagcomm_nodes_in_place();
             mdd_core::tree::resolve_all_indices(&mut self.tree.all_nodes);
             self.rebuild_visible();
-            if self.tree.diagcomm_sort_by_id {
-                self.status = "Sort: by ID".into();
-            } else {
-                self.status = "Sort: by Name".into();
-            }
+            self.status = self.tree.diagcomm_sort.status_label().into();
         } else if sort_node.has_children {
             self.sort_children_by_name(sort_idx);
             mdd_core::tree::resolve_all_indices(&mut self.tree.all_nodes);
@@ -223,7 +220,9 @@ impl App {
             .all_nodes
             .iter()
             .enumerate()
-            .filter(|(_, n)| Self::is_service_list_type(n, mdd_core::tree::ServiceListType::DiagComms))
+            .filter(|(_, n)| {
+                Self::is_service_list_type(n, mdd_core::tree::ServiceListType::DiagComms)
+            })
             .map(|(i, n)| {
                 let section_depth = n.depth;
                 let section_start = i.saturating_add(1);
@@ -251,14 +250,29 @@ impl App {
                 .drain(section_start..section_end)
                 .collect();
 
-            if self.tree.diagcomm_sort_by_id {
-                services.sort_by_key(|n| extract_service_id(&n.text));
-            } else {
-                services.sort_by(|a, b| {
-                    let a_name = a.service_short_name().unwrap_or_default();
-                    let b_name = b.service_short_name().unwrap_or_default();
-                    a_name.cmp(b_name)
-                });
+            match self.tree.diagcomm_sort {
+                DiagcommSortMode::IdAsc => {
+                    services.sort_by_key(|n| extract_service_id(&n.text));
+                }
+                DiagcommSortMode::IdDesc => {
+                    services.sort_by(|a, b| {
+                        extract_service_id(&b.text).cmp(&extract_service_id(&a.text))
+                    });
+                }
+                DiagcommSortMode::NameAsc => {
+                    services.sort_by(|a, b| {
+                        a.service_short_name()
+                            .unwrap_or_default()
+                            .cmp(b.service_short_name().unwrap_or_default())
+                    });
+                }
+                DiagcommSortMode::NameDesc => {
+                    services.sort_by(|a, b| {
+                        b.service_short_name()
+                            .unwrap_or_default()
+                            .cmp(a.service_short_name().unwrap_or_default())
+                    });
+                }
             }
 
             self.tree

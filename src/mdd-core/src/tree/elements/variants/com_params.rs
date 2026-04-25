@@ -14,6 +14,15 @@ use crate::tree::{
     },
 };
 
+/// Map a `param_class` string to a short display badge prefix, e.g. `"[TIMING] "`.
+/// Returns an empty `String` when `param_class` is absent or empty.
+fn param_class_badge(param_class: Option<&str>) -> String {
+    match param_class {
+        Some(cls) if !cls.is_empty() && cls != "-" => format!("[{cls}] "),
+        _ => String::new(),
+    }
+}
+
 /// Format a value as hex with decimal in parentheses if it's numeric.
 /// E.g. "255" -> "0xFF (255)", "abc" -> "abc"
 fn format_value_hex_decimal(value: &str) -> String {
@@ -49,19 +58,23 @@ pub fn add_com_params(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) 
         .filter_map(|(idx, cpr)| {
             let cp = cpr.com_param()?;
             let name = cp.short_name().unwrap_or("?").to_owned();
-            Some((idx, name))
+            let param_class = cp.param_class().map(std::borrow::ToOwned::to_owned);
+            Some((idx, name, param_class))
         })
         .collect();
     sorted_refs.sort_by(|a, b| a.1.cmp(&b.1));
 
-    // Push children, collecting (name → tree index).
+    // Push children, keying node_indices by the badged display name so that
+    // resolve_all_indices can match jump targets against node.text after re-sorts.
     let mut node_indices = std::collections::HashMap::new();
-    for (idx, cp_name) in &sorted_refs {
-        node_indices.insert(cp_name.clone(), b.next_index());
+    for (idx, cp_name, param_class) in &sorted_refs {
+        let badge = param_class_badge(param_class.as_deref());
+        let display_name = format!("{badge}{cp_name}");
+        node_indices.insert(display_name.clone(), b.next_index());
         let sections = build_com_param_ref_detail(layer, *idx);
         b.push_details_structured(
             depth.saturating_add(1),
-            cp_name.clone(),
+            display_name,
             false,
             false,
             sections,
@@ -93,7 +106,9 @@ fn build_com_params_overview(
             let cp = cpr.com_param()?;
             let name = cp.short_name().unwrap_or("?").to_owned();
             let cp_type = format!("{:?}", cp.com_param_type());
-            let jump = make_index_jump(&name, node_indices);
+            let badge = param_class_badge(cp.param_class());
+            let display_name = format!("{badge}{name}");
+            let jump = make_index_jump(&display_name, node_indices);
             Some(DetailRow::normal(
                 vec![
                     DetailCell::new(name, CellType::ParameterName).with_jump(jump),

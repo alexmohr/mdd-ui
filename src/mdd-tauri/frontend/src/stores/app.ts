@@ -32,6 +32,7 @@ export const useAppStore = defineStore("app", () => {
   const filePath = ref("");
   const hideUnchanged = ref(false);
   const fontSize = ref(13);
+  const sortLabel = ref("ID\u25b2");
   const recentFiles = ref<RecentFile[]>([]);
 
   const selectedNode = computed(() =>
@@ -81,6 +82,7 @@ export const useAppStore = defineStore("app", () => {
       filePath.value = path;
       status.value = `${result.node_count} nodes`;
       await api.addRecentFile(path);
+      await loadRecentFiles();
     } catch (e) {
       status.value = `Error: ${e}`;
     } finally {
@@ -109,17 +111,40 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
+  function tabSectionsOf(sections: import('../api/commands').DetailSection[]): import('../api/commands').DetailSection[] {
+    const first = sections[0];
+    if (sections.length > 1 && first?.render_as_header && "PlainText" in first.content) {
+      return sections.slice(1);
+    }
+    return sections;
+  }
+
+  function activeTabTitle(): string | null {
+    const tabs = tabSectionsOf(detailSections.value);
+    return tabs[selectedTab.value]?.title ?? null;
+  }
+
+  function restoreTab(sections: import('../api/commands').DetailSection[], title: string | null) {
+    if (title === null) { selectedTab.value = 0; return; }
+    const tabs = tabSectionsOf(sections);
+    const idx = tabs.findIndex(t => t.title === title);
+    selectedTab.value = idx >= 0 ? idx : 0;
+  }
+
   async function selectNode(index: number) {
     if (selectedIndex.value !== null && selectedIndex.value !== index) {
       const prev = selectedNode.value;
       if (prev) pushHistory(prev.index, prev.text);
     }
+    const prevTitle = activeTabTitle();
     selectedIndex.value = index;
-    selectedTab.value = 0;
     try {
-      detailSections.value = await api.getNodeDetail(index);
+      const sections = await api.getNodeDetail(index);
+      detailSections.value = sections;
+      restoreTab(sections, prevTitle);
     } catch (e) {
       detailSections.value = [];
+      selectedTab.value = 0;
       status.value = `Error: ${e}`;
     }
   }
@@ -127,12 +152,17 @@ export const useAppStore = defineStore("app", () => {
   async function goBack() {
     const entry = history.value.pop();
     if (!entry) return;
-    selectedIndex.value = entry.index;
-    selectedTab.value = 0;
+    const prevTitle = activeTabTitle();
     try {
-      detailSections.value = await api.getNodeDetail(entry.index);
+      const result = await api.navigateTo({
+        target_type: { TreeNodeByIndex: { index: entry.index, short_name: entry.text } },
+      });
+      nodes.value = result.visible;
+      selectedIndex.value = result.target_index;
+      detailSections.value = result.detail;
+      restoreTab(result.detail, prevTitle);
     } catch (e) {
-      detailSections.value = [];
+      status.value = `Error: ${e}`;
     }
   }
 
@@ -180,14 +210,22 @@ export const useAppStore = defineStore("app", () => {
     try { nodes.value = await api.collapseAll(); } catch (e) { status.value = `Error: ${e}`; }
   }
 
-  function increaseFontSize() { fontSize.value = Math.min(20, fontSize.value + 1); }
-  function decreaseFontSize() { fontSize.value = Math.max(9, fontSize.value - 1); }
+  function increaseFontSize() {
+    fontSize.value = Math.min(20, fontSize.value + 1);
+    api.saveUiPrefs({ font_size: fontSize.value }).catch(() => {});
+  }
+  function decreaseFontSize() {
+    fontSize.value = Math.max(9, fontSize.value - 1);
+    api.saveUiPrefs({ font_size: fontSize.value }).catch(() => {});
+  }
 
   async function toggleSort(nodeIndex?: number) {
     try {
       const idx = nodeIndex ?? selectedIndex.value ?? undefined;
-      nodes.value = await api.toggleSort(idx);
-      status.value = "Sorted";
+      const result = await api.toggleSort(idx);
+      nodes.value = result.nodes;
+      status.value = result.sort_label;
+      sortLabel.value = result.sort_label.replace("Sort: ", "").replace("Name ", "N").replace(" ", "");
     } catch (e) {
       status.value = `Error: ${e}`;
     }
@@ -227,6 +265,40 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
+  async function loadPrefs() {
+    try {
+      const prefs = await api.getUiPrefs();
+      fontSize.value = prefs.font_size;
+    } catch (e) {
+      console.error("Failed to load prefs:", e);
+    }
+  }
+
+  function closeFile() {
+    nodes.value = [];
+    ecuName.value = "";
+    nodeCount.value = 0;
+    isDiff.value = false;
+    selectedIndex.value = null;
+    detailSections.value = [];
+    history.value = [];
+    fileLoaded.value = false;
+    filePath.value = "";
+    status.value = "";
+    hideUnchanged.value = false;
+    searchActive.value = false;
+    searchQuery.value = "";
+  }
+
+  async function removeRecentFile(path: string) {
+    try {
+      await api.removeRecentFile(path);
+      recentFiles.value = recentFiles.value.filter(f => f.path !== path);
+    } catch (e) {
+      console.error("Failed to remove recent file:", e);
+    }
+  }
+
   async function clearRecentFiles() {
     try {
       await api.clearRecentFiles();
@@ -240,10 +312,10 @@ export const useAppStore = defineStore("app", () => {
     nodes, ecuName, nodeCount, isDiff, selectedIndex, selectedNode,
     detailSections, selectedTab, searchQuery, searchScope, searchActive,
     status, loading, history, canGoBack, breadcrumbs, splitPct,
-    fileLoaded, filePath, hideUnchanged, fontSize, recentFiles,
+    fileLoaded, filePath, hideUnchanged, fontSize, sortLabel, recentFiles,
     loadFile, loadDiff, selectNode, goBack, toggleExpand, search,
     clearSearch, cycleScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize,
-    navigateTo, loadRecentFiles, clearRecentFiles,
+    navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
   };
 });
