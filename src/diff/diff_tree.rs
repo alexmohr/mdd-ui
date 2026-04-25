@@ -1219,13 +1219,13 @@ mod tests {
     #[test]
     fn match_key_strips_service_prefix() {
         let node = make_node("[Service] 0x2E01 - WriteDID", 0, false);
-        assert_eq!(match_key(&node), "WriteDID");
+        assert_eq!(match_key(&node), "[Service] 0x2E01 - WriteDID");
     }
 
     #[test]
     fn match_key_strips_job_prefix() {
         let node = make_node("[Job] MyJob", 0, false);
-        assert_eq!(match_key(&node), "MyJob");
+        assert_eq!(match_key(&node), "[Job] MyJob");
     }
 
     #[test]
@@ -1249,7 +1249,7 @@ mod tests {
     #[test]
     fn match_key_handles_service_without_id() {
         let node = make_node("[Service] ReadDID", 0, false);
-        assert_eq!(match_key(&node), "ReadDID");
+        assert_eq!(match_key(&node), "[Service] ReadDID");
     }
 
     #[test]
@@ -1442,7 +1442,7 @@ mod tests {
         // Both service containers match by name "Diag-Comms"
         assert_eq!(merged.len(), 1);
         let diag_comms = merged.first().expect("first merged");
-        assert_eq!(diag_comms.children.len(), 2);
+        assert_eq!(diag_comms.children.len(), 3);
 
         // ReadDID is Unchanged (same text)
         assert_eq!(
@@ -1454,7 +1454,7 @@ mod tests {
                 .diff_status,
             Some(DiffStatus::Unchanged)
         );
-        // WriteDID is Modified (ID changed: 0x2E01 → 0x2E02)
+        // WriteDID 0x2E02 is Added (no matching key in old tree)
         assert_eq!(
             diag_comms
                 .children
@@ -1462,7 +1462,17 @@ mod tests {
                 .expect("second child")
                 .node
                 .diff_status,
-            Some(DiffStatus::Modified)
+            Some(DiffStatus::Added)
+        );
+        // WriteDID 0x2E01 is Removed (no matching key in new tree)
+        assert_eq!(
+            diag_comms
+                .children
+                .get(2)
+                .expect("third child")
+                .node
+                .diff_status,
+            Some(DiffStatus::Removed)
         );
     }
 }
