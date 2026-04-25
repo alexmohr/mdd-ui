@@ -5,12 +5,14 @@
 
 use std::{fmt, sync::Arc};
 
+use serde::Serialize;
+
 /// Sentinel value for an unset bit position in the database.
 pub(crate) const BIT_POSITION_UNSET: u32 = 255;
 
 /// Strongly-typed prefixes embedded in tree node text to distinguish categories
 /// that share the same parent node (e.g. services vs. jobs inside a Diag-Comm).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum NodeTextPrefix {
     /// Prefix for diagnostic service nodes: `"[Service] "`.
     Service,
@@ -28,7 +30,7 @@ impl NodeTextPrefix {
 }
 
 /// Type of top-level section in the tree hierarchy.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum SectionType {
     /// General information section (ECU name, metadata).
     General,
@@ -43,7 +45,7 @@ pub enum SectionType {
 }
 
 /// Type of service list section.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum ServiceListType {
     /// Communication parameter references.
     ComParamRefs,
@@ -64,7 +66,7 @@ pub enum ServiceListType {
 }
 
 /// Type of node for styling and interaction purposes.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize)]
 pub enum NodeType {
     /// Collapsible container without its own detail content.
     Container,
@@ -118,7 +120,7 @@ impl NodeType {
 }
 
 /// Diff status for comparison mode.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum DiffStatus {
     /// Element exists only in the new file.
     Added,
@@ -135,7 +137,7 @@ pub enum DiffStatus {
 /// Using an enum instead of a bag of `Option` fields shrinks the common-case
 /// size of [`TreeNode`] and makes invariants explicit (e.g. only `Container`
 /// nodes carry `parent_ref_names`).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub enum NodePayload {
     /// Container (variant / functional group / ECU shared data layer).
     Container {
@@ -181,7 +183,7 @@ pub enum NodePayload {
 
 /// A single row in the flat tree view. Depth controls indentation, and
 /// `expanded` / `has_children` drive the collapse/expand behaviour.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct TreeNode {
     /// Indentation level in the tree hierarchy (0 = root).
     pub depth: usize,
@@ -263,7 +265,7 @@ impl TreeNode {
 }
 
 /// Type of detail section for logic and navigation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum DetailSectionType {
     /// Title-only header section rendered above tabs.
     Header,
@@ -298,7 +300,7 @@ pub enum DetailSectionType {
 }
 
 /// Type of row for interaction purposes.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize)]
 pub enum DetailRowType {
     /// Regular data row.
     #[default]
@@ -312,7 +314,7 @@ pub enum DetailRowType {
 }
 
 /// Type of child element in a variant summary section.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum ChildElementType {
     /// References to communication parameters.
     ComParamRefs,
@@ -374,7 +376,7 @@ impl ChildElementType {
 }
 
 /// Metadata attached to special rows for navigation lookups.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum RowMetadata {
     /// Row represents an inherited element with the source layer name.
     InheritedFrom { layer_name: String },
@@ -385,7 +387,7 @@ pub enum RowMetadata {
 }
 
 /// Type of cell content for interaction purposes
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize)]
 pub enum CellType {
     /// Regular text cell
     #[default]
@@ -399,7 +401,7 @@ pub enum CellType {
 }
 
 /// Classification of the navigation target for a jump cell.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum CellJumpTargetType {
     /// Navigate to a parameter node by its ID
     Parameter { param_id: u32 },
@@ -416,7 +418,7 @@ pub enum CellJumpTargetType {
 
 /// Per-cell jump target metadata: tells the navigation system where clicking
 /// a jump cell should navigate to.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct CellJumpTarget {
     /// What kind of navigation this cell performs.
     pub target_type: CellJumpTargetType,
@@ -430,7 +432,7 @@ impl CellJumpTarget {
 }
 
 /// A single cell in a detail table row.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct DetailCell {
     /// Display text of the cell.
     pub text: String,
@@ -463,7 +465,7 @@ impl DetailCell {
 }
 
 /// A row in a detail table.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct DetailRow {
     /// Column cells for this row.
     pub cells: Vec<DetailCell>,
@@ -478,7 +480,7 @@ pub struct DetailRow {
 }
 
 /// Column constraint for table layout
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum ColumnConstraint {
     /// Fixed width in characters
     Fixed(u16),
@@ -487,7 +489,7 @@ pub enum ColumnConstraint {
 }
 
 /// Different types of content that can be displayed in a detail section
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum DetailContent {
     /// Plain text lines (no table structure)
     PlainText(Vec<String>),
@@ -541,7 +543,7 @@ impl DetailContent {
 }
 
 /// A detail section with a title and content.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct DetailSectionData {
     /// Display title of this section (shown as tab label).
     pub title: String,

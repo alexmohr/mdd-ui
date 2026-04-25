@@ -15,7 +15,7 @@ cda-interfaces = { git = "https://github.com/eclipse-opensovd/classic-diagnostic
 anyhow = "1"
 
 # Serialization (for Tauri command return types)
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

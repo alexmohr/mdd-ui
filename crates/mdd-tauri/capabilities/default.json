@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for mdd-ui",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "dialog:allow-open"
+  ]
+}

@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 [workspace]
-members = ["crates/mdd-core"]
+members = ["crates/mdd-core", "crates/mdd-tauri"]
+default-members = ["."]
 
 [package]
 name = "mdd-ui"

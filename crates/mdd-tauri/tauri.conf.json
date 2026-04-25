@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicxlasj/tauri-settings-schema/refs/heads/main/schema.json",
+  "productName": "mdd-ui",
+  "version": "0.1.0",
+  "identifier": "io.github.alexmohr.mdd-ui",
+  "build": {
+    "frontendDist": "frontend/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "cd frontend && bun run dev",
+    "beforeBuildCommand": "cd frontend && bun run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "MDD UI",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}
