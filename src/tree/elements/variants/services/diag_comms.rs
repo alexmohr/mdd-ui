@@ -14,7 +14,7 @@ use crate::tree::{
     elements::variants::format_service_display_name,
     types::{
         ColumnConstraint, DetailCell, DetailContent, DetailRow, DetailSectionData,
-        DetailSectionType, NodeTextPrefix, NodeType,
+        DetailSectionType, NodeType,
     },
 };
 
@@ -99,7 +99,7 @@ pub fn add_diag_comms<'a>(
 
             b.push_service_node(
                 depth.saturating_add(1),
-                format!("{}{display_name}", NodeTextPrefix::Service.as_str()),
+                display_name.clone(),
                 false,
                 false,
                 sections,
@@ -127,7 +127,7 @@ pub fn add_diag_comms<'a>(
 
             b.push_service_node(
                 depth.saturating_add(1),
-                format!("{}{display_name}", NodeTextPrefix::Service.as_str()),
+                display_name.clone(),
                 false,
                 false,
                 sections,
@@ -228,7 +228,7 @@ fn add_single_ecu_jobs(
         node_indices.insert(short_name.to_owned(), b.next_index());
         b.push_service_node(
             depth.saturating_add(1),
-            format!("{}{short_name}", NodeTextPrefix::Job.as_str()),
+            short_name.to_owned(),
             false,
             false,
             sections,

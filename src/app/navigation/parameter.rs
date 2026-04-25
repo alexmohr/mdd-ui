@@ -38,7 +38,8 @@ impl App {
             let service_name = ctx
                 .node
                 .service_short_name()
-                .unwrap_or(&ctx.node.text)
+                .or_else(|| ctx.node.short_name())
+                .unwrap_or_default()
                 .to_owned();
             (
                 ctx.node_idx,
@@ -150,12 +151,10 @@ impl App {
         self.table.focused_column.min(cells.len().saturating_sub(1))
     }
 
-    /// Navigate to a DOP node by name.
-    /// Uses the database hierarchy via `find_in_hierarchy` — current
-    /// container subtree first, then parent-ref chain.
-    pub(super) fn navigate_to_dop(&mut self, dop_name: &str) {
-        if let Some(dop_idx) = self.find_in_hierarchy(|node| node.text == dop_name) {
-            self.navigate_to_node(dop_idx);
+    /// Navigate to a DOP node by its pre-resolved tree index.
+    pub(super) fn navigate_to_dop(&mut self, index: usize, dop_name: &str) {
+        if self.tree.all_nodes.get(index).is_some() {
+            self.navigate_to_node(index);
             self.status = format!("Navigated to DOP: {dop_name}");
         } else {
             self.status = format!("DOP '{dop_name}' not found in tree");
@@ -173,7 +172,11 @@ impl App {
             .get(self.tree.cursor)
             .copied()
             .and_then(|node_idx| self.find_param_in_subtree_by_name(node_idx, param_name))
-            .or_else(|| self.find_in_hierarchy(|n| n.param_id().is_some() && n.text == param_name));
+            .or_else(|| {
+                self.find_in_hierarchy(|n| {
+                    n.param_id().is_some() && n.short_name().is_some_and(|sn| sn == param_name)
+                })
+            });
 
         let Some(param_idx) = param_idx else {
             self.status = format!("Parameter '{param_name}' not found");
@@ -206,13 +209,15 @@ impl App {
             .enumerate()
             .skip(parent_idx.saturating_add(1))
             .take_while(|(_, node)| node.depth > parent_depth)
-            .find(|(_, node)| node.param_id().is_some() && node.text == param_name)
+            .find(|(_, node)| {
+                node.param_id().is_some() && node.short_name().is_some_and(|sn| sn == param_name)
+            })
             .map(|(idx, _)| idx)
     }
 
     /// Navigate from DIAG-DATA-DICTIONARY-SPEC or DOP category overview to a child node.
     pub(crate) fn try_navigate_to_dop_child(&mut self) {
-        let (node_idx, current_depth, dop_ref, target_name) = {
+        let (dop_jump, target_name) = {
             let Some(ctx) = self.resolve_selected_row() else {
                 return;
             };
@@ -220,45 +225,47 @@ impl App {
                 return;
             };
 
-            let dop_ref = selected_row
+            let dop_jump = selected_row
                 .cells
                 .iter()
                 .find(|c| c.cell_type == CellType::DopReference)
-                .map(|c| c.text.clone());
+                .and_then(|c| c.jump_target.as_ref())
+                .and_then(|jt| {
+                    if let CellJumpTargetType::Dop { index, name } = &jt.target_type {
+                        Some((*index, name.clone()))
+                    } else {
+                        None
+                    }
+                });
 
             let target_name = selected_row
                 .cells
                 .first()
-                .map_or_else(String::default, |c| c.text.clone());
+                .and_then(|c| c.jump_target.as_ref())
+                .and_then(|jt| match &jt.target_type {
+                    CellJumpTargetType::TreeNodeByIndex { index, short_name } => {
+                        Some((*index, short_name.clone()))
+                    }
+                    _ => None,
+                });
 
-            (ctx.node_idx, ctx.node.depth, dop_ref, target_name)
+            (dop_jump, target_name)
         };
 
-        if let Some(dop_name) = dop_ref {
-            self.navigate_to_dop(&dop_name);
+        if let Some((index, dop_name)) = dop_jump {
+            self.navigate_to_dop(index, &dop_name);
             return;
         }
 
-        if target_name.is_empty() {
+        let Some((jump_index, ref name)) = target_name else {
             return;
-        }
+        };
 
-        let target_depth = current_depth.saturating_add(1);
-        let target_idx = self
-            .tree
-            .all_nodes
-            .iter()
-            .enumerate()
-            .skip(node_idx.saturating_add(1))
-            .take_while(|(_, child)| child.depth > current_depth)
-            .find(|(_, child)| child.depth == target_depth && child.text.starts_with(&target_name))
-            .map(|(i, _)| i);
-
-        if let Some(target_node_idx) = target_idx {
-            self.navigate_to_node(target_node_idx);
-            self.status = format!("Navigated to: {target_name}");
+        if self.tree.all_nodes.get(jump_index).is_some() {
+            self.navigate_to_node(jump_index);
+            self.status = format!("Navigated to: {name}");
         } else {
-            self.status = format!("'{target_name}' not found");
+            self.status = format!("'{name}' not found");
         }
     }
 }

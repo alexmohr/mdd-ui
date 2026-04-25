@@ -45,16 +45,22 @@ pub enum SectionType {
 /// Type of service list section.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ServiceListType {
+    /// Communication parameter references.
+    ComParamRefs,
     /// All diagnostic communication services.
     DiagComms,
-    /// Request-only service list.
-    Requests,
-    /// Positive response service list.
-    PosResponses,
-    /// Negative response service list.
-    NegResponses,
     /// Functional class list.
     FunctionalClasses,
+    /// Negative response service list.
+    NegResponses,
+    /// Positive response service list.
+    PosResponses,
+    /// Request-only service list.
+    Requests,
+    /// Special Data Group entries.
+    SDGs,
+    /// State chart definitions.
+    StateCharts,
 }
 
 /// Type of node for styling and interaction purposes.
@@ -156,10 +162,17 @@ pub enum NodePayload {
         /// Canonical short name used for sorting, matching and navigation.
         service_short_name: String,
     },
+    /// Functional-class node.
+    FunctionalClass {
+        /// Canonical short name (identity comparisons, not display text).
+        short_name: String,
+    },
     /// Parameter node.
     Parameter {
         /// Database parameter ID.
         param_id: u32,
+        /// Canonical short name (identity comparisons, not display text).
+        short_name: String,
     },
     /// Fallback for nodes that carry no extra data.
     #[default]
@@ -212,7 +225,7 @@ impl TreeNode {
     /// Returns the parameter ID if this is a `Parameter` node.
     pub fn param_id(&self) -> Option<u32> {
         match &self.payload {
-            NodePayload::Parameter { param_id } => Some(*param_id),
+            NodePayload::Parameter { param_id, .. } => Some(*param_id),
             _ => None,
         }
     }
@@ -227,10 +240,13 @@ impl TreeNode {
         }
     }
 
-    /// Returns the canonical short name for `Container` nodes.
+    /// Returns the canonical short name for nodes that carry one
+    /// (`Container`, `FunctionalClass`, `Parameter`).
     pub fn short_name(&self) -> Option<&str> {
         match &self.payload {
-            NodePayload::Container { short_name, .. } => Some(short_name),
+            NodePayload::Container { short_name, .. }
+            | NodePayload::FunctionalClass { short_name }
+            | NodePayload::Parameter { short_name, .. } => Some(short_name),
             _ => None,
         }
     }
@@ -337,9 +353,23 @@ impl ChildElementType {
         }
     }
 
-    /// Check if a node text starts with this child element type's display name
-    pub fn matches_node_text(&self, text: &str) -> bool {
-        text.starts_with(self.as_str())
+    /// Map this element type to the corresponding [`ServiceListType`].
+    pub const fn to_service_list_type(&self) -> ServiceListType {
+        match self {
+            ChildElementType::ComParamRefs => ServiceListType::ComParamRefs,
+            ChildElementType::DiagComms => ServiceListType::DiagComms,
+            ChildElementType::FunctionalClasses => ServiceListType::FunctionalClasses,
+            ChildElementType::NegResponses => ServiceListType::NegResponses,
+            ChildElementType::PosResponses => ServiceListType::PosResponses,
+            ChildElementType::Requests => ServiceListType::Requests,
+            ChildElementType::SDGs => ServiceListType::SDGs,
+            ChildElementType::StateCharts => ServiceListType::StateCharts,
+        }
+    }
+
+    /// Check if a tree node's service-list type matches this element type.
+    pub fn matches_node(&self, node: &TreeNode) -> bool {
+        node.service_list_type() == Some(self.to_service_list_type())
     }
 }
 
@@ -373,8 +403,10 @@ pub enum CellType {
 pub enum CellJumpTargetType {
     /// Navigate to a parameter node by its ID
     Parameter { param_id: u32 },
-    /// Navigate to a DOP node by name
-    Dop { name: String },
+    /// Navigate to a DOP node by its resolved tree index.
+    /// `name` is the canonical short name used to resolve `index` via
+    /// [`resolve_all_indices`](super::resolve_all_indices).
+    Dop { index: usize, name: String },
     /// Navigate directly to a tree node by its stored index.
     /// Carries the canonical `short_name` for verification — if the node at
     /// `index` no longer matches (e.g. after sorting), the handler falls
@@ -656,7 +688,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // ChildElementType::as_str / matches_node_text
+    // ChildElementType::as_str / to_service_list_type
     // ---------------------------------------------------------------
 
     #[test]
@@ -676,15 +708,23 @@ mod tests {
     }
 
     #[test]
-    fn matches_node_text_positive() {
-        assert!(ChildElementType::DiagComms.matches_node_text("Diag-Comms (5 services)"));
-        assert!(ChildElementType::Requests.matches_node_text("Requests"));
-    }
-
-    #[test]
-    fn matches_node_text_negative() {
-        assert!(!ChildElementType::DiagComms.matches_node_text("Requests (3)"));
-        assert!(!ChildElementType::Requests.matches_node_text("Pos-Responses"));
+    fn to_service_list_type_mapping() {
+        assert_eq!(
+            ChildElementType::ComParamRefs.to_service_list_type(),
+            ServiceListType::ComParamRefs
+        );
+        assert_eq!(
+            ChildElementType::DiagComms.to_service_list_type(),
+            ServiceListType::DiagComms
+        );
+        assert_eq!(
+            ChildElementType::SDGs.to_service_list_type(),
+            ServiceListType::SDGs
+        );
+        assert_eq!(
+            ChildElementType::StateCharts.to_service_list_type(),
+            ServiceListType::StateCharts
+        );
     }
 
     // ---------------------------------------------------------------

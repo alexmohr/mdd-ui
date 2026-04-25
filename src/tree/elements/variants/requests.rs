@@ -113,6 +113,7 @@ pub fn add_requests_section<'a>(
 
                     b.push_param(
                         depth.saturating_add(2),
+                        param_name.clone(),
                         param_name,
                         param_detail,
                         NodeType::Default,

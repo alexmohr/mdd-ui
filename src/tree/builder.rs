@@ -71,10 +71,29 @@ impl TreeBuilder {
         });
     }
 
-    /// Push a parameter node with its ID for lookup
+    /// Push a functional-class node with its canonical short name.
+    pub(crate) fn push_functional_class(
+        &mut self,
+        depth: usize,
+        short_name: String,
+        text: String,
+        sections: Vec<DetailSectionData>,
+    ) {
+        self.push_node(NodeConfig {
+            depth,
+            text,
+            sections,
+            node_type: NodeType::FunctionalClass,
+            payload: NodePayload::FunctionalClass { short_name },
+            ..NodeConfig::default()
+        });
+    }
+
+    /// Push a parameter node with its ID and canonical short name for lookup.
     pub(crate) fn push_param(
         &mut self,
         depth: usize,
+        short_name: String,
         text: String,
         sections: Vec<DetailSectionData>,
         node_type: NodeType,
@@ -85,7 +104,10 @@ impl TreeBuilder {
             text,
             sections,
             node_type,
-            payload: NodePayload::Parameter { param_id },
+            payload: NodePayload::Parameter {
+                param_id,
+                short_name,
+            },
             ..NodeConfig::default()
         });
     }

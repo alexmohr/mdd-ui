@@ -11,9 +11,11 @@ use ratatui::{
 };
 
 use super::{border_style, expand_icon, render_scrollbar, row_style};
+use std::borrow::Cow;
+
 use crate::{
     app::{App, FocusState},
-    tree::DiffStatus,
+    tree::{DiffStatus, NodeTextPrefix, NodeType},
 };
 
 impl App {
@@ -55,11 +57,35 @@ impl App {
                     Some(DiffStatus::Unchanged) | None => "",
                 };
 
+                let node_prefix = match node.node_type {
+                    NodeType::Service | NodeType::ParentRefService => {
+                        NodeTextPrefix::Service.as_str()
+                    }
+                    NodeType::Job => NodeTextPrefix::Job.as_str(),
+                    _ => "",
+                };
+
+                // Pad hex IDs for column alignment in the tree
+                let display_text: Cow<str> = if node.node_type.is_service() {
+                    if let Some(dash_pos) = node.text.find(" - ") {
+                        Cow::Owned(format!(
+                            "{:10}{}",
+                            &node.text[..dash_pos],
+                            &node.text[dash_pos..]
+                        ))
+                    } else {
+                        Cow::Borrowed(&node.text)
+                    }
+                } else {
+                    Cow::Borrowed(&node.text)
+                };
+
                 Some(Line::from(vec![
                     Span::styled(indent, row_style),
                     Span::styled(icon, row_style),
                     Span::styled(diff_prefix, row_style),
-                    Span::styled(&node.text, row_style),
+                    Span::styled(node_prefix, row_style),
+                    Span::styled(display_text, row_style),
                 ]))
             })
             .collect();

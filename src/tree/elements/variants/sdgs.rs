@@ -68,13 +68,13 @@ pub fn add_sdgs(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize) {
     // Build the SDGs table section
     let sdgs_table = build_sdgs_table_section(&sdg_data_list);
 
-    b.push_details_structured(
+    b.push_service_list_header(
         depth,
         format!("SDGs ({})", sdg_data_list.len()),
         false,
         true,
         vec![sdgs_table],
-        NodeType::SectionHeader,
+        crate::tree::ServiceListType::SDGs,
     );
 
     // Add each SDG as a child node with detail

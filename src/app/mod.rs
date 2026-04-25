@@ -458,9 +458,21 @@ impl App {
         app
     }
 
-    /// Helper: Check if a node is a service list section header
+    /// Helper: Check if a node is a service list section header whose
+    /// children can be navigated via `try_navigate_to_service`.
+    /// Non-service sections (`ComParamRefs`, `SDGs`, `StateCharts`) use generic
+    /// detail navigation instead.
     fn is_service_list_section(node: &TreeNode) -> bool {
-        node.service_list_type().is_some()
+        matches!(
+            node.service_list_type(),
+            Some(
+                crate::tree::ServiceListType::DiagComms
+                    | crate::tree::ServiceListType::Requests
+                    | crate::tree::ServiceListType::PosResponses
+                    | crate::tree::ServiceListType::NegResponses
+                    | crate::tree::ServiceListType::FunctionalClasses
+            )
+        )
     }
 
     /// Helper: Check if a node is a specific service list type

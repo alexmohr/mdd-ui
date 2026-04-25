@@ -4,7 +4,7 @@
  */
 
 use super::{App, FocusState, SortDirection, TableSortState};
-use crate::tree::{NodeTextPrefix, TreeNode};
+use crate::tree::TreeNode;
 
 impl App {
     pub(crate) fn toggle_expand(&mut self) {
@@ -255,8 +255,8 @@ impl App {
                 services.sort_by_key(|n| extract_service_id(&n.text));
             } else {
                 services.sort_by(|a, b| {
-                    let a_name = a.service_short_name().unwrap_or(&a.text);
-                    let b_name = b.service_short_name().unwrap_or(&b.text);
+                    let a_name = a.service_short_name().unwrap_or_default();
+                    let b_name = b.service_short_name().unwrap_or_default();
                     a_name.cmp(b_name)
                 });
             }
@@ -323,10 +323,7 @@ impl App {
 
 // Helper functions for service sorting
 fn extract_service_id(text: &str) -> Option<u32> {
-    // Extract ID from format like "[Service] 0x10 - ServiceName" or "0x22F501 - ServiceName"
-    let text = text
-        .strip_prefix(NodeTextPrefix::Service.as_str())
-        .unwrap_or(text);
+    // Extract ID from format like "0x10 - ServiceName" or "0x22F501 - ServiceName"
     let hex_part = text.strip_prefix("0x")?;
     let dash_pos = hex_part.find(" - ")?;
     let id_str = hex_part[..dash_pos].trim();

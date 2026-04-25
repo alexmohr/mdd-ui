@@ -183,22 +183,15 @@ impl App {
             CellJumpTargetType::Parameter { .. } => {
                 self.navigate_to_parameter(cell_value);
             }
-            CellJumpTargetType::Dop { ref name } => {
-                self.navigate_to_dop(name);
+            CellJumpTargetType::Dop { index, ref name } => {
+                self.navigate_to_dop(index, name);
             }
             CellJumpTargetType::TreeNodeByIndex {
                 index,
                 ref short_name,
             } => {
-                let matches_node = |n: &crate::tree::TreeNode| {
-                    n.service_short_name().is_some_and(|sn| sn == short_name)
-                        || n.short_name().is_some_and(|sn| sn == short_name)
-                        || n.text == *short_name
-                };
-                if self.tree.all_nodes.get(index).is_some_and(matches_node) {
+                if self.tree.all_nodes.get(index).is_some() {
                     self.navigate_to_node(index);
-                } else if let Some(idx) = self.find_in_hierarchy(matches_node) {
-                    self.navigate_to_node(idx);
                 } else {
                     self.status = format!("Node \"{short_name}\" not found in tree");
                 }
