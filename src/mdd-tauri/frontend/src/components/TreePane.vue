@@ -9,6 +9,9 @@ const showLegend = ref(false);
 type Badge = { label: string; bg: string; fg: string };
 
 function nodeBadge(node: VisibleNode): Badge | null {
+  // No badges for containers/headers — they have children to explain themselves
+  if (node.has_children) return null;
+
   switch (node.node_type) {
     case "Service":          return { label: "SVC",  bg: "bg-violet-500/20",  fg: "text-violet-300" };
     case "Job":              return { label: "JOB",  bg: "bg-violet-500/15",  fg: "text-violet-300/70" };
@@ -17,7 +20,6 @@ function nodeBadge(node: VisibleNode): Badge | null {
     case "PosResponse":      return { label: "R+",   bg: "bg-emerald-500/20", fg: "text-emerald-300" };
     case "NegResponse":      return { label: "R-",   bg: "bg-rose-500/20",    fg: "text-rose-300" };
     case "FunctionalClass":  return { label: "FC",   bg: "bg-orange-500/20",  fg: "text-orange-300" };
-    case "Dop":              return { label: "DOP",  bg: "bg-pink-500/20",    fg: "text-pink-300" };
     case "Sdg":              return { label: "SDG",  bg: "bg-lime-500/20",    fg: "text-lime-300" };
     default:                 return null;
   }
@@ -43,17 +45,17 @@ function nodeTextClass(node: VisibleNode): string {
 
 const legendItems: Badge[] = [
   { label: "SVC", bg: "bg-violet-500/20", fg: "text-violet-300" },
+  { label: "JOB", bg: "bg-violet-500/15", fg: "text-violet-300/70" },
   { label: "REQ", bg: "bg-teal-500/20",   fg: "text-teal-300" },
   { label: "R+",  bg: "bg-emerald-500/20", fg: "text-emerald-300" },
   { label: "R-",  bg: "bg-rose-500/20",   fg: "text-rose-300" },
   { label: "FC",  bg: "bg-orange-500/20", fg: "text-orange-300" },
-  { label: "DOP", bg: "bg-pink-500/20",   fg: "text-pink-300" },
   { label: "SDG", bg: "bg-lime-500/20",   fg: "text-lime-300" },
   { label: "INH", bg: "bg-gray-500/15",   fg: "text-gray-500" },
 ];
 const legendLabels: Record<string, string> = {
-  SVC: "Service / Job", REQ: "Request", "R+": "Pos-Response", "R-": "Neg-Response",
-  FC: "Functional Class", DOP: "Data Object Property", SDG: "Special Data Group", INH: "Inherited",
+  SVC: "Service", JOB: "Job", REQ: "Request", "R+": "Pos-Response", "R-": "Neg-Response",
+  FC: "Functional Class", SDG: "Special Data Group", INH: "Inherited",
 };
 
 async function onClick(node: VisibleNode) {

@@ -424,11 +424,13 @@ pub fn toggle_sort(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, Strin
     core.diagcomm_sort_by_id = !core.diagcomm_sort_by_id;
     let by_id = core.diagcomm_sort_by_id;
     sort_diagcomm_nodes(&mut core.all_nodes, by_id);
+    sort_all_children_by_name(&mut core.all_nodes);
     mdd_core::tree::resolve_all_indices(&mut core.all_nodes);
     core.visible = build_visible(&core);
     Ok(to_visible_nodes(&core))
 }
 
+/// Sort DiagComm sections by ID or name.
 fn sort_diagcomm_nodes(nodes: &mut Vec<TreeNode>, by_id: bool) {
     let sections: Vec<(usize, usize)> = nodes
         .iter()
@@ -464,6 +466,60 @@ fn sort_diagcomm_nodes(nodes: &mut Vec<TreeNode>, by_id: bool) {
             });
         }
         nodes.splice(start..start, services);
+    }
+}
+
+/// Sort direct children of every non-DiagComm parent node alphabetically.
+/// Preserves subtrees: each direct child and all its descendants move together.
+fn sort_all_children_by_name(nodes: &mut Vec<TreeNode>) {
+    // Find all parent nodes that have children (skip DiagComm headers, already sorted)
+    let parents: Vec<(usize, usize)> = nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| {
+            n.has_children
+                && n.service_list_type().is_none()
+        })
+        .map(|(i, n)| (i, n.depth))
+        .collect();
+
+    // Process in reverse order to keep indices stable
+    for (parent_idx, parent_depth) in parents.into_iter().rev() {
+        let children_start = parent_idx.saturating_add(1);
+        let children_end = nodes
+            .iter()
+            .skip(children_start)
+            .position(|n| n.depth <= parent_depth)
+            .map_or(nodes.len(), |pos| children_start.saturating_add(pos));
+
+        if children_end <= children_start {
+            continue;
+        }
+
+        let direct_child_depth = parent_depth.saturating_add(1);
+        let all_children: Vec<TreeNode> = nodes.drain(children_start..children_end).collect();
+
+        // Group into subtrees (each direct child + its descendants)
+        let mut groups: Vec<Vec<TreeNode>> = Vec::new();
+        let mut current: Vec<TreeNode> = Vec::new();
+        for node in all_children {
+            if node.depth == direct_child_depth && !current.is_empty() {
+                groups.push(std::mem::take(&mut current));
+            }
+            current.push(node);
+        }
+        if !current.is_empty() {
+            groups.push(current);
+        }
+
+        groups.sort_by(|a, b| {
+            let a_text = a.first().map(|n| n.text.to_lowercase());
+            let b_text = b.first().map(|n| n.text.to_lowercase());
+            a_text.cmp(&b_text)
+        });
+
+        let sorted: Vec<TreeNode> = groups.into_iter().flatten().collect();
+        nodes.splice(children_start..children_start, sorted);
     }
 }
 
