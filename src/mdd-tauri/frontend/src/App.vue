@@ -10,12 +10,29 @@ import StatusBar from "./components/StatusBar.vue";
 const store = useAppStore();
 const dragging = ref(false);
 
+onMounted(async () => {
+  await store.loadRecentFiles();
+  window.addEventListener("keydown", handleKeydown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", handleKeydown);
+});
+
 async function openFile() {
   const path = await open({
     title: "Open MDD File",
     filters: [{ name: "MDD Files", extensions: ["mdd"] }],
   });
   if (path) await store.loadFile(path as string);
+}
+
+async function openRecentFile(path: string) {
+  await store.loadFile(path);
+}
+
+function getFileName(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
 }
 
 async function openDiff() {
@@ -49,9 +66,6 @@ function handleKeydown(e: KeyboardEvent) {
     case "-": store.decreaseFontSize(); break;
   }
 }
-
-onMounted(() => window.addEventListener("keydown", handleKeydown));
-onUnmounted(() => window.removeEventListener("keydown", handleKeydown));
 
 function onSplitMouseDown() {
   dragging.value = true;
@@ -94,6 +108,21 @@ function onSplitMouseDown() {
             >
               Compare Files
             </button>
+          </div>
+          <div v-if="store.recentFiles.length > 0" class="mt-8">
+            <div class="text-neutral-500 text-xs uppercase tracking-wider mb-3">Recent Files</div>
+            <div class="flex flex-col gap-2 items-center">
+              <button
+                v-for="file in store.recentFiles"
+                :key="file.path"
+                class="w-80 px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-sm text-left transition-colors border border-neutral-800 hover:border-neutral-700 flex items-center gap-3 group"
+                @click="openRecentFile(file.path)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500 group-hover:text-neutral-400 flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>
+                <span class="truncate flex-1">{{ getFileName(file.path) }}</span>
+                <span class="text-neutral-600 text-xs">{{ file.path }}</span>
+              </button>
+            </div>
           </div>
           <div class="text-neutral-600 text-xs mt-8">
             <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">/</kbd> search

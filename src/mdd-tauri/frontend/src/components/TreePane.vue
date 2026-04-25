@@ -38,46 +38,54 @@ async function ctxAction(action: string) {
 
 // --- Badges ---
 type Badge = { label: string; bg: string; fg: string };
+const INH_BADGE: Badge = { label: "INH", bg: "bg-amber-500/15", fg: "text-amber-400" };
 
-function nodeBadge(node: VisibleNode): Badge | null {
-  // Node-type badges (both leaf and container)
+function nodeBadges(node: VisibleNode): Badge[] {
+  const badges: Badge[] = [];
+
+  // INH is an additional badge — show it alongside the real type
+  if (node.node_type === "ParentRefService") badges.push(INH_BADGE);
+
+  // Node-type badge
   switch (node.node_type) {
-    case "Service":          return { label: "SVC",  bg: "bg-violet-500/20",  fg: "text-violet-300" };
-    case "Job":              return { label: "JOB",  bg: "bg-violet-500/15",  fg: "text-violet-300/70" };
-    case "ParentRefService": return { label: "INH",  bg: "bg-amber-500/15",   fg: "text-amber-400" };
-    case "Request":          return { label: "REQ",  bg: "bg-teal-500/20",    fg: "text-teal-300" };
-    case "PosResponse":      return { label: "R+",   bg: "bg-emerald-500/20", fg: "text-emerald-300" };
-    case "NegResponse":      return { label: "R-",   bg: "bg-rose-500/20",    fg: "text-rose-300" };
-    case "FunctionalClass":  return { label: "FC",   bg: "bg-orange-500/20",  fg: "text-orange-300" };
-    case "Sdg":              return { label: "SDG",  bg: "bg-lime-500/20",    fg: "text-lime-300" };
-    case "Dop":              return { label: "DOP",  bg: "bg-pink-500/20",    fg: "text-pink-300" };
-    case "ParentRefs":       return { label: "REF",  bg: "bg-cyan-500/20",    fg: "text-cyan-300" };
+    case "Service":
+    case "ParentRefService": badges.push({ label: "SVC",  bg: "bg-violet-500/20",  fg: "text-violet-300" }); break;
+    case "Job":              badges.push({ label: "JOB",  bg: "bg-violet-500/15",  fg: "text-violet-300/70" }); break;
+    case "Request":          badges.push({ label: "REQ",  bg: "bg-teal-500/20",    fg: "text-teal-300" }); break;
+    case "PosResponse":      badges.push({ label: "R+",   bg: "bg-emerald-500/20", fg: "text-emerald-300" }); break;
+    case "NegResponse":      badges.push({ label: "R-",   bg: "bg-rose-500/20",    fg: "text-rose-300" }); break;
+    case "FunctionalClass":  badges.push({ label: "FC",   bg: "bg-orange-500/20",  fg: "text-orange-300" }); break;
+    case "Sdg":              badges.push({ label: "SDG",  bg: "bg-lime-500/20",    fg: "text-lime-300" }); break;
+    case "Dop":              badges.push({ label: "DOP",  bg: "bg-pink-500/20",    fg: "text-pink-300" }); break;
+    case "ParentRefs":       badges.push({ label: "REF",  bg: "bg-cyan-500/20",    fg: "text-cyan-300" }); break;
     default: break;
   }
+  if (badges.length > 0) return badges;
 
   // Infer badge from text for DOP category children and service-list headers
   const t = node.text.toLowerCase();
-  if (t.startsWith("diag-comms"))       return { label: "DC",  bg: "bg-violet-500/15", fg: "text-violet-300/70" };
-  if (t.startsWith("requests"))          return { label: "REQ", bg: "bg-teal-500/15",   fg: "text-teal-300/70" };
+  const infer = (b: Badge) => [b];
+  if (t.startsWith("diag-comms"))       return infer({ label: "DC",  bg: "bg-violet-500/15", fg: "text-violet-300/70" });
+  if (t.startsWith("requests"))          return infer({ label: "REQ", bg: "bg-teal-500/15",   fg: "text-teal-300/70" });
   if (t.startsWith("pos-response") || t.startsWith("positive response"))
-                                          return { label: "R+",  bg: "bg-emerald-500/15", fg: "text-emerald-300/70" };
+                                          return infer({ label: "R+",  bg: "bg-emerald-500/15", fg: "text-emerald-300/70" });
   if (t.startsWith("neg-response") || t.startsWith("negative response"))
-                                          return { label: "R-",  bg: "bg-rose-500/15",   fg: "text-rose-300/70" };
-  if (t.startsWith("functional classes")) return { label: "FC",  bg: "bg-orange-500/15", fg: "text-orange-300/70" };
-  if (t.startsWith("comparam"))          return { label: "CP",  bg: "bg-sky-500/15",    fg: "text-sky-300/70" };
-  if (t.startsWith("state chart"))       return { label: "SC",  bg: "bg-indigo-500/15", fg: "text-indigo-300/70" };
-  if (t.startsWith("sdgs"))             return { label: "SDG", bg: "bg-lime-500/15",   fg: "text-lime-300/70" };
+                                          return infer({ label: "R-",  bg: "bg-rose-500/15",   fg: "text-rose-300/70" });
+  if (t.startsWith("functional classes")) return infer({ label: "FC",  bg: "bg-orange-500/15", fg: "text-orange-300/70" });
+  if (t.startsWith("comparam"))          return infer({ label: "CP",  bg: "bg-sky-500/15",    fg: "text-sky-300/70" });
+  if (t.startsWith("state chart"))       return infer({ label: "SC",  bg: "bg-indigo-500/15", fg: "text-indigo-300/70" });
+  if (t.startsWith("sdgs"))             return infer({ label: "SDG", bg: "bg-lime-500/15",   fg: "text-lime-300/70" });
   // DOP sub-categories
-  if (t.startsWith("structures"))        return { label: "STR", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
-  if (t.startsWith("data object"))       return { label: "DOP", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
-  if (t.startsWith("dtc dop"))           return { label: "DTC", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
-  if (t.startsWith("env data"))          return { label: "ENV", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
-  if (t.startsWith("static field"))      return { label: "SF",  bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
-  if (t.startsWith("dynamic"))           return { label: "DYN", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
-  if (t.startsWith("end of pdu"))        return { label: "EOP", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
-  if (t.startsWith("mux"))              return { label: "MUX", bg: "bg-pink-500/15",   fg: "text-pink-300/70" };
+  if (t.startsWith("structures"))        return infer({ label: "STR", bg: "bg-pink-500/15",   fg: "text-pink-300/70" });
+  if (t.startsWith("data object"))       return infer({ label: "DOP", bg: "bg-pink-500/15",   fg: "text-pink-300/70" });
+  if (t.startsWith("dtc dop"))           return infer({ label: "DTC", bg: "bg-pink-500/15",   fg: "text-pink-300/70" });
+  if (t.startsWith("env data"))          return infer({ label: "ENV", bg: "bg-pink-500/15",   fg: "text-pink-300/70" });
+  if (t.startsWith("static field"))      return infer({ label: "SF",  bg: "bg-pink-500/15",   fg: "text-pink-300/70" });
+  if (t.startsWith("dynamic"))           return infer({ label: "DYN", bg: "bg-pink-500/15",   fg: "text-pink-300/70" });
+  if (t.startsWith("end of pdu"))        return infer({ label: "EOP", bg: "bg-pink-500/15",   fg: "text-pink-300/70" });
+  if (t.startsWith("mux"))              return infer({ label: "MUX", bg: "bg-pink-500/15",   fg: "text-pink-300/70" });
 
-  return null;
+  return badges;
 }
 
 function diffBadge(status: string | null): Badge | null {
@@ -127,10 +135,36 @@ async function onChevronClick(e: Event, node: VisibleNode) {
   e.stopPropagation();
   if (node.has_children) await store.toggleExpand(node.index);
 }
+
+// --- Keyboard navigation ---
+async function onKeydown(e: KeyboardEvent) {
+  if (store.nodes.length === 0) return;
+  if (e.key === "ArrowDown" || e.key === "j") {
+    e.preventDefault();
+    const curPos = store.nodes.findIndex((n: VisibleNode) => n.index === store.selectedIndex);
+    const next = Math.min(curPos + 1, store.nodes.length - 1);
+    if (next >= 0) await store.selectNode(store.nodes[next].index);
+  } else if (e.key === "ArrowUp" || e.key === "k") {
+    e.preventDefault();
+    const curPos = store.nodes.findIndex((n: VisibleNode) => n.index === store.selectedIndex);
+    const prev = Math.max(curPos - 1, 0);
+    await store.selectNode(store.nodes[prev].index);
+  } else if (e.key === "ArrowRight" || e.key === "l") {
+    if (store.selectedNode && store.selectedNode.has_children && !store.selectedNode.expanded)
+      await store.toggleExpand(store.selectedNode.index);
+  } else if (e.key === "ArrowLeft" || e.key === "h") {
+    if (store.selectedNode && store.selectedNode.has_children && store.selectedNode.expanded)
+      await store.toggleExpand(store.selectedNode.index);
+  } else if (e.key === " ") {
+    e.preventDefault();
+    if (store.selectedNode && store.selectedNode.has_children)
+      await store.toggleExpand(store.selectedNode.index);
+  }
+}
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-neutral-950">
+  <div class="flex flex-col h-full bg-neutral-950 outline-none" tabindex="0" @keydown="onKeydown">
     <!-- Header -->
     <div class="flex items-center h-8 px-2 border-b border-neutral-800/60 shrink-0 gap-1">
       <span class="text-[11px] text-neutral-500 font-medium uppercase tracking-wider flex-1">Explorer</span>
@@ -205,12 +239,13 @@ async function onChevronClick(e: Event, node: VisibleNode) {
           :class="`${diffBadge(node.diff_status)!.bg} ${diffBadge(node.diff_status)!.fg}`"
         >{{ diffBadge(node.diff_status)!.label }}</span>
 
-        <!-- Type badge -->
+        <!-- Type badges -->
         <span
-          v-if="nodeBadge(node)"
+          v-for="(badge, bi) in nodeBadges(node)"
+          :key="bi"
           class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none shrink-0"
-          :class="`${nodeBadge(node)!.bg} ${nodeBadge(node)!.fg}`"
-        >{{ nodeBadge(node)!.label }}</span>
+          :class="`${badge.bg} ${badge.fg}`"
+        >{{ badge.label }}</span>
 
         <!-- Label -->
         <span class="truncate text-[12px] leading-tight" :class="nodeTextClass(node)">{{ node.text }}</span>

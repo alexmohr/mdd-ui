@@ -148,6 +148,54 @@ To use the MCP server with [OpenCode](https://opencode.ai), add the following to
 
 Replace `path/to/mdd-ui` with the actual path to your built binary (e.g., `target/release/mdd-ui`).
 
+### Tauri Desktop UI
+
+mdd-ui also includes a desktop application built with [Tauri](https://tauri.app/) and [Vue.js](https://vuejs.org/). This provides a graphical interface for browsing MDD databases.
+
+#### Prerequisites
+
+- Rust **2024 edition** (1.85+)
+- [Bun](https://bun.sh/) (for the frontend build)
+- Node.js dependencies (installed via bun)
+
+#### Running the Tauri UI (Development Mode)
+
+```sh
+cd src/mdd-tauri
+bun install
+bun tauri dev
+```
+
+This will start the development server with hot-reloading enabled.
+
+#### Building the Tauri UI (Manual Release Build)
+
+To build a release binary for your current platform:
+
+```sh
+cd src/mdd-tauri
+bun install
+bun tauri build
+```
+
+The built application will be in `src/mdd-tauri/target/release/bundle/` with platform-specific installers:
+- **Linux**: `.deb` and `.AppImage` files
+- **macOS**: `.dmg` file and `.app` bundle
+- **Windows**: `.msi` installer and `.exe` file
+
+To build for a specific target platform, use the `--target` flag:
+
+```sh
+# Example: Build for Windows from Linux
+bun tauri build --target x86_64-pc-windows-msvc
+```
+
+#### Automated Release Builds
+
+The project includes a GitHub Actions workflow that automatically builds Tauri binaries for all platforms when a release is created. The binaries are uploaded as artifacts to the release page.
+
+See [`.github/workflows/tauri-release.yml`](.github/workflows/tauri-release.yml) for the workflow configuration.
+
 ## Keybindings
 
 ### Navigation

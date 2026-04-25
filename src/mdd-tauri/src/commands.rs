@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Alexander Mohr
 
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use mdd_core::tree::{
     DiffStatus, DetailSectionData, NodeType, TreeNode,
 };
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 // ---------------------------------------------------------------------------
 // Lightweight DTOs sent to the Vue frontend
@@ -679,4 +681,107 @@ fn expand_ancestors(nodes: &mut [TreeNode], target_idx: usize) {
             n.expanded = true;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Recent files management
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RecentFile {
+    pub path: String,
+    pub timestamp: i64,
+}
+
+#[derive(Serialize)]
+pub struct RecentFilesResult {
+    pub files: Vec<RecentFile>,
+}
+
+fn get_recent_files_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let cache_dir = app.path().cache_dir()
+        .map_err(|e| format!("Failed to get cache directory: {e}"))?;
+    Ok(cache_dir.join("mdd-ui").join("recent-files.json"))
+}
+
+#[tauri::command]
+pub fn get_recent_files(app: AppHandle) -> Result<RecentFilesResult, String> {
+    let path = get_recent_files_path(&app)?;
+    
+    // Read recent files from cache
+    let content = match fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return Ok(RecentFilesResult { files: Vec::new() }),
+    };
+    
+    let mut files: Vec<RecentFile> = serde_json::from_str(&content)
+        .unwrap_or_default();
+    
+    // Filter out files that don't exist
+    files.retain(|f| PathBuf::from(&f.path).exists());
+    
+    // Write back the filtered list
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create cache directory: {e}"))?;
+    }
+    let json = serde_json::to_string(&files)
+        .map_err(|e| format!("Failed to serialize recent files: {e}"))?;
+    fs::write(&path, json)
+        .map_err(|e| format!("Failed to write recent files: {e}"))?;
+    
+    Ok(RecentFilesResult { files })
+}
+
+#[tauri::command]
+pub fn add_recent_file(path: String, app: AppHandle) -> Result<(), String> {
+    let cache_path = get_recent_files_path(&app)?;
+    
+    // Create cache directory if it doesn't exist
+    if let Some(parent) = cache_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create cache directory: {e}"))?;
+    }
+    
+    // Read existing recent files
+    let mut files: Vec<RecentFile> = if cache_path.exists() {
+        let content = fs::read_to_string(&cache_path)
+            .map_err(|e| format!("Failed to read recent files: {e}"))?;
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    
+    // Remove the file if it already exists (to move it to the top)
+    files.retain(|f| f.path != path);
+    
+    // Add the file to the top with current timestamp
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    files.insert(0, RecentFile { path, timestamp });
+    
+    // Keep only the most recent 10 files
+    files.truncate(10);
+    
+    // Write back to cache
+    let json = serde_json::to_string(&files)
+        .map_err(|e| format!("Failed to serialize recent files: {e}"))?;
+    fs::write(&cache_path, json)
+        .map_err(|e| format!("Failed to write recent files: {e}"))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_recent_files(app: AppHandle) -> Result<(), String> {
+    let path = get_recent_files_path(&app)?;
+    
+    if path.exists() {
+        fs::remove_file(&path)
+            .map_err(|e| format!("Failed to remove recent files: {e}"))?;
+    }
+    
+    Ok(())
 }

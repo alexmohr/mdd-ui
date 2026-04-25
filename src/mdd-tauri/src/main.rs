@@ -8,6 +8,7 @@ mod commands;
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(commands::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::load_mdd,
@@ -23,6 +24,9 @@ fn main() {
             commands::collapse_all,
             commands::toggle_hide_unchanged,
             commands::navigate_to,
+            commands::get_recent_files,
+            commands::add_recent_file,
+            commands::clear_recent_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -71,6 +71,15 @@ export interface NavigateResult {
   detail: DetailSection[];
 }
 
+export interface RecentFile {
+  path: string;
+  timestamp: number;
+}
+
+export interface RecentFilesResult {
+  files: RecentFile[];
+}
+
 export async function loadMdd(path: string): Promise<LoadResult> {
   return invoke<LoadResult>("load_mdd", { path });
 }
@@ -130,4 +139,16 @@ export async function navigateTo(
   target: JumpTarget,
 ): Promise<NavigateResult> {
   return invoke<NavigateResult>("navigate_to", { target });
+}
+
+export async function getRecentFiles(): Promise<RecentFilesResult> {
+  return invoke<RecentFilesResult>("get_recent_files");
+}
+
+export async function addRecentFile(path: string): Promise<void> {
+  return invoke("add_recent_file", { path });
+}
+
+export async function clearRecentFiles(): Promise<void> {
+  return invoke("clear_recent_files");
 }
