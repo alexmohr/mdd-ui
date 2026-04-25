@@ -11,7 +11,7 @@ mod history;
 mod input;
 mod mouse;
 mod navigation;
-mod render;
+pub(crate) mod render;
 mod search;
 mod sort;
 mod visibility;

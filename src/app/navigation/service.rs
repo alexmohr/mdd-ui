@@ -178,19 +178,6 @@ impl App {
         }
     }
 
-    /// Check if node is a service-related node
-    pub(super) fn is_service_node(node: &TreeNode) -> bool {
-        node.node_type.is_service()
-    }
-
-    /// Return the canonical short name for a service / job node.
-    pub(super) fn extract_service_name_from_node(node: &TreeNode) -> String {
-        node.service_short_name()
-            .or_else(|| node.short_name())
-            .unwrap_or_default()
-            .to_owned()
-    }
-
     /// Navigate to parent service in the container.
     /// Uses the path-based lookup (container → Diag-Comms section → service)
     /// with automatic parent-ref fallback via `find_by_section_path`.

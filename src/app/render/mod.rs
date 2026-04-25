@@ -7,7 +7,7 @@ mod composite;
 mod detail;
 mod popup;
 mod table;
-mod tabs;
+pub(in crate::app) mod tabs;
 mod tree;
 
 use ratatui::{

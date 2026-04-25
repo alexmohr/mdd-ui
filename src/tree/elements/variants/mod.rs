@@ -411,49 +411,13 @@ pub fn add_protocols(b: &mut TreeBuilder, ecu: &EcuDb<'_>) {
         )
         | Err(_) => None,
     });
-
-    if layers.is_empty() {
-        return;
-    }
-
-    let header_idx = b.next_index();
-    b.push_section_header(
-        "Protocols".to_string(),
-        false,
-        true,
-        vec![],
+    add_layer_section(
+        b,
+        &layers,
+        "Protocols",
         SectionType::Protocols,
+        "Protocols Overview",
     );
-
-    let mut node_indices: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
-    let mut names = Vec::new();
-    for layer in &layers {
-        let name = layer.short_name().unwrap_or("unnamed");
-        names.push(name.to_owned());
-        let detail_sections = build_layer_summary_section(layer, name);
-
-        // Protocols are at the top of the hierarchy — their parent refs are handled
-        // by the layers that reference them (variants, functional groups)
-        node_indices.insert(name.to_string(), b.next_index());
-        b.push_container(
-            1,
-            name.to_string(),
-            name.to_string(),
-            detail_sections,
-            Vec::new(),
-        );
-
-        b.add_diag_layer_structured(
-            layer,
-            2,
-            None::<std::iter::Empty<cda_database::datatypes::ParentRef>>,
-            None::<std::iter::Empty<cda_database::datatypes::Variant>>,
-        );
-    }
-
-    let overview = build_names_overview_table(&names, "Protocols Overview", &node_indices);
-    b.set_detail_sections(header_idx, overview);
 }
 
 /// Build variant summary section with info and children table

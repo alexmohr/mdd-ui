@@ -12,21 +12,21 @@ use ratatui::{
 
 use crate::app::App;
 
+/// Calculate a centered popup rectangle as a percentage of the given area.
+fn centered_popup(area: Rect, width_pct: u16, height_pct: u16) -> Rect {
+    let w = area.width.saturating_mul(width_pct) / 100;
+    let h = area.height.saturating_mul(height_pct) / 100;
+    Rect {
+        x: (area.width.saturating_sub(w)) / 2,
+        y: (area.height.saturating_sub(h)) / 2,
+        width: w,
+        height: h,
+    }
+}
+
 impl App {
     pub(in crate::app) fn draw_help_popup(&self, frame: &mut Frame) {
-        // Calculate popup size and position (centered, 70% width, 80% height)
-        let area = frame.area();
-        let popup_width = area.width.saturating_mul(70) / 100;
-        let popup_height = area.height.saturating_mul(80) / 100;
-        let popup_x = (area.width.saturating_sub(popup_width)) / 2;
-        let popup_y = (area.height.saturating_sub(popup_height)) / 2;
-
-        let popup_rect = Rect {
-            x: popup_x,
-            y: popup_y,
-            width: popup_width,
-            height: popup_height,
-        };
+        let popup_rect = centered_popup(frame.area(), 70, 80);
 
         // Clear the area behind the popup
         frame.render_widget(Clear, popup_rect);
@@ -110,19 +110,7 @@ impl App {
             return;
         };
 
-        // Calculate popup size and position (centered, 60% width, 50% height)
-        let area = frame.area();
-        let popup_width = area.width.saturating_mul(60) / 100;
-        let popup_height = area.height.saturating_mul(50) / 100;
-        let popup_x = (area.width.saturating_sub(popup_width)) / 2;
-        let popup_y = (area.height.saturating_sub(popup_height)) / 2;
-
-        let popup_rect = Rect {
-            x: popup_x,
-            y: popup_y,
-            width: popup_width,
-            height: popup_height,
-        };
+        let popup_rect = centered_popup(frame.area(), 60, 50);
 
         // Clear the area first
         frame.render_widget(Clear, popup_rect);

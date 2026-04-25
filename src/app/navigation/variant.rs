@@ -9,13 +9,6 @@ use crate::{
 };
 
 impl App {
-    /// Handle Enter key for functional class nodes.
-    /// Delegates to the generic cell-jump dispatch so navigation is driven
-    /// by per-cell `CellJumpTarget` metadata rather than hard-coded column indices.
-    pub(super) fn handle_functional_class_enter(&mut self) {
-        self.try_navigate_from_detail_row();
-    }
-
     /// Navigate to a variant from the Variants overview table
     pub(crate) fn try_navigate_to_variant(&mut self) {
         let target = {

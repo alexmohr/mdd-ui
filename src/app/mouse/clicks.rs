@@ -5,7 +5,10 @@
 
 use ratatui::layout::{Direction, Layout};
 
-use crate::app::{App, COLUMN_SPACING};
+use crate::app::{
+    App, COLUMN_SPACING,
+    render::tabs::{build_tab_strings, compute_tab_lines},
+};
 
 impl App {
     pub(super) fn handle_tab_click(&mut self, column: u16, row: u16) {
@@ -28,38 +31,8 @@ impl App {
 
         // Calculate available width for tabs (full width, no borders)
         let available_width = usize::from(tab_area.width);
-
-        // Build tab strings with decorators to match rendering logic
-        let tab_strings: Vec<String> = self
-            .layout
-            .tab_titles
-            .iter()
-            .map(|title| format!(" {title} "))
-            .collect();
-
-        // Simulate tab wrapping to determine which line each tab is on
-        let mut lines: Vec<Vec<usize>> = Vec::new();
-        let mut current_line: Vec<usize> = Vec::new();
-        let mut current_width: usize = 0;
-
-        for (idx, tab_str) in tab_strings.iter().enumerate() {
-            let tab_width: usize = tab_str.chars().count().saturating_add(1); // +1 for separator
-
-            if current_width.saturating_add(tab_width) > available_width && !current_line.is_empty()
-            {
-                // Start a new line
-                lines.push(current_line);
-                current_line = Vec::new();
-                current_width = 0;
-            }
-
-            current_line.push(idx);
-            current_width = current_width.saturating_add(tab_width);
-        }
-
-        if !current_line.is_empty() {
-            lines.push(current_line);
-        }
+        let tab_strings = build_tab_strings(&self.layout.tab_titles);
+        let lines = compute_tab_lines(&tab_strings, available_width);
 
         // Determine which line was clicked
         let Some(clicked_line_tabs) = lines.get(relative_row) else {
