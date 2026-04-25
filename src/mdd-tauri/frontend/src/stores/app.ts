@@ -176,6 +176,15 @@ export const useAppStore = defineStore("app", () => {
     try { nodes.value = await api.collapseAll(); } catch (e) { status.value = `Error: ${e}`; }
   }
 
+  async function toggleSort() {
+    try {
+      nodes.value = await api.toggleSort();
+      status.value = "Sort toggled";
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    }
+  }
+
   async function toggleHideUnchanged() {
     try {
       nodes.value = await api.toggleHideUnchanged();
@@ -207,7 +216,7 @@ export const useAppStore = defineStore("app", () => {
     status, loading, history, canGoBack, breadcrumbs, splitPct,
     fileLoaded, filePath, hideUnchanged,
     loadFile, loadDiff, selectNode, goBack, toggleExpand, search,
-    clearSearch, cycleScope, expandAll, collapseAll, toggleHideUnchanged,
+    clearSearch, cycleScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     navigateTo,
   };
 });
