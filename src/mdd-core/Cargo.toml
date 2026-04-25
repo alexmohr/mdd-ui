@@ -17,14 +17,5 @@ anyhow = "1"
 # Serialization (for Tauri command return types)
 serde = { version = "1", features = ["derive", "rc"] }
 
-[lints.clippy]
-pedantic = { level = "warn", priority = -1 }
-similar_names = "allow"
-clone_on_ref_ptr = "warn"
-indexing_slicing = "deny"
-unwrap_used = "deny"
-arithmetic_side_effects = "deny"
-separated_literal_suffix = "deny"
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }
+[lints]
+workspace = true

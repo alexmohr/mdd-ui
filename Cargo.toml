@@ -5,6 +5,22 @@
 members = ["src/mdd-core"]
 default-members = ["."]
 
+[workspace.lints.clippy]
+# enable pedantic
+pedantic = { level = "warn", priority = -1 }
+## exclude some too pedantic lints for now
+similar_names = { level = "allow" }
+
+# additional lints
+clone_on_ref_ptr = { level = "warn" }
+indexing_slicing = { level = "deny" }
+unwrap_used = { level = "deny" }
+arithmetic_side_effects = { level = "deny" }
+separated_literal_suffix = { level = "deny" }
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }
+
 [package]
 name = "mdd-ui"
 version = "0.1.0"
@@ -46,18 +62,5 @@ tokio = { version = "1", features = ["rt", "macros"], optional = true }
 [patch.crates-io]
 flatbuffers = { git = "https://github.com/alexmohr/flatbuffers.git", rev = "0ba3307d" }
 
-[lints.clippy]
-# enable pedantic
-pedantic = { level = "warn", priority = -1 }
-## exclude some too pedantic lints for now
-similar_names = "allow"
-
-# additional lints
-clone_on_ref_ptr = "warn"
-indexing_slicing = "deny"
-unwrap_used = "deny"
-arithmetic_side_effects = "deny"
-separated_literal_suffix = "deny"
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }
+[lints]
+workspace = true

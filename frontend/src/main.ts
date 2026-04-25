@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+// SPDX-License-Identifier: Apache-2.0
+
 import "./style.css";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
