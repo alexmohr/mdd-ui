@@ -36,6 +36,30 @@ macro_rules! collect_short_names {
     };
 }
 
+/// Extract `ResponseSnapshot`s from an optional `FlatBuffers` response vector.
+/// Uses a macro because the concrete response type is not publicly nameable.
+macro_rules! collect_responses {
+    ($opt_vec:expr) => {
+        $opt_vec
+            .into_iter()
+            .flatten()
+            .map(|resp| {
+                let response_type = format!("{:?}", resp.response_type());
+                let params: Vec<ParamSnapshot> = resp
+                    .params()
+                    .into_iter()
+                    .flatten()
+                    .map(|p| ParamSnapshot::from_param(&Parameter(p)))
+                    .collect();
+                ResponseSnapshot {
+                    response_type,
+                    params,
+                }
+            })
+            .collect::<Vec<ResponseSnapshot>>()
+    };
+}
+
 // ---------------------------------------------------------------------------
 // Snapshot types
 // ---------------------------------------------------------------------------
@@ -391,43 +415,8 @@ impl DiagServiceSnapshot {
             RequestSnapshot { params }
         });
 
-        let pos_responses = ds
-            .pos_responses()
-            .into_iter()
-            .flatten()
-            .map(|resp| {
-                let response_type = format!("{:?}", resp.response_type());
-                let params: Vec<ParamSnapshot> = resp
-                    .params()
-                    .into_iter()
-                    .flatten()
-                    .map(|p| ParamSnapshot::from_param(&Parameter(p)))
-                    .collect();
-                ResponseSnapshot {
-                    response_type,
-                    params,
-                }
-            })
-            .collect();
-
-        let neg_responses = ds
-            .neg_responses()
-            .into_iter()
-            .flatten()
-            .map(|resp| {
-                let response_type = format!("{:?}", resp.response_type());
-                let params: Vec<ParamSnapshot> = resp
-                    .params()
-                    .into_iter()
-                    .flatten()
-                    .map(|p| ParamSnapshot::from_param(&Parameter(p)))
-                    .collect();
-                ResponseSnapshot {
-                    response_type,
-                    params,
-                }
-            })
-            .collect();
+        let pos_responses = collect_responses!(ds.pos_responses());
+        let neg_responses = collect_responses!(ds.neg_responses());
 
         Self {
             diag_comm,

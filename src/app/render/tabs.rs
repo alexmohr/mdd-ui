@@ -13,6 +13,43 @@ use ratatui::{
 
 use crate::app::App;
 
+/// Build decorated tab strings from titles: `" Title "`.
+pub(in crate::app) fn build_tab_strings(tab_titles: &[String]) -> Vec<String> {
+    tab_titles
+        .iter()
+        .map(|title| format!(" {title} "))
+        .collect()
+}
+
+/// Compute the line-grouped tab layout for the given available width.
+/// Returns a `Vec` of lines, where each line is a `Vec` of tab indices.
+pub(in crate::app) fn compute_tab_lines(
+    tab_strings: &[String],
+    available_width: usize,
+) -> Vec<Vec<usize>> {
+    let mut lines: Vec<Vec<usize>> = Vec::new();
+    let mut current_line: Vec<usize> = Vec::new();
+    let mut current_width: usize = 0;
+
+    for (idx, tab_str) in tab_strings.iter().enumerate() {
+        let tab_width = tab_str.len().saturating_add(1); // +1 for separator
+
+        if current_width.saturating_add(tab_width) > available_width && !current_line.is_empty() {
+            lines.push(std::mem::take(&mut current_line));
+            current_width = 0;
+        }
+
+        current_line.push(idx);
+        current_width = current_width.saturating_add(tab_width);
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
+}
+
 impl App {
     /// Calculate how many lines are needed to display tabs given available width
     pub(super) fn calculate_tab_lines(tab_titles: &[String], available_width: usize) -> usize {
@@ -55,35 +92,8 @@ impl App {
             return; // Too narrow to render anything meaningful
         }
 
-        // Build tab strings with decorators: " TabName "
-        let tab_strings: Vec<String> = tab_titles
-            .iter()
-            .map(|title| format!(" {title} "))
-            .collect();
-
-        // Calculate positions and line breaks
-        let mut lines: Vec<Vec<(usize, &str)>> = Vec::new();
-        let mut current_line: Vec<(usize, &str)> = Vec::new();
-        let mut current_width: usize = 0;
-
-        for (idx, tab_str) in tab_strings.iter().enumerate() {
-            let tab_width = tab_str.len().saturating_add(1); // +1 for separator
-
-            if current_width.saturating_add(tab_width) > available_width && !current_line.is_empty()
-            {
-                // Start a new line
-                lines.push(current_line);
-                current_line = Vec::new();
-                current_width = 0;
-            }
-
-            current_line.push((idx, tab_str.as_str()));
-            current_width = current_width.saturating_add(tab_width);
-        }
-
-        if !current_line.is_empty() {
-            lines.push(current_line);
-        }
+        let tab_strings = build_tab_strings(tab_titles);
+        let lines = compute_tab_lines(&tab_strings, available_width);
 
         // Render each line of tabs
         let num_tab_lines = lines.len();
@@ -97,8 +107,12 @@ impl App {
                 .saturating_add(u16::try_from(line_idx).unwrap_or(u16::MAX));
             let mut x = area.x;
 
-            for (i, (tab_idx, tab_str)) in line_tabs.iter().enumerate() {
-                let is_selected = *tab_idx == selected;
+            for (i, &tab_idx) in line_tabs.iter().enumerate() {
+                let Some(tab_str) = tab_strings.get(tab_idx) else {
+                    continue;
+                };
+                let tab_str = tab_str.as_str();
+                let is_selected = tab_idx == selected;
                 let style = if is_selected {
                     Style::default()
                         .fg(self.theme.tab_active_fg)
@@ -126,7 +140,7 @@ impl App {
                 }
 
                 // Render the tab
-                let span = Span::styled(*tab_str, style);
+                let span = Span::styled(tab_str, style);
                 let line = Line::from(span);
 
                 let tab_width = u16::try_from(tab_str.len()).unwrap_or(u16::MAX);

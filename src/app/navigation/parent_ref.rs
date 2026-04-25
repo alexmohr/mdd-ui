@@ -23,13 +23,17 @@ impl App {
             return;
         };
 
-        if !Self::is_service_node(node) {
+        if !node.node_type.is_service() {
             self.status = "Not a service node".into();
             return;
         }
 
         // Extract current service name and parent layer name
-        let current_service_name = Self::extract_service_name_from_node(node);
+        let current_service_name = node
+            .service_short_name()
+            .or_else(|| node.short_name())
+            .unwrap_or_default()
+            .to_owned();
         let Some(parent_layer_name) = self.get_parent_layer_name(node_idx) else {
             return;
         };

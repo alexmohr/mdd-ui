@@ -56,7 +56,7 @@ impl App {
         }
 
         if matches!(node.node_type, NodeType::FunctionalClass) {
-            self.handle_functional_class_enter();
+            self.try_navigate_from_detail_row();
             return;
         }
 
