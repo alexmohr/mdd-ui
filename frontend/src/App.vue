@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Alexander Mohr -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { useAppStore } from "./stores/app";

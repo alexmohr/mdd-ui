@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Alexander Mohr
+// SPDX-License-Identifier: Apache-2.0
+
 import { invoke } from "@tauri-apps/api/core";
 
 export interface VisibleNode {

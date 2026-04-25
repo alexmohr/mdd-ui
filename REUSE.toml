@@ -8,3 +8,20 @@ version = 1
 path = ["LICENSE", "NOTICE", "CONTRIBUTORS", "LICENSES/**.txt"]
 SPDX-FileCopyrightText = "The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)"
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ["icons/**", "frontend/public/logo.png"]
+SPDX-FileCopyrightText = "2026 Alexander Mohr"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  "capabilities/default.json",
+  "frontend/bun.lock",
+  "frontend/package.json",
+  "frontend/tsconfig.json",
+  "gen/schemas/**",
+  ".DS_Store",
+]
+SPDX-FileCopyrightText = "2026 Alexander Mohr"
+SPDX-License-Identifier = "Apache-2.0"
