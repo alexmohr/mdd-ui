@@ -2,10 +2,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useSettingsStore } from "../stores/settings";
 import { useAppStore } from "../stores/app";
 import { check } from "@tauri-apps/plugin-updater";
+import { getVersion } from "@tauri-apps/api/app";
 
 const store = useSettingsStore();
 const appStore = useAppStore();
@@ -23,6 +24,11 @@ const updateStatus = ref<UpdateCheckStatus>("idle");
 const updateVersion = ref("");
 const updateError = ref("");
 const isInstalling = ref(false);
+const currentVersion = ref("");
+
+onMounted(async () => {
+  currentVersion.value = await getVersion();
+});
 
 async function checkForUpdates() {
   updateStatus.value = "checking";
@@ -534,6 +540,14 @@ async function handleClearAllCaches() {
 
           <!-- Updates -->
           <template v-if="activeCategory === 'updates'">
+            <!-- Current version -->
+            <section class="space-y-1">
+              <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider">Current Version</h4>
+              <p class="text-xs text-neutral-400 font-mono">
+                {{ currentVersion || '…' }}
+              </p>
+            </section>
+
             <!-- Auto-check toggle -->
             <section class="space-y-3">
               <div class="flex items-start justify-between gap-4">
