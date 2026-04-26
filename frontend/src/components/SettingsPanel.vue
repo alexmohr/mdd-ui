@@ -18,10 +18,11 @@ const categories = [
   { id: "updates", label: "Updates" },
 ];
 
-type UpdateCheckStatus = "idle" | "checking" | "up-to-date" | "available" | "installing" | "done" | "error";
+type UpdateCheckStatus = "idle" | "checking" | "up-to-date" | "available" | "done" | "error";
 const updateStatus = ref<UpdateCheckStatus>("idle");
 const updateVersion = ref("");
 const updateError = ref("");
+const isInstalling = ref(false);
 
 async function checkForUpdates() {
   updateStatus.value = "checking";
@@ -42,7 +43,7 @@ async function checkForUpdates() {
 }
 
 async function installUpdate() {
-  updateStatus.value = "installing";
+  isInstalling.value = true;
   try {
     const update = await check();
     if (update) {
@@ -52,6 +53,8 @@ async function installUpdate() {
   } catch (e) {
     updateStatus.value = "error";
     updateError.value = `${e}`;
+  } finally {
+    isInstalling.value = false;
   }
 }
 
@@ -570,11 +573,11 @@ async function handleClearAllCaches() {
                 <button
                   class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0 disabled:opacity-50"
                   :class="
-                    updateStatus === 'checking' || updateStatus === 'installing'
+                    updateStatus === 'checking' || isInstalling
                       ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed border border-neutral-700'
                       : 'bg-blue-600 hover:bg-blue-500 text-white'
                   "
-                  :disabled="updateStatus === 'checking' || updateStatus === 'installing'"
+                  :disabled="updateStatus === 'checking' || isInstalling"
                   @click="checkForUpdates"
                 >
                   <span v-if="updateStatus === 'checking'" class="flex items-center gap-1.5">
@@ -587,10 +590,10 @@ async function handleClearAllCaches() {
                 <button
                   v-if="updateStatus === 'available'"
                   class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0 bg-green-600 hover:bg-green-500 text-white disabled:opacity-50"
-                  :disabled="updateStatus === 'installing'"
+                  :disabled="isInstalling"
                   @click="installUpdate"
                 >
-                  <span v-if="updateStatus === 'installing'" class="flex items-center gap-1.5">
+                  <span v-if="isInstalling" class="flex items-center gap-1.5">
                     <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                     Installing…
                   </span>
