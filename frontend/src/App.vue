@@ -4,23 +4,27 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { useAppStore } from "./stores/app";
+import { useLlmStore } from "./stores/llm";
 import { open } from "@tauri-apps/plugin-dialog";
 import TreePane from "./components/TreePane.vue";
 import DetailPane from "./components/DetailPane.vue";
 import SearchBar from "./components/SearchBar.vue";
 import StatusBar from "./components/StatusBar.vue";
+import LlmPanel from "./components/LlmPanel.vue";
 
 const store = useAppStore();
+const llmStore = useLlmStore();
 const dragging = ref(false);
 const isMac = navigator.platform.toLowerCase().includes('mac');
 
 onMounted(async () => {
-  await Promise.all([store.loadRecentFiles(), store.loadPrefs()]);
+  await Promise.all([store.loadRecentFiles(), store.loadPrefs(), llmStore.loadSettings()]);
   window.addEventListener("keydown", handleKeydown);
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeydown);
+  llmStore.stopPolling();
 });
 
 async function openFile() {
@@ -102,8 +106,29 @@ function onSplitMouseDown() {
     :class="{ 'select-none': dragging }"
     :style="{ fontSize: store.fontSize + 'px' }"
   >
+    <!-- Loading overlay -->
+    <div
+      v-if="store.loading"
+      class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-neutral-950/90 backdrop-blur-sm"
+    >
+      <svg class="animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>
+      <span class="mt-3 text-sm text-neutral-400">Loading…</span>
+    </div>
     <!-- Welcome screen -->
     <template v-if="!store.fileLoaded">
+      <!-- Chat toggle in welcome screen -->
+      <div class="absolute top-2 right-3 z-10" style="padding-top: env(titlebar-area-y, 0)">
+        <button
+          class="p-1.5 rounded-md transition-colors"
+          :class="llmStore.panelOpen ? 'bg-neutral-700 text-blue-400' : 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800'"
+          title="AI Assistant"
+          @click="llmStore.panelOpen = !llmStore.panelOpen"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+      </div>
       <div class="flex-1 flex items-center justify-center" data-tauri-drag-region>
         <div class="text-center space-y-6">
           <div class="flex flex-col items-center gap-3">
@@ -208,6 +233,14 @@ function onSplitMouseDown() {
         <!-- Actions -->
         <div class="flex items-center gap-1" data-tauri-drag-region>
           <button
+            class="p-1.5 rounded-md transition-colors"
+            :class="llmStore.panelOpen ? 'bg-neutral-700 text-blue-400' : 'text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800'"
+            title="AI Assistant"
+            @click="llmStore.panelOpen = !llmStore.panelOpen"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          <button
             v-if="store.isDiff"
             class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
             :class="store.hideUnchanged ? 'bg-amber-600/20 text-amber-400' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'"
@@ -262,5 +295,8 @@ function onSplitMouseDown() {
       <!-- Status bar -->
       <StatusBar />
     </template>
+
+    <!-- AI panel (overlay, always available) -->
+    <LlmPanel v-if="llmStore.panelOpen" />
   </div>
 </template>

@@ -8,7 +8,6 @@ import type { VisibleNode } from "../api/commands";
 import { getNodePath } from "../api/commands";
 
 const store = useAppStore();
-const showLegend = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
 
 watch(
@@ -176,24 +175,6 @@ function nodeTextClass(node: VisibleNode): string {
   return "text-neutral-300";
 }
 
-const legendItems: Badge[] = [
-  { label: "SVC", bg: "bg-violet-500/20", fg: "text-violet-300" },
-  { label: "JOB", bg: "bg-violet-500/15", fg: "text-violet-300/70" },
-  { label: "REQ", bg: "bg-teal-500/20",   fg: "text-teal-300" },
-  { label: "R+",  bg: "bg-emerald-500/20", fg: "text-emerald-300" },
-  { label: "R-",  bg: "bg-rose-500/20",   fg: "text-rose-300" },
-  { label: "FC",  bg: "bg-orange-500/20", fg: "text-orange-300" },
-  { label: "DOP", bg: "bg-pink-500/20",   fg: "text-pink-300" },
-  { label: "SDG", bg: "bg-lime-500/20",   fg: "text-lime-300" },
-  { label: "INH", bg: "bg-amber-500/15",   fg: "text-amber-400" },
-  { label: "REF", bg: "bg-cyan-500/20",   fg: "text-cyan-300" },
-];
-const legendLabels: Record<string, string> = {
-  SVC: "Service", JOB: "Job", REQ: "Request", "R+": "Pos-Response", "R-": "Neg-Response",
-  FC: "Functional Class", DOP: "DOP / Structure", SDG: "Special Data Group",
-  INH: "Inherited", REF: "Parent References",
-};
-
 async function onClick(node: VisibleNode) {
   await store.selectNode(node.index);
 }
@@ -240,9 +221,6 @@ async function onKeydown(e: KeyboardEvent) {
       <button class="p-1 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors" title="Search (/)" @click="store.searchActive = true">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       </button>
-      <button class="p-1 rounded transition-colors" :class="showLegend ? 'text-blue-400 bg-blue-500/10' : 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800'" title="Legend" @click="showLegend = !showLegend">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-      </button>
       <button class="p-1 rounded transition-colors relative" :disabled="!canSort" :title="`Sort (s) — ${store.sortLabel}`" :class="canSort ? 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'" @click="canSort && store.toggleSort()">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg>
         <span class="absolute bottom-0 -right-1.5 text-[9px] font-bold leading-none bg-neutral-950 px-px rounded-sm pointer-events-none" :class="canSort ? 'text-blue-400' : 'text-neutral-700'">{{ store.sortLabel }}</span>
@@ -255,24 +233,6 @@ async function onKeydown(e: KeyboardEvent) {
       </button>
     </div>
 
-    <!-- Legend -->
-    <div v-if="showLegend" class="border-b border-neutral-800/60 px-3 py-2.5 bg-neutral-900 shrink-0">
-      <div class="text-[10px] text-neutral-500 uppercase tracking-wider font-medium mb-2">Badges</div>
-      <div class="flex flex-wrap gap-2">
-        <div v-for="b in legendItems" :key="b.label" class="flex items-center gap-1.5">
-          <span class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none" :class="`${b.bg} ${b.fg}`">{{ b.label }}</span>
-          <span class="text-[11px] text-neutral-500">{{ legendLabels[b.label] }}</span>
-        </div>
-      </div>
-      <template v-if="store.isDiff">
-        <div class="text-[10px] text-neutral-500 uppercase tracking-wider font-medium mt-2.5 mb-2">Diff</div>
-        <div class="flex gap-3">
-          <div class="flex items-center gap-1.5"><span class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none bg-emerald-500/20 text-emerald-300">+</span><span class="text-[11px] text-neutral-500">Added</span></div>
-          <div class="flex items-center gap-1.5"><span class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none bg-red-500/20 text-red-300">-</span><span class="text-[11px] text-neutral-500">Removed</span></div>
-          <div class="flex items-center gap-1.5"><span class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none bg-amber-500/20 text-amber-300">~</span><span class="text-[11px] text-neutral-500">Modified</span></div>
-        </div>
-      </template>
-    </div>
 
     <!-- Node list -->
     <div ref="scrollContainer" class="flex-1 overflow-y-auto overflow-x-hidden py-0.5">
