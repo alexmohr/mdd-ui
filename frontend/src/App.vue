@@ -7,6 +7,7 @@ import { useAppStore } from "./stores/app";
 import { useLlmStore } from "./stores/llm";
 import { useSettingsStore } from "./stores/settings";
 import { open } from "@tauri-apps/plugin-dialog";
+import * as api from "./api/commands";
 import TreePane from "./components/TreePane.vue";
 import DetailPane from "./components/DetailPane.vue";
 import SearchBar from "./components/SearchBar.vue";
@@ -27,6 +28,8 @@ watch(() => store.theme, (t) => {
 onMounted(async () => {
   await Promise.all([store.loadRecentFiles(), store.loadPrefs(), llmStore.loadSettings()]);
   window.addEventListener("keydown", handleKeydown);
+  const initialFile = await api.getInitialFile();
+  if (initialFile) await store.loadFile(initialFile);
 });
 
 onUnmounted(() => {

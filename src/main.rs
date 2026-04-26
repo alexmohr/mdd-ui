@@ -17,6 +17,8 @@ use mdd_core::database;
 #[derive(Parser)]
 #[command(name = "mdd-ui", about = "MDD diagnostic database viewer")]
 struct Cli {
+    /// MDD file to open on startup
+    file: Option<String>,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -52,18 +54,19 @@ fn main() -> Result<()> {
         #[cfg(feature = "mcp")]
         Some(Command::Mcp) => mcp::run_mcp(),
         None => {
-            run_tauri_app();
+            run_tauri_app(cli.file);
             Ok(())
         }
     }
 }
 
-fn run_tauri_app() {
+fn run_tauri_app(initial_file: Option<String>) {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(commands::AppState::default())
+        .manage(commands::InitialFile(std::sync::Mutex::new(initial_file)))
         .invoke_handler(tauri::generate_handler![
             commands::load_mdd,
             commands::load_diff,
@@ -89,6 +92,7 @@ fn run_tauri_app() {
             commands::get_ui_prefs,
             commands::save_ui_prefs,
             commands::register_mdd_association,
+            commands::get_initial_file,
             llm::get_llm_settings,
             llm::save_llm_settings,
             llm::clear_llm_token,
