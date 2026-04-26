@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import { useAppStore } from "./stores/app";
 import { useLlmStore } from "./stores/llm";
 import { useSettingsStore } from "./stores/settings";
@@ -19,6 +19,10 @@ const llmStore = useLlmStore();
 const settingsStore = useSettingsStore();
 const dragging = ref(false);
 const isMac = navigator.platform.toLowerCase().includes('mac');
+
+watch(() => store.theme, (t) => {
+  document.documentElement.classList.toggle('light', t === 'light');
+}, { immediate: true });
 
 onMounted(async () => {
   await Promise.all([store.loadRecentFiles(), store.loadPrefs(), llmStore.loadSettings()]);
@@ -268,19 +272,6 @@ function onSplitMouseDown() {
           >
             Hide unchanged
           </button>
-          <div class="flex items-center gap-0.5 mr-1" data-tauri-drag-region>
-            <button
-              class="w-5 h-5 flex items-center justify-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors text-[11px] font-bold"
-              title="Decrease font size (-)"
-              @click="store.decreaseFontSize()"
-            >A-</button>
-            <span class="text-[10px] text-neutral-600 w-5 text-center">{{ store.fontSize }}</span>
-            <button
-              class="w-5 h-5 flex items-center justify-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors text-[11px] font-bold"
-              title="Increase font size (+)"
-              @click="store.increaseFontSize()"
-            >A+</button>
-          </div>
           <button
             class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
             title="Open file"

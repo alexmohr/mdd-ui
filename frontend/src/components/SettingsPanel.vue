@@ -4,11 +4,16 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useSettingsStore } from "../stores/settings";
+import { useAppStore } from "../stores/app";
 
 const store = useSettingsStore();
+const appStore = useAppStore();
 const activeCategory = ref("general");
 
-const categories = [{ id: "general", label: "General" }];
+const categories = [
+  { id: "general", label: "General" },
+  { id: "appearance", label: "Appearance" },
+];
 
 function close() {
   store.open = false;
@@ -189,6 +194,86 @@ function close() {
                     <code class="text-neutral-500">xdg-utils</code>.
                   </li>
                 </ul>
+              </div>
+            </section>
+          </template>
+
+          <!-- Appearance -->
+          <template v-if="activeCategory === 'appearance'">
+            <!-- Font size -->
+            <section class="space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                  Font Size
+                </h4>
+                <p class="text-xs text-neutral-500 leading-relaxed">
+                  Adjust the interface text size. Keyboard shortcuts
+                  <code class="text-neutral-400 bg-neutral-800 px-1 rounded">+</code> /
+                  <code class="text-neutral-400 bg-neutral-800 px-1 rounded">-</code> also work.
+                </p>
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  class="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors text-sm font-bold shrink-0"
+                  title="Decrease font size"
+                  :disabled="appStore.fontSize <= 9"
+                  :class="appStore.fontSize <= 9 ? 'opacity-30 cursor-not-allowed' : ''"
+                  @click="appStore.decreaseFontSize()"
+                >A-</button>
+                <input
+                  type="range"
+                  min="9"
+                  max="20"
+                  :value="appStore.fontSize"
+                  class="flex-1 h-1 rounded-full accent-blue-500 cursor-pointer"
+                  @input="appStore.setFontSize(Number(($event.target as HTMLInputElement).value))"
+                />
+                <button
+                  class="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors text-sm font-bold shrink-0"
+                  title="Increase font size"
+                  :disabled="appStore.fontSize >= 20"
+                  :class="appStore.fontSize >= 20 ? 'opacity-30 cursor-not-allowed' : ''"
+                  @click="appStore.increaseFontSize()"
+                >A+</button>
+                <span class="text-xs text-neutral-400 w-6 text-right shrink-0">{{ appStore.fontSize }}</span>
+              </div>
+            </section>
+
+            <!-- Theme -->
+            <section class="space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                  Theme
+                </h4>
+                <p class="text-xs text-neutral-500 leading-relaxed">
+                  Choose between a dark or light color scheme.
+                </p>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  class="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors"
+                  :class="
+                    appStore.theme === 'dark'
+                      ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                      : 'border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600'
+                  "
+                  @click="appStore.setTheme('dark')"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                  Dark
+                </button>
+                <button
+                  class="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors"
+                  :class="
+                    appStore.theme === 'light'
+                      ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                      : 'border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600'
+                  "
+                  @click="appStore.setTheme('light')"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                  Light
+                </button>
               </div>
             </section>
           </template>

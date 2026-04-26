@@ -176,6 +176,7 @@ export async function removeRecentFile(path: string): Promise<void> {
 
 export interface UiPrefs {
   font_size: number;
+  theme: string;
 }
 
 export async function getUiPrefs(): Promise<UiPrefs> {
