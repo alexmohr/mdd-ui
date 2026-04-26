@@ -35,6 +35,8 @@ jobs:
           components: clippy, rustfmt
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+      - name: Install Linux system dependencies
+        uses: ./.github/actions/install-linux-deps
       - name: Install cargo-deny
         run: cargo install --locked --version 0.18.9 cargo-deny
       - name: Install taplo toml toolkit
@@ -70,6 +72,8 @@ jobs:
           toolchain: 1.88.0
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+      - name: Install Linux system dependencies
+        uses: ./.github/actions/install-linux-deps
       - name: Build with all features
         run: cargo build --locked --all-features --verbose
       - name: Test with all features

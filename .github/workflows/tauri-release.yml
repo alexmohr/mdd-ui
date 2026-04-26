@@ -57,6 +57,10 @@ jobs:
         with:
           workspaces: src/mdd-tauri -> target
 
+      - name: Install Linux system dependencies
+        if: matrix.platform.os == 'ubuntu-latest'
+        uses: ./.github/actions/install-linux-deps
+
       - name: Install frontend dependencies
         working-directory: src/mdd-tauri/frontend
         run: bun install
