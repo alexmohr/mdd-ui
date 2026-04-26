@@ -44,6 +44,9 @@ tauri-plugin-fs = "2"
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+# HTTP client (GHE device flow + LLM API)
+reqwest = { version = "0.12", features = ["json"] }
+
 # Error handling
 anyhow = "1"
 

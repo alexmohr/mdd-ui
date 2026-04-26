@@ -326,9 +326,14 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, String> {
-    let db = mdd_core::database::load_mdd(&path).map_err(|e| format!("Failed to load: {e:#}"))?;
-    let (nodes, ecu_name) = mdd_core::tree::build_tree(&db, &path);
+pub async fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, String> {
+    let (nodes, ecu_name) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+        let db = mdd_core::database::load_mdd(&path).map_err(|e| format!("Failed to load: {e:#}"))?;
+        Ok(mdd_core::tree::build_tree(&db, &path))
+    })
+    .await
+    .map_err(|e| format!("Thread error: {e}"))??
+    ;
     let node_count = nodes.len();
 
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
@@ -349,17 +354,21 @@ pub fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, 
 }
 
 #[tauri::command]
-pub fn load_diff(
+pub async fn load_diff(
     old_path: String,
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<LoadResult, String> {
-    let db_old = mdd_core::database::load_mdd(&old_path)
-        .map_err(|e| format!("Failed to load old: {e:#}"))?;
-    let db_new = mdd_core::database::load_mdd(&new_path)
-        .map_err(|e| format!("Failed to load new: {e:#}"))?;
-    let (nodes, ecu_name) =
-        mdd_core::diff::diff_tree::build_diff_tree(&db_old, &db_new, &old_path, &new_path);
+    let (nodes, ecu_name) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+        let db_old = mdd_core::database::load_mdd(&old_path)
+            .map_err(|e| format!("Failed to load old: {e:#}"))?;
+        let db_new = mdd_core::database::load_mdd(&new_path)
+            .map_err(|e| format!("Failed to load new: {e:#}"))?;
+        Ok(mdd_core::diff::diff_tree::build_diff_tree(&db_old, &db_new, &old_path, &new_path))
+    })
+    .await
+    .map_err(|e| format!("Thread error: {e}"))??
+    ;
     let node_count = nodes.len();
 
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
