@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capabilities for mdd-ui","local":true,"windows":["main"],"permissions":["core:default","core:window:allow-start-dragging","dialog:default","dialog:allow-open"]}}
+{"default":{"identifier":"default","description":"Default capabilities for mdd-ui","local":true,"windows":["main"],"permissions":["core:default","core:window:allow-start-dragging","dialog:default","dialog:allow-open","opener:default"]}}
