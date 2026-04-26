@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch, nextTick } from "vue";
 import { useAppStore } from "../stores/app";
 
 const store = useAppStore();
@@ -10,6 +10,13 @@ const input = ref<HTMLInputElement | null>(null);
 const pendingOp = ref<'and' | 'or'>('and');
 
 onMounted(() => input.value?.focus());
+
+watch(() => store.searchActive, async (active) => {
+  if (active) {
+    await nextTick();
+    input.value?.focus();
+  }
+});
 
 async function onSubmit() {
   if (store.searchQuery.trim()) {
@@ -63,6 +70,13 @@ async function onClear() {
           >×</button>
         </span>
       </template>
+      <button
+        class="p-0.5 rounded text-neutral-600 hover:text-blue-400 hover:bg-neutral-800 transition-colors"
+        title="Add another filter (/)"
+        @click="store.searchActive = true"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+      </button>
       <button
         class="text-[0.78em] text-neutral-600 hover:text-red-400 transition-colors"
         @click="onClear"
