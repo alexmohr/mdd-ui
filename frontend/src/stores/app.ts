@@ -35,6 +35,7 @@ export const useAppStore = defineStore("app", () => {
   const filePath = ref("");
   const hideUnchanged = ref(false);
   const fontSize = ref(13);
+  const theme = ref<'dark' | 'light'>('dark');
   const sortLabel = ref("ID\u25b2");
   const recentFiles = ref<RecentFile[]>([]);
 
@@ -223,11 +224,20 @@ export const useAppStore = defineStore("app", () => {
 
   function increaseFontSize() {
     fontSize.value = Math.min(20, fontSize.value + 1);
-    api.saveUiPrefs({ font_size: fontSize.value }).catch(() => {});
+    api.saveUiPrefs({ font_size: fontSize.value, theme: theme.value }).catch(() => {});
   }
   function decreaseFontSize() {
     fontSize.value = Math.max(9, fontSize.value - 1);
-    api.saveUiPrefs({ font_size: fontSize.value }).catch(() => {});
+    api.saveUiPrefs({ font_size: fontSize.value, theme: theme.value }).catch(() => {});
+  }
+  function setFontSize(size: number) {
+    fontSize.value = Math.max(9, Math.min(20, size));
+    api.saveUiPrefs({ font_size: fontSize.value, theme: theme.value }).catch(() => {});
+  }
+
+  function setTheme(t: 'dark' | 'light') {
+    theme.value = t;
+    api.saveUiPrefs({ font_size: fontSize.value, theme: t }).catch(() => {});
   }
 
   async function toggleSort(nodeIndex?: number) {
@@ -280,6 +290,7 @@ export const useAppStore = defineStore("app", () => {
     try {
       const prefs = await api.getUiPrefs();
       fontSize.value = prefs.font_size;
+      theme.value = (prefs.theme as 'dark' | 'light') ?? 'dark';
     } catch (e) {
       console.error("Failed to load prefs:", e);
     }
@@ -323,10 +334,10 @@ export const useAppStore = defineStore("app", () => {
     nodes, ecuName, nodeCount, isDiff, selectedIndex, selectedNode,
     detailSections, selectedTab, searchQuery, searchScope, searchActive,
     status, loading, history, canGoBack, breadcrumbs, splitPct,
-    fileLoaded, filePath, hideUnchanged, fontSize, sortLabel, recentFiles,
+    fileLoaded, filePath, hideUnchanged, fontSize, theme, sortLabel, recentFiles,
     loadFile, loadDiff, selectNode, goBack, toggleExpand, search,
     clearSearch, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
-    increaseFontSize, decreaseFontSize,
+    increaseFontSize, decreaseFontSize, setFontSize, setTheme,
     navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
   };
 });

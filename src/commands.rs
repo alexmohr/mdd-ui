@@ -951,11 +951,20 @@ pub fn remove_recent_file(path: String, app: AppHandle) -> Result<(), String> {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct UiPrefs {
     pub font_size: u8,
+    #[serde(default = "default_theme")]
+    pub theme: String,
+}
+
+fn default_theme() -> String {
+    "dark".to_owned()
 }
 
 impl Default for UiPrefs {
     fn default() -> Self {
-        Self { font_size: 13 }
+        Self {
+            font_size: 13,
+            theme: "dark".to_owned(),
+        }
     }
 }
 

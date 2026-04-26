@@ -339,7 +339,8 @@ async fn ensure_copilot_key(app: &AppHandle) -> Result<(String, String), String>
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs().cast_signed();
+            .as_secs()
+            .cast_signed();
         if expires_at > now.saturating_add(300) {
             let api_base = settings
                 .copilot_api_base
