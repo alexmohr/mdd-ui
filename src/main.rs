@@ -65,6 +65,7 @@ fn run_tauri_app(initial_file: Option<String>) {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commands::AppState::default())
         .manage(commands::InitialFile(std::sync::Mutex::new(initial_file)))
         .invoke_handler(tauri::generate_handler![

@@ -192,6 +192,7 @@ export interface UiPrefs {
   max_recent_files: number;
   wrap_table_text: boolean;
   last_tab_title: string | null;
+  auto_check_updates: boolean;
 }
 
 export async function getUiPrefs(): Promise<UiPrefs> {

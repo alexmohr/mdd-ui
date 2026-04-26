@@ -46,5 +46,16 @@
         "role": "Viewer"
       }
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzM0Y5QjVEMjQ3NUQyRTUKUldUbDBuVWtYWnMvMC9VdmtoM09uYXp2Y2FXQWxwSlFvUXFybm1KaWxxMkd0aU5SMFIrTG85bW0K",
+      "endpoints": [
+        "https://github.com/alexmohr/mdd-ui/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

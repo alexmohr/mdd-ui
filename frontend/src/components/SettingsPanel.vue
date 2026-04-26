@@ -5,6 +5,7 @@
 import { ref } from "vue";
 import { useSettingsStore } from "../stores/settings";
 import { useAppStore } from "../stores/app";
+import { check } from "@tauri-apps/plugin-updater";
 
 const store = useSettingsStore();
 const appStore = useAppStore();
@@ -14,7 +15,45 @@ const categories = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
   { id: "behavior", label: "Behavior" },
+  { id: "updates", label: "Updates" },
 ];
+
+type UpdateCheckStatus = "idle" | "checking" | "up-to-date" | "available" | "installing" | "done" | "error";
+const updateStatus = ref<UpdateCheckStatus>("idle");
+const updateVersion = ref("");
+const updateError = ref("");
+
+async function checkForUpdates() {
+  updateStatus.value = "checking";
+  updateError.value = "";
+  updateVersion.value = "";
+  try {
+    const update = await check();
+    if (update) {
+      updateVersion.value = update.version;
+      updateStatus.value = "available";
+    } else {
+      updateStatus.value = "up-to-date";
+    }
+  } catch (e) {
+    updateStatus.value = "error";
+    updateError.value = `${e}`;
+  }
+}
+
+async function installUpdate() {
+  updateStatus.value = "installing";
+  try {
+    const update = await check();
+    if (update) {
+      await update.downloadAndInstall();
+      updateStatus.value = "done";
+    }
+  } catch (e) {
+    updateStatus.value = "error";
+    updateError.value = `${e}`;
+  }
+}
 
 function close() {
   store.open = false;
@@ -486,6 +525,103 @@ async function handleClearAllCaches() {
                     :class="appStore.wrapTableText ? 'translate-x-4' : 'translate-x-0'"
                   />
                 </button>
+              </div>
+            </section>
+          </template>
+
+          <!-- Updates -->
+          <template v-if="activeCategory === 'updates'">
+            <!-- Auto-check toggle -->
+            <section class="space-y-3">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                    Automatically check for updates
+                  </h4>
+                  <p class="text-xs text-neutral-500 leading-relaxed">
+                    Check for new releases on startup. Disabled by default.
+                  </p>
+                </div>
+                <button
+                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5 overflow-hidden"
+                  :class="appStore.autoCheckUpdates ? 'bg-blue-600' : 'bg-neutral-700'"
+                  @click="appStore.setAutoCheckUpdates(!appStore.autoCheckUpdates)"
+                >
+                  <span
+                    class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    :class="appStore.autoCheckUpdates ? 'translate-x-4' : 'translate-x-0'"
+                  />
+                </button>
+              </div>
+            </section>
+
+            <!-- Manual check -->
+            <section class="space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                  Check for Updates
+                </h4>
+                <p class="text-xs text-neutral-500 leading-relaxed">
+                  Manually check for a new release on GitHub.
+                </p>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <button
+                  class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0 disabled:opacity-50"
+                  :class="
+                    updateStatus === 'checking' || updateStatus === 'installing'
+                      ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed border border-neutral-700'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white'
+                  "
+                  :disabled="updateStatus === 'checking' || updateStatus === 'installing'"
+                  @click="checkForUpdates"
+                >
+                  <span v-if="updateStatus === 'checking'" class="flex items-center gap-1.5">
+                    <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    Checking…
+                  </span>
+                  <span v-else>Check Now</span>
+                </button>
+
+                <button
+                  v-if="updateStatus === 'available'"
+                  class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0 bg-green-600 hover:bg-green-500 text-white disabled:opacity-50"
+                  :disabled="updateStatus === 'installing'"
+                  @click="installUpdate"
+                >
+                  <span v-if="updateStatus === 'installing'" class="flex items-center gap-1.5">
+                    <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    Installing…
+                  </span>
+                  <span v-else>Install v{{ updateVersion }}</span>
+                </button>
+
+                <span v-if="updateStatus === 'up-to-date'" class="flex items-center gap-1.5 text-xs text-green-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+                  Up to date
+                </span>
+              </div>
+
+              <div
+                v-if="updateStatus === 'done'"
+                class="rounded-lg bg-green-900/20 border border-green-800/40 p-3 text-xs text-green-300 leading-relaxed"
+              >
+                Update installed. Please restart MDD UI to apply the changes.
+              </div>
+
+              <div
+                v-if="updateStatus === 'available'"
+                class="rounded-lg bg-blue-900/20 border border-blue-800/40 p-3 text-xs text-blue-300 leading-relaxed"
+              >
+                Version <strong>{{ updateVersion }}</strong> is available.
+              </div>
+
+              <div
+                v-if="updateStatus === 'error'"
+                class="rounded-lg bg-red-900/20 border border-red-800/40 p-3 text-xs text-red-400 leading-relaxed"
+              >
+                {{ updateError }}
               </div>
             </section>
           </template>
