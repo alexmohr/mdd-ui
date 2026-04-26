@@ -7,13 +7,15 @@ import { useAppStore } from "../stores/app";
 
 const store = useAppStore();
 const input = ref<HTMLInputElement | null>(null);
+const pendingOp = ref<'and' | 'or'>('and');
 
 onMounted(() => input.value?.focus());
 
 async function onSubmit() {
   if (store.searchQuery.trim()) {
-    await store.search(store.searchQuery.trim());
+    await store.search(store.searchQuery.trim(), pendingOp.value);
     store.searchQuery = "";
+    pendingOp.value = 'and';
   }
   store.searchActive = false;
 }
@@ -38,19 +40,29 @@ async function onClear() {
       class="flex items-center flex-wrap gap-1.5 px-3 py-1.5 bg-neutral-900 border-b border-neutral-800/60"
     >
       <span class="text-neutral-600 text-[0.78em] uppercase tracking-wide shrink-0">Filters:</span>
-      <span
-        v-for="(f, i) in store.searchFilters"
-        :key="i"
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/25 text-blue-300 text-[0.8em]"
-      >
-        <span>{{ f.query }}</span>
-        <span v-if="f.scope !== 'All'" class="text-blue-400/50 text-[0.9em]">[{{ f.scope }}]</span>
+      <template v-for="(f, i) in store.searchFilters" :key="i">
+        <!-- AND/OR operator toggle between chips -->
         <button
-          class="ml-0.5 text-blue-400/50 hover:text-red-400 transition-colors leading-none"
-          :title="`Remove filter: ${f.query}`"
-          @click="store.removeSearchFilter(i)"
-        >×</button>
-      </span>
+          v-if="i > 0"
+          class="px-1.5 py-0.5 rounded text-[0.75em] font-mono font-bold transition-colors"
+          :class="f.op === 'or'
+            ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-400/30'
+            : 'bg-neutral-700/60 text-neutral-400 hover:bg-neutral-600/60'"
+          :title="`Click to toggle to ${f.op === 'or' ? 'AND' : 'OR'}`"
+          @click="store.toggleFilterOp(i)"
+        >{{ f.op === 'or' ? 'OR' : 'AND' }}</button>
+
+        <!-- Chip -->
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/25 text-blue-300 text-[0.8em]">
+          <span>{{ f.query }}</span>
+          <span v-if="f.scope !== 'All'" class="text-blue-400/50 text-[0.9em]">[{{ f.scope }}]</span>
+          <button
+            class="ml-0.5 text-blue-400/50 hover:text-red-400 transition-colors leading-none"
+            :title="`Remove filter: ${f.query}`"
+            @click="store.removeSearchFilter(i)"
+          >×</button>
+        </span>
+      </template>
       <button
         class="text-[0.78em] text-neutral-600 hover:text-red-400 transition-colors"
         @click="onClear"
@@ -63,6 +75,16 @@ async function onClear() {
       class="flex items-center gap-2 h-9 px-3 bg-neutral-900 border-b border-neutral-800/60"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500 shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <!-- AND/OR toggle for the next filter -->
+      <button
+        v-if="store.searchFilters.length > 0"
+        class="px-1.5 py-0.5 rounded text-[0.75em] font-mono font-bold transition-colors shrink-0"
+        :class="pendingOp === 'or'
+          ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-400/30'
+          : 'bg-neutral-700/60 text-neutral-400 hover:bg-neutral-600/60'"
+        title="Toggle AND / OR for this filter"
+        @click="pendingOp = pendingOp === 'or' ? 'and' : 'or'"
+      >{{ pendingOp === 'or' ? 'OR' : 'AND' }}</button>
       <input
         ref="input"
         v-model="store.searchQuery"

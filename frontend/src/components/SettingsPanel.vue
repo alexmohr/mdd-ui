@@ -13,6 +13,7 @@ const activeCategory = ref("general");
 const categories = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
+  { id: "behavior", label: "Behavior" },
 ];
 
 function close() {
@@ -196,6 +197,35 @@ function close() {
                 </ul>
               </div>
             </section>
+
+            <!-- Recent Files -->
+            <section class="space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                  Recent Files
+                </h4>
+                <p class="text-xs text-neutral-500 leading-relaxed">
+                  Number of recent files shown on the welcome screen.
+                </p>
+              </div>
+              <div class="flex gap-2 flex-wrap">
+                <button
+                  v-for="n in [5, 10, 15, 20]"
+                  :key="n"
+                  class="px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors"
+                  :class="appStore.maxRecentFiles === n
+                    ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                    : 'border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600'"
+                  @click="appStore.setMaxRecentFiles(n)"
+                >{{ n }}</button>
+              </div>
+              <button
+                class="px-3 py-1.5 rounded-md text-xs font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 transition-colors"
+                @click="appStore.clearRecentFiles()"
+              >
+                Clear recent files
+              </button>
+            </section>
           </template>
 
           <!-- Appearance -->
@@ -273,6 +303,104 @@ function close() {
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
                   Light
+                </button>
+              </div>
+            </section>
+
+            <!-- Row Density -->
+            <section class="space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                  Row Density
+                </h4>
+                <p class="text-xs text-neutral-500 leading-relaxed">
+                  Controls the height of rows in the tree explorer.
+                </p>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  v-for="[id, label] in [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['spacious', 'Spacious']]"
+                  :key="id"
+                  class="px-3 py-2 rounded-lg border text-xs font-medium transition-colors"
+                  :class="appStore.rowDensity === id
+                    ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                    : 'border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600'"
+                  @click="appStore.setRowDensity(id as 'compact' | 'comfortable' | 'spacious')"
+                >{{ label }}</button>
+              </div>
+            </section>
+          </template>
+
+          <!-- Behavior -->
+          <template v-if="activeCategory === 'behavior'">
+            <!-- Auto-expand first level -->
+            <section class="space-y-3">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                    Auto-expand first level
+                  </h4>
+                  <p class="text-xs text-neutral-500 leading-relaxed">
+                    Expand top-level nodes automatically when a file is opened.
+                  </p>
+                </div>
+                <button
+                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5"
+                  :class="appStore.autoExpandFirstLevel ? 'bg-blue-600' : 'bg-neutral-700'"
+                  @click="appStore.setAutoExpandFirstLevel(!appStore.autoExpandFirstLevel)"
+                >
+                  <span
+                    class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    :class="appStore.autoExpandFirstLevel ? 'translate-x-4' : 'translate-x-0.5'"
+                  />
+                </button>
+              </div>
+            </section>
+
+            <!-- Default hide unchanged -->
+            <section class="space-y-3">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                    Hide unchanged nodes in diff
+                  </h4>
+                  <p class="text-xs text-neutral-500 leading-relaxed">
+                    Automatically hide unchanged nodes when comparing two files.
+                  </p>
+                </div>
+                <button
+                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5"
+                  :class="appStore.defaultHideUnchanged ? 'bg-blue-600' : 'bg-neutral-700'"
+                  @click="appStore.setDefaultHideUnchanged(!appStore.defaultHideUnchanged)"
+                >
+                  <span
+                    class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    :class="appStore.defaultHideUnchanged ? 'translate-x-4' : 'translate-x-0.5'"
+                  />
+                </button>
+              </div>
+            </section>
+
+            <!-- Wrap table cell text -->
+            <section class="space-y-3">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                    Wrap table cell text
+                  </h4>
+                  <p class="text-xs text-neutral-500 leading-relaxed">
+                    Wrap long values in detail-pane table cells instead of truncating.
+                  </p>
+                </div>
+                <button
+                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5"
+                  :class="appStore.wrapTableText ? 'bg-blue-600' : 'bg-neutral-700'"
+                  @click="appStore.setWrapTableText(!appStore.wrapTableText)"
+                >
+                  <span
+                    class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    :class="appStore.wrapTableText ? 'translate-x-4' : 'translate-x-0.5'"
+                  />
                 </button>
               </div>
             </section>

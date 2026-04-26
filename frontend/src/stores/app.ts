@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { defineStore } from "pinia";
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import type {
   VisibleNode,
   DetailSection,
@@ -19,6 +19,7 @@ export interface HistoryEntry {
 export interface SearchFilter {
   query: string;
   scope: string;
+  op: 'and' | 'or';
 }
 
 export const useAppStore = defineStore("app", () => {
@@ -45,12 +46,28 @@ export const useAppStore = defineStore("app", () => {
   const theme = ref<'dark' | 'light'>('dark');
   const sortLabel = ref("ID\u25b2");
   const recentFiles = ref<RecentFile[]>([]);
+  const rowDensity = ref<'compact' | 'comfortable' | 'spacious'>('comfortable');
+  const defaultHideUnchanged = ref(false);
+  const autoExpandFirstLevel = ref(false);
+  const maxRecentFiles = ref(10);
+  const wrapTableText = ref(false);
+  const lastTabTitle = ref<string | null>(null);
 
   const selectedNode = computed(() =>
     nodes.value.find((n: VisibleNode) => n.index === selectedIndex.value) ?? null,
   );
 
   const canGoBack = computed(() => history.value.length > 0);
+
+  const rowHeightPx = computed(() => {
+    switch (rowDensity.value) {
+      case 'compact': return 20;
+      case 'spacious': return 30;
+      default: return 24;
+    }
+  });
+
+  const displayedRecentFiles = computed(() => recentFiles.value.slice(0, maxRecentFiles.value));
   const canGoForward = computed(() => forwardHistory.value.length > 0);
 
   const breadcrumbs = computed(() => {
@@ -79,6 +96,37 @@ export const useAppStore = defineStore("app", () => {
     history.value.push({ index, text });
   }
 
+  function persistPrefs() {
+    api.saveUiPrefs({
+      font_size: fontSize.value,
+      theme: theme.value,
+      split_pct: splitPct.value,
+      row_density: rowDensity.value,
+      default_hide_unchanged: defaultHideUnchanged.value,
+      auto_expand_first_level: autoExpandFirstLevel.value,
+      max_recent_files: maxRecentFiles.value,
+      wrap_table_text: wrapTableText.value,
+      last_tab_title: lastTabTitle.value,
+    }).catch(() => {});
+  }
+
+  let _splitPctTimer: ReturnType<typeof setTimeout> | null = null;
+  watch(splitPct, () => {
+    if (_splitPctTimer) clearTimeout(_splitPctTimer);
+    _splitPctTimer = setTimeout(persistPrefs, 500);
+  });
+
+  let _tabTitleTimer: ReturnType<typeof setTimeout> | null = null;
+  watch(selectedTab, (tab) => {
+    const tabs = tabSectionsOf(detailSections.value);
+    const title = tabs[tab]?.title ?? null;
+    if (title) {
+      lastTabTitle.value = title;
+      if (_tabTitleTimer) clearTimeout(_tabTitleTimer);
+      _tabTitleTimer = setTimeout(persistPrefs, 500);
+    }
+  });
+
   function pushHistory(index: number, text: string) {
     _pushBack(index, text);
     forwardHistory.value = [];
@@ -100,6 +148,9 @@ export const useAppStore = defineStore("app", () => {
       fileLoaded.value = true;
       filePath.value = path;
       status.value = `${result.node_count} nodes`;
+      if (autoExpandFirstLevel.value) {
+        nodes.value = await api.expandFirstLevel();
+      }
       await api.addRecentFile(path);
       await loadRecentFiles();
     } catch (e) {
@@ -125,6 +176,13 @@ export const useAppStore = defineStore("app", () => {
       fileLoaded.value = true;
       filePath.value = "";
       status.value = `Diff: ${result.node_count} nodes`;
+      if (defaultHideUnchanged.value) {
+        nodes.value = await api.toggleHideUnchanged();
+        hideUnchanged.value = true;
+      }
+      if (autoExpandFirstLevel.value) {
+        nodes.value = await api.expandFirstLevel();
+      }
     } catch (e) {
       status.value = `Error: ${e}`;
     } finally {
@@ -157,7 +215,7 @@ export const useAppStore = defineStore("app", () => {
       const prev = selectedNode.value;
       if (prev) pushHistory(prev.index, prev.text);
     }
-    const prevTitle = activeTabTitle();
+    const prevTitle = activeTabTitle() ?? lastTabTitle.value;
     selectedIndex.value = index;
     try {
       const sections = await api.getNodeDetail(index);
@@ -218,13 +276,13 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
-  async function search(query: string) {
+  async function search(query: string, op: 'and' | 'or' = 'and') {
     try {
-      const result = await api.doSearch(query);
+      const result = await api.doSearch(query, op);
       nodes.value = result.visible;
       searchScope.value = result.scope;
       status.value = `${result.match_count} filter(s) active`;
-      searchFilters.value.push({ query, scope: result.scope });
+      searchFilters.value.push({ query, scope: result.scope, op });
     } catch (e) {
       status.value = `Error: ${e}`;
     }
@@ -240,19 +298,34 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
+  async function _replayFilters(filters: SearchFilter[]) {
+    nodes.value = await api.clearSearch();
+    searchFilters.value = [];
+    for (const f of filters) {
+      await api.setSearchScope(f.scope);
+      const result = await api.doSearch(f.query, f.op);
+      nodes.value = result.visible;
+      searchScope.value = result.scope;
+      searchFilters.value.push(f);
+    }
+    status.value = filters.length > 0 ? `${filters.length} filter(s) active` : "";
+  }
+
   async function removeSearchFilter(idx: number) {
-    const remaining = searchFilters.value.filter((_, i) => i !== idx);
     try {
-      nodes.value = await api.clearSearch();
-      searchFilters.value = [];
-      for (const f of remaining) {
-        await api.setSearchScope(f.scope);
-        const result = await api.doSearch(f.query);
-        nodes.value = result.visible;
-        searchScope.value = result.scope;
-        searchFilters.value.push(f);
-      }
-      status.value = remaining.length > 0 ? `${remaining.length} filter(s) active` : "";
+      await _replayFilters(searchFilters.value.filter((_, i) => i !== idx));
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    }
+  }
+
+  async function toggleFilterOp(idx: number) {
+    if (idx === 0) return;
+    const updated = searchFilters.value.map((f, i) =>
+      i === idx ? { ...f, op: (f.op === 'and' ? 'or' : 'and') as 'and' | 'or' } : f
+    );
+    try {
+      await _replayFilters(updated);
     } catch (e) {
       status.value = `Error: ${e}`;
     }
@@ -316,20 +389,41 @@ export const useAppStore = defineStore("app", () => {
 
   function increaseFontSize() {
     fontSize.value = Math.min(20, fontSize.value + 1);
-    api.saveUiPrefs({ font_size: fontSize.value, theme: theme.value }).catch(() => {});
+    persistPrefs();
   }
   function decreaseFontSize() {
     fontSize.value = Math.max(9, fontSize.value - 1);
-    api.saveUiPrefs({ font_size: fontSize.value, theme: theme.value }).catch(() => {});
+    persistPrefs();
   }
   function setFontSize(size: number) {
     fontSize.value = Math.max(9, Math.min(20, size));
-    api.saveUiPrefs({ font_size: fontSize.value, theme: theme.value }).catch(() => {});
+    persistPrefs();
   }
 
   function setTheme(t: 'dark' | 'light') {
     theme.value = t;
-    api.saveUiPrefs({ font_size: fontSize.value, theme: t }).catch(() => {});
+    persistPrefs();
+  }
+
+  function setRowDensity(d: 'compact' | 'comfortable' | 'spacious') {
+    rowDensity.value = d;
+    persistPrefs();
+  }
+  function setDefaultHideUnchanged(v: boolean) {
+    defaultHideUnchanged.value = v;
+    persistPrefs();
+  }
+  function setAutoExpandFirstLevel(v: boolean) {
+    autoExpandFirstLevel.value = v;
+    persistPrefs();
+  }
+  function setMaxRecentFiles(n: number) {
+    maxRecentFiles.value = n;
+    persistPrefs();
+  }
+  function setWrapTableText(v: boolean) {
+    wrapTableText.value = v;
+    persistPrefs();
   }
 
   async function toggleSort(nodeIndex?: number) {
@@ -383,6 +477,13 @@ export const useAppStore = defineStore("app", () => {
       const prefs = await api.getUiPrefs();
       fontSize.value = prefs.font_size;
       theme.value = (prefs.theme as 'dark' | 'light') ?? 'dark';
+      if (prefs.split_pct >= 15 && prefs.split_pct <= 70) splitPct.value = prefs.split_pct;
+      rowDensity.value = (prefs.row_density as 'compact' | 'comfortable' | 'spacious') ?? 'comfortable';
+      defaultHideUnchanged.value = prefs.default_hide_unchanged ?? false;
+      autoExpandFirstLevel.value = prefs.auto_expand_first_level ?? false;
+      maxRecentFiles.value = prefs.max_recent_files ?? 10;
+      wrapTableText.value = prefs.wrap_table_text ?? false;
+      lastTabTitle.value = prefs.last_tab_title ?? null;
     } catch (e) {
       console.error("Failed to load prefs:", e);
     }
@@ -427,14 +528,15 @@ export const useAppStore = defineStore("app", () => {
   return {
     nodes, ecuName, nodeCount, isDiff, selectedIndex, selectedNode,
     detailSections, selectedTab, searchQuery, searchScope, searchActive,
-    status, loading, history, forwardHistory, canGoBack, canGoForward, breadcrumbs, splitPct,
+    status, loading, history, canGoBack, canGoForward, breadcrumbs, splitPct,
     fileLoaded, filePath, hideUnchanged, fontSize, theme, sortLabel, recentFiles,
-    searchFilters,
-    loadFile, loadDiff, selectNode, goBack, goForward, toggleExpand, search,
-    clearSearch, removeSearchFilter, cycleScope, setScope,
-    expandAll, collapseAll, toggleSort, toggleHideUnchanged,
+    rowDensity, rowHeightPx, defaultHideUnchanged, autoExpandFirstLevel,
+    maxRecentFiles, wrapTableText, lastTabTitle, displayedRecentFiles,
+    loadFile, loadDiff, selectNode, goBack, goForward, toggleExpand, search, searchFilters,
+    clearSearch, removeSearchFilter, toggleFilterOp, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize, setFontSize, setTheme,
-    navigateTo, nextChange, prevChange,
-    loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
+    setRowDensity, setDefaultHideUnchanged, setAutoExpandFirstLevel, setMaxRecentFiles, setWrapTableText,
+    navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
+    nextChange, prevChange,
   };
 });

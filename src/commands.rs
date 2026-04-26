@@ -110,10 +110,17 @@ pub struct CoreState {
     pub diagcomm_sort: DiagcommSortMode,
 }
 
+#[derive(Clone, PartialEq)]
+pub enum FilterOp {
+    And,
+    Or,
+}
+
 #[derive(Clone)]
 pub struct SearchEntry {
     pub query: String,
     pub scope: SearchScope,
+    pub op: FilterOp,
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -179,11 +186,30 @@ fn build_visible(state: &CoreState) -> Vec<usize> {
 
     // When searching, first compute include flags
     let include = if has_search {
-        let mut inc = vec![true; state.all_nodes.len()];
+        let all_true = vec![true; state.all_nodes.len()];
+        let mut inc: Option<Vec<bool>> = None;
         for entry in &state.search_stack {
-            inc = apply_search_filter(&state.all_nodes, &inc, &entry.query, &entry.scope);
+            let fresh = apply_search_filter(&state.all_nodes, &all_true, &entry.query, &entry.scope);
+            inc = Some(match inc {
+                None => fresh,
+                Some(mut cur) => {
+                    match entry.op {
+                        FilterOp::And => {
+                            for (a, b) in cur.iter_mut().zip(fresh.iter()) {
+                                *a = *a && *b;
+                            }
+                        }
+                        FilterOp::Or => {
+                            for (a, b) in cur.iter_mut().zip(fresh.iter()) {
+                                *a = *a || *b;
+                            }
+                        }
+                    }
+                    cur
+                }
+            });
         }
-        Some(inc)
+        inc
     } else {
         None
     };
@@ -425,11 +451,12 @@ pub fn toggle_expand(index: usize, state: State<'_, AppState>) -> Result<Vec<Vis
 }
 
 #[tauri::command]
-pub fn search(query: String, state: State<'_, AppState>) -> Result<SearchResult, String> {
+pub fn search(query: String, op: Option<String>, state: State<'_, AppState>) -> Result<SearchResult, String> {
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
     if !query.is_empty() {
         let scope = core.search_scope.clone();
-        core.search_stack.push(SearchEntry { query, scope });
+        let filter_op = if op.as_deref() == Some("or") { FilterOp::Or } else { FilterOp::And };
+        core.search_stack.push(SearchEntry { query, scope, op: filter_op });
     }
     let visible = build_visible(&core);
     core.visible = visible;
@@ -752,6 +779,18 @@ pub fn collapse_all(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, Stri
 }
 
 #[tauri::command]
+pub fn expand_first_level(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
+    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    for node in &mut core.all_nodes {
+        if node.has_children && node.depth == 0 {
+            node.expanded = true;
+        }
+    }
+    core.visible = build_visible(&core);
+    Ok(to_visible_nodes(&core))
+}
+
+#[tauri::command]
 pub fn toggle_hide_unchanged(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
     core.hide_unchanged = !core.hide_unchanged;
@@ -968,8 +1007,8 @@ pub fn add_recent_file(path: String, app: AppHandle) -> Result<(), String> {
         .cast_signed();
     files.insert(0, RecentFile { path, timestamp });
 
-    // Keep only the most recent 10 files
-    files.truncate(10);
+    // Keep only the most recent 20 files
+    files.truncate(20);
 
     // Write back to cache
     let json = serde_json::to_string(&files)
@@ -1015,17 +1054,39 @@ pub struct UiPrefs {
     pub font_size: u8,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default = "default_split_pct")]
+    pub split_pct: u8,
+    #[serde(default = "default_row_density")]
+    pub row_density: String,
+    #[serde(default)]
+    pub default_hide_unchanged: bool,
+    #[serde(default)]
+    pub auto_expand_first_level: bool,
+    #[serde(default = "default_max_recent_files")]
+    pub max_recent_files: u8,
+    #[serde(default)]
+    pub wrap_table_text: bool,
+    #[serde(default)]
+    pub last_tab_title: Option<String>,
 }
 
-fn default_theme() -> String {
-    "dark".to_owned()
-}
+fn default_theme() -> String { "dark".to_owned() }
+fn default_split_pct() -> u8 { 35 }
+fn default_row_density() -> String { "comfortable".to_owned() }
+fn default_max_recent_files() -> u8 { 10 }
 
 impl Default for UiPrefs {
     fn default() -> Self {
         Self {
             font_size: 13,
             theme: "dark".to_owned(),
+            split_pct: 35,
+            row_density: "comfortable".to_owned(),
+            default_hide_unchanged: false,
+            auto_expand_first_level: false,
+            max_recent_files: 10,
+            wrap_table_text: false,
+            last_tab_title: None,
         }
     }
 }
