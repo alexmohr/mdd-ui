@@ -167,11 +167,11 @@ function onSplitMouseDown() {
               Compare Files
             </button>
           </div>
-          <div v-if="store.recentFiles.length > 0" class="mt-8">
+          <div v-if="store.displayedRecentFiles.length > 0" class="mt-8">
             <div class="text-neutral-500 text-xs uppercase tracking-wider mb-3">Recent Files</div>
             <div class="flex flex-col gap-2 items-center">
               <div
-                v-for="file in store.recentFiles"
+                v-for="file in store.displayedRecentFiles"
                 :key="file.path"
                 class="w-80 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-colors flex items-center group"
               >
