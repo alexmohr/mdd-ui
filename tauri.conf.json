@@ -36,6 +36,15 @@
       "icons/icon.icns",
       "icons/icon.ico",
       "icons/icon.png"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["mdd"],
+        "name": "MDD Database",
+        "description": "Diagnostic database file",
+        "mimeType": "application/x-mdd",
+        "role": "Viewer"
+      }
     ]
   }
 }

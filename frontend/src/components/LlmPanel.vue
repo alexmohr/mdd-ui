@@ -4,18 +4,44 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, reactive } from "vue";
 import { useLlmStore } from "../stores/llm";
-import type { LlmSettingsView } from "../stores/llm";
+import type { LlmSettingsUpdate } from "../stores/llm";
+import { useAppStore } from "../stores/app";
+import { marked } from "marked";
+
+// Extension: render [[name]] as a clickable navigation button
+marked.use({
+  extensions: [{
+    name: "mddNav",
+    level: "inline" as const,
+    start(src: string) { return src.indexOf("[["); },
+    tokenizer(src: string) {
+      const m = /^\[\[([^\]]+)\]\]/.exec(src);
+      if (m) return { type: "mddNav", raw: m[0], name: m[1] };
+    },
+    renderer(token) {
+      const name = (token as { name: string }).name.replace(/"/g, "&quot;");
+      return `<button class="mdd-nav" data-name="${name}">${name}</button>`;
+    },
+  }],
+});
+
+function renderMessage(content: string): string {
+  return marked.parse(content, { async: false }) as string;
+}
 
 const store = useLlmStore();
+const appStore = useAppStore();
 const messagesEl = ref<HTMLElement | null>(null);
 const inputText = ref("");
 const copied = ref(false);
 
-const form = reactive<Omit<LlmSettingsView, "has_token">>({
+const form = reactive<LlmSettingsUpdate & { api_token: string }>({
   ghe_host: store.settings.ghe_host,
   client_id: store.settings.client_id,
   llm_endpoint: store.settings.llm_endpoint,
   llm_model: store.settings.llm_model,
+  auth_method: store.settings.auth_method,
+  api_token: "",
 });
 
 watch(
@@ -26,6 +52,8 @@ watch(
       form.client_id = store.settings.client_id;
       form.llm_endpoint = store.settings.llm_endpoint;
       form.llm_model = store.settings.llm_model;
+      form.auth_method = store.settings.auth_method;
+      form.api_token = "";
       if (store.isAuthenticated) void store.fetchModels();
     }
   },
@@ -56,8 +84,24 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+async function importGhCliToken() {
+  await store.importGhCliToken(form.ghe_host);
+  if (!store.error) store.settingsOpen = false;
+}
+
 async function saveSettings() {
-  await store.saveSettings({ ...form });
+  const endpoint =
+    form.auth_method === "copilot"
+      ? `https://copilot-api.${form.ghe_host}`
+      : form.llm_endpoint;
+  await store.saveSettings({
+    ghe_host: form.ghe_host,
+    client_id: form.client_id,
+    llm_endpoint: endpoint,
+    llm_model: form.llm_model,
+    auth_method: form.auth_method,
+    api_token: form.api_token || undefined,
+  });
   store.settingsOpen = false;
 }
 
@@ -85,6 +129,17 @@ function cancelLogin() {
 function close() {
   store.stopPolling();
   store.panelOpen = false;
+}
+
+async function navigateToNode(name: string) {
+  // The backend resolves TreeNodeByIndex by name fallback when index doesn't match,
+  // so we can navigate directly without a search round-trip.
+  await appStore.navigateTo({ target_type: { TreeNodeByIndex: { index: 0, short_name: name } } });
+}
+
+function onMessageAreaClick(e: MouseEvent) {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>(".mdd-nav");
+  if (btn?.dataset.name) void navigateToNode(btn.dataset.name);
 }
 </script>
 
@@ -190,48 +245,197 @@ function close() {
     <!-- Settings panel -->
     <div
       v-if="store.settingsOpen"
-      class="border-b border-neutral-800 p-3 space-y-3 shrink-0 overflow-y-auto max-h-[55vh]"
+      class="border-b border-neutral-800 p-3 space-y-4 shrink-0 overflow-y-auto max-h-[55vh]"
     >
-      <p class="text-[11px] text-neutral-500 uppercase tracking-wider font-medium">
-        GitHub Enterprise
-      </p>
+      <!-- Step 1 — Authentication -->
       <div class="space-y-2">
-        <div>
-          <label class="block text-[11px] text-neutral-400 mb-1">GHE Host</label>
-          <input
-            v-model="form.ghe_host"
-            type="text"
-            placeholder="github.mycompany.com"
-            class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
-          />
+        <div class="flex items-center gap-2">
+          <span class="flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white shrink-0">1</span>
+          <p class="text-[11px] text-neutral-300 font-medium">Authentication <span class="text-red-400">*</span></p>
         </div>
         <div>
-          <label class="block text-[11px] text-neutral-400 mb-1"
-            >OAuth App Client ID</label
-          >
-          <input
-            v-model="form.client_id"
-            type="text"
-            placeholder="Iv1.xxxxxxxxxxxxxxxx"
-            class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
-          />
+          <label class="block text-[11px] text-neutral-400 mb-1">Method</label>
+          <div class="relative">
+            <select
+              v-model="form.auth_method"
+              class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 transition-colors appearance-none pr-7"
+            >
+              <option value="copilot">GitHub Copilot (GHE) — recommended</option>
+              <option value="ghe">GitHub Enterprise (OAuth Device Flow)</option>
+              <option value="token">API Token</option>
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+          </div>
         </div>
+
+        <!-- GitHub Copilot — hardcoded app, no setup needed -->
+        <template v-if="form.auth_method === 'copilot'">
+          <p class="text-[10px] text-neutral-600 leading-relaxed">
+            Uses GitHub's Copilot OAuth app — no Client ID or app registration needed.
+            You will be shown a code to enter at the verification URL (handles SAML SSO).
+          </p>
+          <div>
+            <label class="block text-[11px] text-neutral-400 mb-1">GHE Host <span class="text-red-400">*</span></label>
+            <input
+              v-model="form.ghe_host"
+              type="text"
+              placeholder="mercedes-benz.ghe.com"
+              class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <p class="mt-1 text-[10px] text-neutral-600">Domain only — no protocol or path</p>
+          </div>
+          <div class="pt-1">
+            <div v-if="store.isAuthenticated && store.settings.auth_method === 'copilot'" class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
+                <span class="text-xs text-neutral-300">Logged in via GitHub Copilot</span>
+              </div>
+              <button class="text-xs text-red-400 hover:text-red-300 transition-colors" @click="store.logout()">Logout</button>
+            </div>
+            <button
+              v-else-if="store.loginState !== 'polling'"
+              class="w-full py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              :disabled="!form.ghe_host"
+              @click="store.startCopilotLogin(form.ghe_host)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              Login with GitHub Copilot
+            </button>
+            <p v-if="store.error && form.auth_method === 'copilot'" class="mt-1 text-[10px] text-red-400">{{ store.error }}</p>
+          </div>
+        </template>
+
+        <!-- GHE fields -->
+        <template v-else-if="form.auth_method === 'ghe'">
+          <p class="text-[10px] text-neutral-600 leading-relaxed">
+            Obtains a Bearer token via GitHub's Device Flow. Create an OAuth App on your GHE instance with Device Flow enabled and no callback URL.
+          </p>
+          <div>
+            <label class="block text-[11px] text-neutral-400 mb-1">GHE Host <span class="text-red-400">*</span></label>
+            <input
+              v-model="form.ghe_host"
+              type="text"
+              placeholder="github.mycompany.com"
+              class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <p class="mt-1 text-[10px] text-neutral-600">Domain only — no protocol or path</p>
+          </div>
+          <div>
+            <label class="block text-[11px] text-neutral-400 mb-1">OAuth App Client ID <span class="text-red-400">*</span></label>
+            <input
+              v-model="form.client_id"
+              type="text"
+              placeholder="Iv1.xxxxxxxxxxxxxxxx"
+              class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <p class="mt-1 text-[10px] text-neutral-600">
+              Found on your OAuth App page:
+              <a
+                v-if="form.ghe_host"
+                :href="'https://' + form.ghe_host + '/settings/developers'"
+                target="_blank"
+                rel="noopener"
+                class="text-blue-400 hover:text-blue-300 underline"
+              >{{ form.ghe_host }}/settings/developers ↗</a>
+              <span v-else>Settings → Developer settings → OAuth Apps</span>
+              — create a new app with Device Flow enabled, no callback URL needed.
+            </p>
+          </div>
+          <div class="pt-1">
+            <div v-if="store.isAuthenticated && store.settings.auth_method === 'ghe'" class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
+                <span class="text-xs text-neutral-300">Logged in via GHE</span>
+              </div>
+              <button class="text-xs text-red-400 hover:text-red-300 transition-colors" @click="store.logout()">Logout</button>
+            </div>
+            <button
+              v-else
+              class="w-full py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              :disabled="store.loginState === 'polling'"
+              @click="store.startLogin()"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              Login with GitHub Enterprise
+            </button>
+          </div>
+        </template>
+
+        <!-- Direct API token -->
+        <template v-else-if="form.auth_method === 'token'">
+          <p class="text-[10px] text-neutral-600">
+            Bearer token (PAT) sent in the Authorization header. No app registration needed.
+          </p>
+          <div>
+            <label class="block text-[11px] text-neutral-400 mb-1">GHE Host <span class="text-neutral-600">(optional)</span></label>
+            <input
+              v-model="form.ghe_host"
+              type="text"
+              placeholder="mercedes-benz.ghe.com"
+              class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <p class="mt-1 text-[10px] text-neutral-600">Fill in to get a quick-link for creating a token below</p>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-[11px] text-neutral-400">Personal Access Token <span class="text-red-400">*</span></label>
+              <a
+                v-if="form.ghe_host"
+                :href="'https://' + form.ghe_host + '/settings/tokens/new?scopes=read%3Auser&description=mdd-ui'"
+                target="_blank"
+                rel="noopener"
+                class="text-[10px] text-blue-400 hover:text-blue-300 underline"
+              >Create token on {{ form.ghe_host }} ↗</a>
+            </div>
+            <input
+              v-model="form.api_token"
+              type="password"
+              placeholder="Leave blank to keep existing token"
+              autocomplete="off"
+              class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <p v-if="store.settings.has_token && store.settings.auth_method === 'token'" class="mt-1 text-[10px] text-green-600 flex items-center gap-1">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Token is set
+            </p>
+          </div>
+        </template>
+
       </div>
-      <p class="text-[11px] text-neutral-500 uppercase tracking-wider font-medium pt-1">
-        LLM Endpoint
-      </p>
+
+      <!-- Step 2 — LLM Endpoint -->
       <div class="space-y-2">
-        <div>
-          <label class="block text-[11px] text-neutral-400 mb-1">API Base URL</label>
+        <div class="flex items-center gap-2">
+          <span class="flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white shrink-0">2</span>
+          <p class="text-[11px] text-neutral-300 font-medium">LLM Endpoint <span class="text-red-400">*</span></p>
+        </div>
+        <!-- Copilot: endpoint auto-derived from GHE host -->
+        <div v-if="form.auth_method === 'copilot'">
+          <p class="text-[10px] text-neutral-600">
+            Endpoint: <code class="text-neutral-400">https://copilot-api.{{ form.ghe_host || '…' }}</code> (auto-configured)
+          </p>
+        </div>
+        <div v-else>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-[11px] text-neutral-400">API Base URL <span class="text-red-400">*</span></label>
+            <button
+              v-if="form.auth_method === 'ghe' && form.ghe_host"
+              class="text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+              type="button"
+              @click="form.llm_endpoint = 'https://' + form.ghe_host + '/v1'"
+            >Use GHE host ↗</button>
+          </div>
           <input
             v-model="form.llm_endpoint"
             type="text"
             placeholder="https://llm.mycompany.com/v1"
             class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
           />
+          <p class="mt-1 text-[10px] text-neutral-600">OpenAI-compatible — exposes <code class="text-neutral-500">/models</code> and <code class="text-neutral-500">/chat/completions</code></p>
         </div>
         <div>
-          <label class="block text-[11px] text-neutral-400 mb-1">Model</label>
+          <label class="block text-[11px] text-neutral-400 mb-1">Model <span class="text-red-400">*</span></label>
           <div class="relative">
             <select
               v-model="form.llm_model"
@@ -239,9 +443,8 @@ function close() {
               class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 transition-colors appearance-none pr-7 disabled:opacity-50"
             >
               <option value="" disabled>
-                {{ store.modelsLoading ? 'Fetching models…' : store.availableModels.length === 0 ? '— log in to load models —' : '— select a model —' }}
+                {{ store.modelsLoading ? 'Fetching models…' : store.availableModels.length === 0 ? '— authenticate first —' : '— select a model —' }}
               </option>
-              <!-- Keep current saved value selectable even if not yet in fetched list -->
               <option
                 v-if="form.llm_model && !store.availableModels.includes(form.llm_model)"
                 :value="form.llm_model"
@@ -249,37 +452,14 @@ function close() {
               <option v-for="m in store.availableModels" :key="m" :value="m">{{ m }}</option>
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-              <svg
-                v-if="store.modelsLoading"
-                class="animate-spin text-neutral-500"
-                xmlns="http://www.w3.org/2000/svg"
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-              <svg
-                v-else
-                xmlns="http://www.w3.org/2000/svg"
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="text-neutral-500"
-              ><path d="m6 9 6 6 6-6"/></svg>
+              <svg v-if="store.modelsLoading" class="animate-spin text-neutral-500" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500"><path d="m6 9 6 6 6-6"/></svg>
             </div>
           </div>
         </div>
       </div>
-      <div class="flex gap-2">
+
+      <div class="flex gap-2 pt-1">
         <button
           class="flex-1 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
           @click="saveSettings"
@@ -293,45 +473,6 @@ function close() {
           Cancel
         </button>
       </div>
-
-      <!-- Auth divider -->
-      <div class="border-t border-neutral-800 pt-3">
-        <p class="text-[11px] text-neutral-500 uppercase tracking-wider font-medium mb-2">
-          Authentication
-        </p>
-        <div v-if="store.isAuthenticated" class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="w-2 h-2 rounded-full bg-green-500"></div>
-            <span class="text-xs text-neutral-300">Logged in via GHE</span>
-          </div>
-          <button
-            class="text-xs text-red-400 hover:text-red-300 transition-colors"
-            @click="store.logout()"
-          >
-            Logout
-          </button>
-        </div>
-        <div v-else>
-          <button
-            class="w-full py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs font-medium transition-colors flex items-center justify-center gap-2"
-            :disabled="store.loginState === 'polling'"
-            @click="store.startLogin()"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path
-                d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
-              />
-            </svg>
-            Login with GitHub Enterprise
-          </button>
-        </div>
-      </div>
     </div>
 
     <!-- Device flow pending -->
@@ -343,7 +484,7 @@ function close() {
         <div
           class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"
         ></div>
-        Waiting for GitHub Enterprise authorization
+        Waiting for GitHub authorization
       </div>
       <p class="text-[11px] text-neutral-500">
         1. Copy the code below, then open the verification URL.
@@ -410,6 +551,7 @@ function close() {
     <div
       ref="messagesEl"
       class="flex-1 overflow-y-auto p-3 space-y-3 min-h-0"
+      @click="onMessageAreaClick"
     >
       <div v-if="store.messages.length === 0" class="text-center py-8">
         <p class="text-neutral-600 text-xs">
@@ -427,16 +569,17 @@ function close() {
         <span class="text-[10px] text-neutral-600 px-1">
           {{ msg.role === "user" ? "You" : "AI" }}
         </span>
-        <div
-          class="max-w-[90%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words"
-          :class="
-            msg.role === 'user'
-              ? 'bg-blue-600/20 text-blue-100 rounded-br-sm'
-              : 'bg-neutral-800 text-neutral-200 rounded-bl-sm'
-          "
-        >
-          {{ msg.content }}
-        </div>
+          <!-- User message -->
+          <div
+            v-if="msg.role === 'user'"
+            class="max-w-[90%] rounded-xl rounded-br-sm px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words bg-blue-600/20 text-blue-100"
+          >{{ msg.content }}</div>
+          <!-- AI message: rendered markdown with navigation links -->
+          <div
+            v-else
+            class="prose max-w-[90%] rounded-xl rounded-bl-sm px-3 py-2 text-xs bg-neutral-800 text-neutral-200"
+            v-html="renderMessage(msg.content)"
+          />
       </div>
 
       <!-- Typing indicator -->
@@ -523,3 +666,23 @@ function close() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.prose :deep(h1), .prose :deep(h2), .prose :deep(h3) { font-weight: 600; margin: 0.4em 0 0.2em; }
+.prose :deep(h1) { font-size: 0.95rem; }
+.prose :deep(h2) { font-size: 0.85rem; }
+.prose :deep(h3) { font-size: 0.8rem; }
+.prose :deep(p) { margin: 0.3em 0; }
+.prose :deep(ul) { list-style: disc; padding-left: 1.2em; margin: 0.3em 0; }
+.prose :deep(ol) { list-style: decimal; padding-left: 1.2em; margin: 0.3em 0; }
+.prose :deep(li) { margin: 0.1em 0; }
+.prose :deep(code) { background: rgba(255,255,255,0.08); padding: 0.1em 0.3em; border-radius: 3px; font-family: monospace; font-size: 0.9em; }
+.prose :deep(pre) { background: rgba(0,0,0,0.35); padding: 0.6em 0.75em; border-radius: 6px; overflow-x: auto; margin: 0.4em 0; }
+.prose :deep(pre code) { background: none; padding: 0; }
+.prose :deep(strong) { font-weight: 600; }
+.prose :deep(em) { font-style: italic; }
+.prose :deep(blockquote) { border-left: 2px solid #4b5563; padding-left: 0.6em; color: #9ca3af; margin: 0.3em 0; }
+.prose :deep(a) { color: #60a5fa; text-decoration: underline; }
+.prose :deep(button.mdd-nav) { color: #60a5fa; text-decoration: underline; text-underline-offset: 2px; font-weight: 500; cursor: pointer; background: none; border: none; padding: 0; font-size: inherit; font-family: inherit; }
+.prose :deep(button.mdd-nav:hover) { color: #93c5fd; }
+</style>

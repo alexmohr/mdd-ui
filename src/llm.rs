@@ -20,6 +20,7 @@ pub struct LlmSettings {
     pub client_id: String,
     pub llm_endpoint: String,
     pub llm_model: String,
+    pub auth_method: String,
     pub token: Option<String>,
 }
 
@@ -30,28 +31,33 @@ impl Default for LlmSettings {
             client_id: String::new(),
             llm_endpoint: String::new(),
             llm_model: "gpt-4o".to_owned(),
+            auth_method: "ghe".to_owned(),
             token: None,
         }
     }
 }
 
-/// Sent to the frontend — token is never exposed, only a boolean flag.
+/// Sent to the frontend — raw token is never exposed, only a boolean flag.
 #[derive(Serialize)]
 pub struct LlmSettingsView {
     pub ghe_host: String,
     pub client_id: String,
     pub llm_endpoint: String,
     pub llm_model: String,
+    pub auth_method: String,
     pub has_token: bool,
 }
 
-/// Received from the frontend to update settings (token managed separately).
+/// Received from the frontend to update settings.
 #[derive(Deserialize)]
 pub struct LlmSettingsUpdate {
     pub ghe_host: String,
     pub client_id: String,
     pub llm_endpoint: String,
     pub llm_model: String,
+    pub auth_method: String,
+    /// Only used for auth_method == "token"; leave None/empty to keep existing token.
+    pub api_token: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +106,7 @@ pub fn get_llm_settings(app: AppHandle) -> LlmSettingsView {
         client_id: s.client_id,
         llm_endpoint: s.llm_endpoint,
         llm_model: s.llm_model,
+        auth_method: s.auth_method,
         has_token: s.token.is_some(),
     }
 }
@@ -114,6 +121,14 @@ pub fn save_llm_settings(
     current.client_id = settings.client_id;
     current.llm_endpoint = settings.llm_endpoint;
     current.llm_model = settings.llm_model;
+    current.auth_method = settings.auth_method.clone();
+    if settings.auth_method == "token" {
+        if let Some(tok) = settings.api_token.filter(|t| !t.is_empty()) {
+            current.token = Some(tok);
+        }
+    } else if settings.auth_method == "none" {
+        current.token = None;
+    }
     persist_settings(&app, &current)
 }
 
@@ -156,7 +171,9 @@ pub async fn start_ghe_device_flow(
     let resp = client
         .post(&url)
         .header("Accept", "application/json")
-        .form(&[("client_id", client_id.as_str()), ("scope", "read:user")])
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "mdd-ui")
+        .json(&serde_json::json!({"client_id": client_id, "scope": "read:user"}))
         .send()
         .await
         .map_err(|e| format!("Device flow request failed: {e}"))?;
@@ -204,11 +221,13 @@ pub async fn poll_ghe_device_flow(
     let resp = client
         .post(&url)
         .header("Accept", "application/json")
-        .form(&[
-            ("client_id", client_id.as_str()),
-            ("device_code", device_code.as_str()),
-            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-        ])
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "mdd-ui")
+        .json(&serde_json::json!({
+            "client_id": client_id,
+            "device_code": device_code,
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
+        }))
         .send()
         .await
         .map_err(|e| format!("Poll request failed: {e}"))?;
@@ -255,17 +274,17 @@ struct ModelEntry {
 #[tauri::command]
 pub async fn fetch_llm_models(app: AppHandle) -> Result<Vec<String>, String> {
     let settings = load_settings(&app);
-    let token = settings
-        .token
-        .ok_or_else(|| "Not authenticated.".to_owned())?;
     if settings.llm_endpoint.is_empty() {
         return Err("LLM endpoint not configured.".to_owned());
     }
+    let auth_header = build_auth_header(&settings)?;
     let client = reqwest::Client::new();
     let url = format!("{}/models", settings.llm_endpoint.trim_end_matches('/'));
-    let resp = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {token}"))
+    let mut req = client.get(&url).header("User-Agent", "mdd-ui");
+    if let Some(h) = auth_header {
+        req = req.header("Authorization", h);
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| format!("Models request failed: {e}"))?;
@@ -330,15 +349,14 @@ pub async fn llm_chat(
     state: State<'_, AppState>,
 ) -> Result<ChatResult, String> {
     let settings = load_settings(&app);
-    let token = settings
-        .token
-        .ok_or_else(|| "Not authenticated. Please log in with GitHub Enterprise.".to_owned())?;
-    let endpoint = settings.llm_endpoint;
-    let model = settings.llm_model;
+    let endpoint = settings.llm_endpoint.clone();
+    let model = settings.llm_model.clone();
 
     if endpoint.is_empty() {
         return Err("LLM endpoint not configured. Please open settings.".to_owned());
     }
+
+    let auth_header = build_auth_header(&settings)?;
 
     // Build context from the currently loaded MDD file (drop the lock before await).
     let context = {
@@ -367,11 +385,17 @@ pub async fn llm_chat(
         stream: false,
     };
 
-    let resp = client
+    let mut req = client
         .post(&url)
-        .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .json(&body)
+        .header("User-Agent", "mdd-ui")
+        .header("Openai-Intent", "conversation-edits")
+        .header("x-initiator", "user")
+        .json(&body);
+    if let Some(h) = auth_header {
+        req = req.header("Authorization", h);
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| format!("LLM request failed: {e}"))?;
@@ -382,10 +406,23 @@ pub async fn llm_chat(
         return Err(format!("LLM API returned {status}: {body_text}"));
     }
 
-    let data: OpenAiResponse = resp
-        .json()
+    let body_text = resp
+        .text()
         .await
-        .map_err(|e| format!("Failed to parse LLM response: {e}"))?;
+        .map_err(|e| format!("Failed to read LLM response body: {e}"))?;
+
+    if body_text.trim_start().starts_with('<') {
+        return Err(
+            "LLM endpoint returned an HTML page instead of JSON — \
+             this usually means the request was redirected to an SSO login page. \
+             Check that your token is SAML-authorized for the organization \
+             (Settings → Tokens → Authorize) and that the API Base URL is correct."
+                .to_owned(),
+        );
+    }
+
+    let data: OpenAiResponse = serde_json::from_str(&body_text)
+        .map_err(|e| format!("Failed to parse LLM response: {e}\nRaw body: {body_text}"))?;
 
     let content = data
         .choices
@@ -395,6 +432,80 @@ pub async fn llm_chat(
         .unwrap_or_default();
 
     Ok(ChatResult { content })
+}
+
+#[tauri::command]
+pub async fn import_gh_cli_token(ghe_host: String, app: AppHandle) -> Result<(), String> {
+    // Fast path: gh is already authenticated — grab the stored token.
+    let token = gh_get_token(&ghe_host).await.ok().flatten();
+
+    let token = if let Some(t) = token {
+        t
+    } else {
+        // Slow path: open the browser for gh auth login (handles SAML SSO, no app ID needed).
+        let host = ghe_host.clone();
+        let status = tauri::async_runtime::spawn_blocking(move || {
+            std::process::Command::new("gh")
+                .args([
+                    "auth",
+                    "login",
+                    "--hostname",
+                    &host,
+                    "--git-protocol",
+                    "https",
+                    "--web",
+                ])
+                .status()
+        })
+        .await
+        .map_err(|e| format!("Task error: {e}"))?
+        .map_err(|e| format!("gh CLI not found: {e}. Install from https://cli.github.com"))?;
+
+        if !status.success() {
+            return Err(format!(
+                "gh auth login failed. Try manually: gh auth login --hostname {ghe_host} --web"
+            ));
+        }
+
+        gh_get_token(&ghe_host)
+            .await?
+            .ok_or_else(|| "gh auth login succeeded but returned no token.".to_owned())?
+    };
+
+    let mut settings = load_settings(&app);
+    settings.token = Some(token);
+    persist_settings(&app, &settings)
+}
+
+async fn gh_get_token(ghe_host: &str) -> Result<Option<String>, String> {
+    let host = ghe_host.to_owned();
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        std::process::Command::new("gh")
+            .args(["auth", "token", "--hostname", &host])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("Task error: {e}"))?
+    .map_err(|e| format!("gh CLI not found: {e}. Install from https://cli.github.com"))?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let t = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    Ok(if t.is_empty() { None } else { Some(t) })
+}
+
+fn build_auth_header(settings: &LlmSettings) -> Result<Option<String>, String> {
+    match settings.auth_method.as_str() {
+        "none" => Ok(None),
+        _ => {
+            let token = settings
+                .token
+                .as_ref()
+                .ok_or_else(|| "Not authenticated. Please configure authentication in settings.".to_owned())?;
+            Ok(Some(format!("Bearer {token}")))
+        }
+    }
 }
 
 fn build_mdd_context(core: &crate::commands::CoreState) -> String {
@@ -407,14 +518,32 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
             .to_owned(),
     );
     lines.push(String::new());
+    lines.push(
+        "IMPORTANT: Only answer questions using the MDD data provided below. \
+        Do not invent, assume, or hallucinate any services, parameters, or properties \
+        that are not explicitly listed here. If the data does not contain enough information \
+        to answer the question, say so clearly. \
+        Markdown is fully supported in your responses — use headings, bold, lists, and code blocks where appropriate."
+            .to_owned(),
+    );
+    lines.push(String::new());
+    lines.push(
+        "When referencing any node, service, parameter, or diagnostic object by name, \
+        always wrap it in double square brackets, e.g. [[ServiceName]] or [[ParameterName]]. \
+        Copy the name character-for-character exactly as it appears in the MDD structure below — \
+        do not rephrase, shorten, or change capitalisation. \
+        This allows the user to click on them for direct navigation in the UI."
+            .to_owned(),
+    );
+    lines.push(String::new());
     lines.push(format!("ECU: {}", core.ecu_name));
     lines.push(format!("Total nodes: {}", core.all_nodes.len()));
     lines.push(String::new());
-    lines.push("Structure overview (top-level containers and services):".to_owned());
+    lines.push("MDD structure (containers, services, and sub-services):".to_owned());
     for node in &core.all_nodes {
-        if node.depth <= 1 {
+        if node.depth <= 3 {
             let indent = "  ".repeat(node.depth);
-            lines.push(format!("{indent}- {}", node.text));
+            lines.push(format!("{indent}- [{:?}] {}", node.node_type, node.text));
         }
     }
     lines.join("\n")

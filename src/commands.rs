@@ -727,20 +727,23 @@ pub fn navigate_to(
 fn resolve_jump_target(nodes: &[TreeNode], target: &JumpTargetType) -> Option<usize> {
     match target {
         JumpTargetType::TreeNodeByIndex { index, short_name } => {
-            // Verify the index still points to the right node; fallback to name search
-            if nodes.get(*index).is_some_and(|n| {
+            let lower = short_name.to_lowercase();
+            let exact = |n: &TreeNode| {
                 n.short_name().is_some_and(|sn| sn == short_name)
                     || n.service_short_name().is_some_and(|sn| sn == short_name)
                     || n.text == *short_name
-            }) {
+            };
+            let icase = |n: &TreeNode| {
+                n.short_name().is_some_and(|sn| sn.to_lowercase() == lower)
+                    || n.service_short_name()
+                        .is_some_and(|sn| sn.to_lowercase() == lower)
+                    || n.text.to_lowercase() == lower
+            };
+            // Prefer exact match at the hinted index, then exact anywhere, then case-insensitive
+            if nodes.get(*index).is_some_and(exact) {
                 Some(*index)
             } else {
-                // Fallback: search by name
-                nodes.iter().position(|n| {
-                    n.short_name().is_some_and(|sn| sn == short_name)
-                        || n.service_short_name().is_some_and(|sn| sn == short_name)
-                        || n.text == *short_name
-                })
+                nodes.iter().position(exact).or_else(|| nodes.iter().position(icase))
             }
         }
         JumpTargetType::Dop { index, name } => {
@@ -980,4 +983,167 @@ pub fn save_ui_prefs(prefs: UiPrefs, app: AppHandle) -> Result<(), String> {
         serde_json::to_string(&prefs).map_err(|e| format!("Failed to serialize prefs: {e}"))?;
     fs::write(&path, json).map_err(|e| format!("Failed to write prefs: {e}"))?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// File association registration
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn register_mdd_association(_app: AppHandle) -> Result<String, String> {
+    register_mdd_association_impl()
+}
+
+#[cfg(target_os = "macos")]
+fn register_mdd_association_impl() -> Result<String, String> {
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Cannot locate executable: {e}"))?;
+
+    let bundle_path = exe
+        .ancestors()
+        .find(|p| p.extension().is_some_and(|ext| ext == "app"))
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| {
+            "Not running from an installed .app bundle. Build and install MDD UI first.".to_owned()
+        })?;
+
+    let lsregister = "/System/Library/Frameworks/CoreServices.framework/Versions/A/Support/lsregister";
+    let bundle_str = bundle_path
+        .to_str()
+        .ok_or_else(|| "Bundle path contains invalid UTF-8".to_owned())?;
+
+    let output = std::process::Command::new(lsregister)
+        .args(["-f", bundle_str])
+        .output()
+        .map_err(|e| format!("Failed to run lsregister: {e}"))?;
+
+    if output.status.success() {
+        Ok(
+            "Registered with macOS Launch Services.\n\nTo set as default: right-click any .mdd file \u{2192} Get Info \u{2192} Open With \u{2192} select MDD UI \u{2192} click \u{201c}Change All\u{201d}."
+                .to_owned(),
+        )
+    } else {
+        Err(format!(
+            "lsregister failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn register_mdd_association_impl() -> Result<String, String> {
+    fn reg_add(key: &str, default_val: bool, name: &str, value: &str) -> Result<(), String> {
+        let mut cmd = std::process::Command::new("reg");
+        cmd.arg("add").arg(key);
+        if default_val {
+            cmd.arg("/ve");
+        } else {
+            cmd.args(["/v", name]);
+        }
+        cmd.args(["/d", value, "/f"]);
+        let output = cmd
+            .output()
+            .map_err(|e| format!("Failed to run reg.exe: {e}"))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(format!(
+                "reg.exe failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
+    }
+
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Cannot locate executable: {e}"))?;
+    let exe_str = exe.to_string_lossy();
+    let prog_id = "io.github.alexmohr.mdd-ui.mddfile";
+    let prog_key = format!(r"HKCU\Software\Classes\{prog_id}");
+    let icon_key = format!(r"HKCU\Software\Classes\{prog_id}\DefaultIcon");
+    let cmd_key = format!(r"HKCU\Software\Classes\{prog_id}\shell\open\command");
+    let icon_val = format!("{exe_str},0");
+    let cmd_val = format!("{exe_str} \"%1\"");
+
+    reg_add(&prog_key, true, "", "MDD Database")?;
+    reg_add(&icon_key, true, "", &icon_val)?;
+    reg_add(&cmd_key, true, "", &cmd_val)?;
+    reg_add(r"HKCU\Software\Classes\.mdd", true, "", prog_id)?;
+    reg_add(
+        r"HKCU\Software\Classes\.mdd",
+        false,
+        "Content Type",
+        "application/x-mdd",
+    )?;
+
+    Ok("Registered as default handler for .mdd files.".to_owned())
+}
+
+#[cfg(target_os = "linux")]
+fn register_mdd_association_impl() -> Result<String, String> {
+    let home = std::env::var("HOME")
+        .map_err(|_| "HOME environment variable not set".to_owned())?;
+    let home_path = std::path::Path::new(&home);
+
+    let mime_dir = home_path.join(".local/share/mime/packages");
+    fs::create_dir_all(&mime_dir)
+        .map_err(|e| format!("Failed to create MIME directory: {e}"))?;
+
+    let mime_content = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<mime-info xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n  \
+  <mime-type type=\"application/x-mdd\">\n    \
+    <comment>MDD Diagnostic Database</comment>\n    \
+    <glob pattern=\"*.mdd\"/>\n  \
+  </mime-type>\n\
+</mime-info>\n";
+    fs::write(mime_dir.join("application-x-mdd.xml"), mime_content)
+        .map_err(|e| format!("Failed to write MIME definition: {e}"))?;
+
+    let _ = std::process::Command::new("update-mime-database")
+        .arg(home_path.join(".local/share/mime"))
+        .output();
+
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Cannot locate executable: {e}"))?;
+    let exe_str = exe.to_string_lossy();
+    let apps_dir = home_path.join(".local/share/applications");
+    fs::create_dir_all(&apps_dir)
+        .map_err(|e| format!("Failed to create applications directory: {e}"))?;
+
+    let desktop_content = format!(
+        "[Desktop Entry]\nName=MDD UI\nComment=Diagnostic database browser\n\
+Exec={exe_str} %f\nIcon=io.github.alexmohr.mdd-ui\nType=Application\n\
+Categories=Utility;\nMimeType=application/x-mdd;\n"
+    );
+    fs::write(
+        apps_dir.join("io.github.alexmohr.mdd-ui.desktop"),
+        desktop_content,
+    )
+    .map_err(|e| format!("Failed to write .desktop file: {e}"))?;
+
+    let _ = std::process::Command::new("update-desktop-database")
+        .arg(&apps_dir)
+        .output();
+
+    let output = std::process::Command::new("xdg-mime")
+        .args([
+            "default",
+            "io.github.alexmohr.mdd-ui.desktop",
+            "application/x-mdd",
+        ])
+        .output()
+        .map_err(|e| format!("xdg-mime not found: {e}. Install the xdg-utils package."))?;
+
+    if output.status.success() {
+        Ok("Registered as default handler for .mdd files (application/x-mdd).".to_owned())
+    } else {
+        Err(format!(
+            "xdg-mime failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+fn register_mdd_association_impl() -> Result<String, String> {
+    Err("File association registration is not supported on this platform.".to_owned())
 }

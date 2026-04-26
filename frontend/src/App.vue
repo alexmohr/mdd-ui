@@ -5,15 +5,18 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import { useAppStore } from "./stores/app";
 import { useLlmStore } from "./stores/llm";
+import { useSettingsStore } from "./stores/settings";
 import { open } from "@tauri-apps/plugin-dialog";
 import TreePane from "./components/TreePane.vue";
 import DetailPane from "./components/DetailPane.vue";
 import SearchBar from "./components/SearchBar.vue";
 import StatusBar from "./components/StatusBar.vue";
 import LlmPanel from "./components/LlmPanel.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
 
 const store = useAppStore();
 const llmStore = useLlmStore();
+const settingsStore = useSettingsStore();
 const dragging = ref(false);
 const isMac = navigator.platform.toLowerCase().includes('mac');
 
@@ -118,8 +121,8 @@ function onSplitMouseDown() {
     </div>
     <!-- Welcome screen -->
     <template v-if="!store.fileLoaded">
-      <!-- Chat toggle in welcome screen -->
-      <div class="absolute top-2 right-3 z-10" style="padding-top: env(titlebar-area-y, 0)">
+      <!-- Top-right controls in welcome screen -->
+      <div class="absolute top-2 right-3 z-10 flex items-center gap-1" style="padding-top: env(titlebar-area-y, 0)">
         <button
           class="p-1.5 rounded-md transition-colors"
           :class="llmStore.panelOpen ? 'bg-neutral-700 text-blue-400' : 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800'"
@@ -127,6 +130,14 @@ function onSplitMouseDown() {
           @click="llmStore.panelOpen = !llmStore.panelOpen"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button
+          class="p-1.5 rounded-md transition-colors"
+          :class="settingsStore.open ? 'bg-neutral-700 text-neutral-200' : 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800'"
+          title="Settings"
+          @click="settingsStore.open = !settingsStore.open"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
       </div>
       <div class="flex-1 flex items-center justify-center" data-tauri-drag-region>
@@ -241,6 +252,14 @@ function onSplitMouseDown() {
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </button>
           <button
+            class="p-1.5 rounded-md transition-colors"
+            :class="settingsStore.open ? 'bg-neutral-700 text-neutral-200' : 'text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800'"
+            title="Settings"
+            @click="settingsStore.open = !settingsStore.open"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+          <button
             v-if="store.isDiff"
             class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
             :class="store.hideUnchanged ? 'bg-amber-600/20 text-amber-400' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'"
@@ -298,5 +317,8 @@ function onSplitMouseDown() {
 
     <!-- AI panel (overlay, always available) -->
     <LlmPanel v-if="llmStore.panelOpen" />
+
+    <!-- Settings modal -->
+    <SettingsPanel v-if="settingsStore.open" />
   </div>
 </template>

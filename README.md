@@ -146,6 +146,12 @@ This is a Cargo workspace with two crates:
 | [rmcp](https://github.com/modelcontextprotocol/rust-sdk) | MCP server SDK (optional, `mcp` feature) |
 | [tokio](https://tokio.rs) | Async runtime for MCP server (optional, `mcp` feature) |
 
+## AI Assistant (GitHub Copilot)
+
+The built-in AI assistant supports GitHub Copilot via OAuth Device Flow. The GHE authentication uses the OAuth App Client ID from the [opencode](https://github.com/sst/opencode) project (`Ov23li8tweQw6odWQebz`), borrowed temporarily because it is already approved on enterprise GHE instances with Copilot enabled — avoiding the need for users to go through a corporate OAuth App approval process.
+
+mdd-ui has its own registered OAuth App (`Ov23liMhCri4BIE67Zeh`). Once it has been approved by the relevant enterprise admins, the Client ID in `frontend/src/stores/llm.ts` should be updated accordingly.
+
 ## License
 
 Licensed under [Apache-2.0](LICENSE).
