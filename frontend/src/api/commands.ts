@@ -185,3 +185,7 @@ export async function getUiPrefs(): Promise<UiPrefs> {
 export async function saveUiPrefs(prefs: UiPrefs): Promise<void> {
   return invoke("save_ui_prefs", { prefs });
 }
+
+export async function registerMddAssociation(): Promise<string> {
+  return invoke<string>("register_mdd_association");
+}

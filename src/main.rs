@@ -85,12 +85,14 @@ fn run_tauri_app() {
             commands::remove_recent_file,
             commands::get_ui_prefs,
             commands::save_ui_prefs,
+            commands::register_mdd_association,
             llm::get_llm_settings,
             llm::save_llm_settings,
             llm::clear_llm_token,
             llm::start_ghe_device_flow,
             llm::poll_ghe_device_flow,
             llm::fetch_llm_models,
+            llm::import_gh_cli_token,
             llm::llm_chat,
         ])
         .run(tauri::generate_context!())
