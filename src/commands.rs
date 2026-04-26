@@ -328,12 +328,12 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
 #[tauri::command]
 pub async fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, String> {
     let (nodes, ecu_name) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
-        let db = mdd_core::database::load_mdd(&path).map_err(|e| format!("Failed to load: {e:#}"))?;
+        let db =
+            mdd_core::database::load_mdd(&path).map_err(|e| format!("Failed to load: {e:#}"))?;
         Ok(mdd_core::tree::build_tree(&db, &path))
     })
     .await
-    .map_err(|e| format!("Thread error: {e}"))??
-    ;
+    .map_err(|e| format!("Thread error: {e}"))??;
     let node_count = nodes.len();
 
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
@@ -364,11 +364,12 @@ pub async fn load_diff(
             .map_err(|e| format!("Failed to load old: {e:#}"))?;
         let db_new = mdd_core::database::load_mdd(&new_path)
             .map_err(|e| format!("Failed to load new: {e:#}"))?;
-        Ok(mdd_core::diff::diff_tree::build_diff_tree(&db_old, &db_new, &old_path, &new_path))
+        Ok(mdd_core::diff::diff_tree::build_diff_tree(
+            &db_old, &db_new, &old_path, &new_path,
+        ))
     })
     .await
-    .map_err(|e| format!("Thread error: {e}"))??
-    ;
+    .map_err(|e| format!("Thread error: {e}"))??;
     let node_count = nodes.len();
 
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
@@ -743,7 +744,10 @@ fn resolve_jump_target(nodes: &[TreeNode], target: &JumpTargetType) -> Option<us
             if nodes.get(*index).is_some_and(exact) {
                 Some(*index)
             } else {
-                nodes.iter().position(exact).or_else(|| nodes.iter().position(icase))
+                nodes
+                    .iter()
+                    .position(exact)
+                    .or_else(|| nodes.iter().position(icase))
             }
         }
         JumpTargetType::Dop { index, name } => {
@@ -996,18 +1000,18 @@ pub fn register_mdd_association(_app: AppHandle) -> Result<String, String> {
 
 #[cfg(target_os = "macos")]
 fn register_mdd_association_impl() -> Result<String, String> {
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("Cannot locate executable: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("Cannot locate executable: {e}"))?;
 
     let bundle_path = exe
         .ancestors()
         .find(|p| p.extension().is_some_and(|ext| ext == "app"))
-        .map(|p| p.to_path_buf())
+        .map(std::path::Path::to_path_buf)
         .ok_or_else(|| {
             "Not running from an installed .app bundle. Build and install MDD UI first.".to_owned()
         })?;
 
-    let lsregister = "/System/Library/Frameworks/CoreServices.framework/Versions/A/Support/lsregister";
+    let lsregister =
+        "/System/Library/Frameworks/CoreServices.framework/Versions/A/Support/lsregister";
     let bundle_str = bundle_path
         .to_str()
         .ok_or_else(|| "Bundle path contains invalid UTF-8".to_owned())?;
@@ -1019,7 +1023,9 @@ fn register_mdd_association_impl() -> Result<String, String> {
 
     if output.status.success() {
         Ok(
-            "Registered with macOS Launch Services.\n\nTo set as default: right-click any .mdd file \u{2192} Get Info \u{2192} Open With \u{2192} select MDD UI \u{2192} click \u{201c}Change All\u{201d}."
+            "Registered with macOS Launch Services.\n\nTo set as default: right-click any .mdd \
+             file \u{2192} Get Info \u{2192} Open With \u{2192} select MDD UI \u{2192} click \
+             \u{201c}Change All\u{201d}."
                 .to_owned(),
         )
     } else {
@@ -1054,8 +1060,7 @@ fn register_mdd_association_impl() -> Result<String, String> {
         }
     }
 
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("Cannot locate executable: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("Cannot locate executable: {e}"))?;
     let exe_str = exe.to_string_lossy();
     let prog_id = "io.github.alexmohr.mdd-ui.mddfile";
     let prog_key = format!(r"HKCU\Software\Classes\{prog_id}");
@@ -1080,13 +1085,11 @@ fn register_mdd_association_impl() -> Result<String, String> {
 
 #[cfg(target_os = "linux")]
 fn register_mdd_association_impl() -> Result<String, String> {
-    let home = std::env::var("HOME")
-        .map_err(|_| "HOME environment variable not set".to_owned())?;
+    let home = std::env::var("HOME").map_err(|_| "HOME environment variable not set".to_owned())?;
     let home_path = std::path::Path::new(&home);
 
     let mime_dir = home_path.join(".local/share/mime/packages");
-    fs::create_dir_all(&mime_dir)
-        .map_err(|e| format!("Failed to create MIME directory: {e}"))?;
+    fs::create_dir_all(&mime_dir).map_err(|e| format!("Failed to create MIME directory: {e}"))?;
 
     let mime_content = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
 <mime-info xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n  \
@@ -1102,17 +1105,16 @@ fn register_mdd_association_impl() -> Result<String, String> {
         .arg(home_path.join(".local/share/mime"))
         .output();
 
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("Cannot locate executable: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("Cannot locate executable: {e}"))?;
     let exe_str = exe.to_string_lossy();
     let apps_dir = home_path.join(".local/share/applications");
     fs::create_dir_all(&apps_dir)
         .map_err(|e| format!("Failed to create applications directory: {e}"))?;
 
     let desktop_content = format!(
-        "[Desktop Entry]\nName=MDD UI\nComment=Diagnostic database browser\n\
-Exec={exe_str} %f\nIcon=io.github.alexmohr.mdd-ui\nType=Application\n\
-Categories=Utility;\nMimeType=application/x-mdd;\n"
+        "[Desktop Entry]\nName=MDD UI\nComment=Diagnostic database browser\nExec={exe_str} \
+         %f\nIcon=io.github.alexmohr.mdd-ui\nType=Application\nCategories=Utility;\\
+         nMimeType=application/x-mdd;\n"
     );
     fs::write(
         apps_dir.join("io.github.alexmohr.mdd-ui.desktop"),

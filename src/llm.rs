@@ -5,11 +5,12 @@
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::module_name_repetitions)]
 
-use crate::commands::AppState;
+use std::{collections::HashMap, fs, path::PathBuf};
+
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager, State};
+
+use crate::commands::AppState;
 
 // ---------------------------------------------------------------------------
 // Persisted settings
@@ -23,7 +24,7 @@ pub struct LlmSettings {
     /// One of: copilot, azure, openai, bedrock
     pub auth_method: String,
     pub token: Option<String>,
-    /// Azure API version (e.g. "2024-10-21"); only used for Azure OpenAI.
+    /// Azure API version (e.g. "2024-10-21"); only used for Azure `OpenAI`.
     #[serde(default)]
     pub api_version: Option<String>,
     /// Short-lived Copilot API key obtained via token exchange.
@@ -102,11 +103,9 @@ fn load_settings(app: &AppHandle) -> LlmSettings {
 fn persist_settings(app: &AppHandle, settings: &LlmSettings) -> Result<(), String> {
     let path = llm_settings_path(app)?;
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create cache directory: {e}"))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create cache directory: {e}"))?;
     }
-    let json =
-        serde_json::to_string(settings).map_err(|e| format!("Serialize error: {e}"))?;
+    let json = serde_json::to_string(settings).map_err(|e| format!("Serialize error: {e}"))?;
     fs::write(&path, json).map_err(|e| format!("Write error: {e}"))?;
     Ok(())
 }
@@ -129,15 +128,12 @@ pub fn get_llm_settings(app: AppHandle) -> LlmSettingsView {
 }
 
 #[tauri::command]
-pub fn save_llm_settings(
-    settings: LlmSettingsUpdate,
-    app: AppHandle,
-) -> Result<(), String> {
+pub fn save_llm_settings(settings: LlmSettingsUpdate, app: AppHandle) -> Result<(), String> {
     let mut current = load_settings(&app);
     current.ghe_host = settings.ghe_host;
     current.llm_endpoint = settings.llm_endpoint;
     current.llm_model = settings.llm_model;
-    current.auth_method = settings.auth_method.clone();
+    current.auth_method.clone_from(&settings.auth_method);
     current.api_version = settings.api_version;
     // For non-Copilot providers, store the API key/token if provided.
     match settings.auth_method.as_str() {
@@ -146,8 +142,7 @@ pub fn save_llm_settings(
                 current.token = Some(tok);
             }
         }
-        "copilot" => { /* token is set by the device flow, not here */ }
-        _ => {}
+        _ => {} // "copilot": token is set by the device flow, not here
     }
     persist_settings(&app, &current)
 }
@@ -314,8 +309,8 @@ async fn exchange_copilot_token(
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
         return Err(format!(
-            "Copilot token exchange returned {status}: {body}\n\
-             Hint: verify that Copilot is enabled for your GHE account."
+            "Copilot token exchange returned {status}: {body}\nHint: verify that Copilot is \
+             enabled for your GHE account."
         ));
     }
 
@@ -344,8 +339,8 @@ async fn ensure_copilot_key(app: &AppHandle) -> Result<(String, String), String>
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs() as i64;
-        if expires_at > now + 300 {
+            .as_secs().cast_signed();
+        if expires_at > now.saturating_add(300) {
             let api_base = settings
                 .copilot_api_base
                 .clone()
@@ -542,10 +537,10 @@ pub async fn llm_chat(
 
     if body_text.trim_start().starts_with('<') {
         return Err(
-            "LLM endpoint returned an HTML page instead of JSON — \
-             this usually means the request was redirected to an SSO login page. \
-             Check that your token is SAML-authorized for the organization \
-             (Settings → Tokens → Authorize) and that the API Base URL is correct."
+            "LLM endpoint returned an HTML page instead of JSON — this usually means the request \
+             was redirected to an SSO login page. Check that your token is SAML-authorized for \
+             the organization (Settings → Tokens → Authorize) and that the API Base URL is \
+             correct."
                 .to_owned(),
         );
     }
@@ -565,10 +560,9 @@ pub async fn llm_chat(
 
 /// Resolve auth header (name, value) for non-Copilot providers.
 fn build_auth_header(settings: &LlmSettings) -> Result<(String, String), String> {
-    let token = settings
-        .token
-        .as_ref()
-        .ok_or_else(|| "Not authenticated. Please configure authentication in settings.".to_owned())?;
+    let token = settings.token.as_ref().ok_or_else(|| {
+        "Not authenticated. Please configure authentication in settings.".to_owned()
+    })?;
     match settings.auth_method.as_str() {
         "azure" => Ok(("api-key".to_owned(), token.clone())),
         "openai" | "bedrock" => Ok(("Authorization".to_owned(), format!("Bearer {token}"))),
@@ -578,29 +572,27 @@ fn build_auth_header(settings: &LlmSettings) -> Result<(String, String), String>
 
 fn build_mdd_context(core: &crate::commands::CoreState) -> String {
     let mut lines: Vec<String> = Vec::new();
-    lines.push(
-        "You are an expert automotive diagnostics engineer assistant.".to_owned(),
-    );
+    lines.push("You are an expert automotive diagnostics engineer assistant.".to_owned());
     lines.push(
         "The user is viewing an MDD (Master Diagnostic Data) database in the MDD UI tool."
             .to_owned(),
     );
     lines.push(String::new());
     lines.push(
-        "IMPORTANT: Only answer questions using the MDD data provided below. \
-        Do not invent, assume, or hallucinate any services, parameters, or properties \
-        that are not explicitly listed here. If the data does not contain enough information \
-        to answer the question, say so clearly. \
-        Markdown is fully supported in your responses — use headings, bold, lists, and code blocks where appropriate."
+        "IMPORTANT: Only answer questions using the MDD data provided below. Do not invent, \
+         assume, or hallucinate any services, parameters, or properties that are not explicitly \
+         listed here. If the data does not contain enough information to answer the question, say \
+         so clearly. Markdown is fully supported in your responses — use headings, bold, lists, \
+         and code blocks where appropriate."
             .to_owned(),
     );
     lines.push(String::new());
     lines.push(
-        "When referencing any node, service, parameter, or diagnostic object by name, \
-        always wrap it in double square brackets, e.g. [[ServiceName]] or [[ParameterName]]. \
-        Copy the name character-for-character exactly as it appears in the MDD structure below — \
-        do not rephrase, shorten, or change capitalisation. \
-        This allows the user to click on them for direct navigation in the UI."
+        "When referencing any node, service, parameter, or diagnostic object by name, always wrap \
+         it in double square brackets, e.g. [[ServiceName]] or [[ParameterName]]. Copy the name \
+         character-for-character exactly as it appears in the MDD structure below — do not \
+         rephrase, shorten, or change capitalisation. This allows the user to click on them for \
+         direct navigation in the UI."
             .to_owned(),
     );
     lines.push(String::new());
