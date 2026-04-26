@@ -19,7 +19,7 @@ marked.use({
       if (m) return { type: "mddNav", raw: m[0], name: m[1] };
     },
     renderer(token) {
-      const name = (token as { name: string }).name.replace(/"/g, "&quot;");
+      const name = (token as unknown as { name: string }).name.replace(/"/g, "&quot;");
       return `<button class="mdd-nav" data-name="${name}">${name}</button>`;
     },
   }],
@@ -37,11 +37,11 @@ const copied = ref(false);
 
 const form = reactive<LlmSettingsUpdate & { api_token: string }>({
   ghe_host: store.settings.ghe_host,
-  client_id: store.settings.client_id,
   llm_endpoint: store.settings.llm_endpoint,
   llm_model: store.settings.llm_model,
   auth_method: store.settings.auth_method,
   api_token: "",
+  api_version: store.settings.api_version,
 });
 
 watch(
@@ -49,11 +49,11 @@ watch(
   (open) => {
     if (open) {
       form.ghe_host = store.settings.ghe_host;
-      form.client_id = store.settings.client_id;
       form.llm_endpoint = store.settings.llm_endpoint;
       form.llm_model = store.settings.llm_model;
       form.auth_method = store.settings.auth_method;
       form.api_token = "";
+      form.api_version = store.settings.api_version;
       if (store.isAuthenticated) void store.fetchModels();
     }
   },
@@ -84,11 +84,6 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-async function importGhCliToken() {
-  await store.importGhCliToken(form.ghe_host);
-  if (!store.error) store.settingsOpen = false;
-}
-
 async function saveSettings() {
   const endpoint =
     form.auth_method === "copilot"
@@ -96,11 +91,11 @@ async function saveSettings() {
       : form.llm_endpoint;
   await store.saveSettings({
     ghe_host: form.ghe_host,
-    client_id: form.client_id,
     llm_endpoint: endpoint,
     llm_model: form.llm_model,
     auth_method: form.auth_method,
     api_token: form.api_token || undefined,
+    api_version: form.api_version || undefined,
   });
   store.settingsOpen = false;
 }
@@ -260,9 +255,10 @@ function onMessageAreaClick(e: MouseEvent) {
               v-model="form.auth_method"
               class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 transition-colors appearance-none pr-7"
             >
-              <option value="copilot">GitHub Copilot (GHE) — recommended</option>
-              <option value="ghe">GitHub Enterprise (OAuth Device Flow)</option>
-              <option value="token">API Token</option>
+              <option value="copilot">GitHub Copilot (GHE)</option>
+              <option value="azure">Azure OpenAI</option>
+              <option value="openai">OpenAI</option>
+              <option value="bedrock">AWS Bedrock</option>
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-2 flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500"><path d="m6 9 6 6 6-6"/></svg>
@@ -307,88 +303,62 @@ function onMessageAreaClick(e: MouseEvent) {
           </div>
         </template>
 
-        <!-- GHE fields -->
-        <template v-else-if="form.auth_method === 'ghe'">
+        <!-- Azure OpenAI -->
+        <template v-else-if="form.auth_method === 'azure'">
           <p class="text-[10px] text-neutral-600 leading-relaxed">
-            Obtains a Bearer token via GitHub's Device Flow. Create an OAuth App on your GHE instance with Device Flow enabled and no callback URL.
+            Uses the <code class="text-neutral-500">api-key</code> header. Provide your Azure OpenAI API key and resource endpoint.
           </p>
           <div>
-            <label class="block text-[11px] text-neutral-400 mb-1">GHE Host <span class="text-red-400">*</span></label>
+            <label class="block text-[11px] text-neutral-400 mb-1">API Key <span class="text-red-400">*</span></label>
             <input
-              v-model="form.ghe_host"
-              type="text"
-              placeholder="github.mycompany.com"
+              v-model="form.api_token"
+              type="password"
+              placeholder="Leave blank to keep existing key"
+              autocomplete="off"
               class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
             />
-            <p class="mt-1 text-[10px] text-neutral-600">Domain only — no protocol or path</p>
-          </div>
-          <div>
-            <label class="block text-[11px] text-neutral-400 mb-1">OAuth App Client ID <span class="text-red-400">*</span></label>
-            <input
-              v-model="form.client_id"
-              type="text"
-              placeholder="Iv1.xxxxxxxxxxxxxxxx"
-              class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
-            />
-            <p class="mt-1 text-[10px] text-neutral-600">
-              Found on your OAuth App page:
-              <a
-                v-if="form.ghe_host"
-                :href="'https://' + form.ghe_host + '/settings/developers'"
-                target="_blank"
-                rel="noopener"
-                class="text-blue-400 hover:text-blue-300 underline"
-              >{{ form.ghe_host }}/settings/developers ↗</a>
-              <span v-else>Settings → Developer settings → OAuth Apps</span>
-              — create a new app with Device Flow enabled, no callback URL needed.
+            <p v-if="store.settings.has_token && store.settings.auth_method === 'azure'" class="mt-1 text-[10px] text-green-600 flex items-center gap-1">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Key is set
             </p>
           </div>
-          <div class="pt-1">
-            <div v-if="store.isAuthenticated && store.settings.auth_method === 'ghe'" class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
-                <span class="text-xs text-neutral-300">Logged in via GHE</span>
-              </div>
-              <button class="text-xs text-red-400 hover:text-red-300 transition-colors" @click="store.logout()">Logout</button>
-            </div>
-            <button
-              v-else
-              class="w-full py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-              :disabled="store.loginState === 'polling'"
-              @click="store.startLogin()"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-              Login with GitHub Enterprise
-            </button>
+          <div>
+            <label class="block text-[11px] text-neutral-400 mb-1">API Version <span class="text-neutral-600">(optional)</span></label>
+            <input
+              v-model="form.api_version"
+              type="text"
+              placeholder="2024-10-21"
+              class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+            />
           </div>
         </template>
 
-        <!-- Direct API token -->
-        <template v-else-if="form.auth_method === 'token'">
-          <p class="text-[10px] text-neutral-600">
-            Bearer token (PAT) sent in the Authorization header. No app registration needed.
+        <!-- OpenAI -->
+        <template v-else-if="form.auth_method === 'openai'">
+          <p class="text-[10px] text-neutral-600 leading-relaxed">
+            Direct OpenAI API. Uses <code class="text-neutral-500">Authorization: Bearer</code> header.
           </p>
           <div>
-            <label class="block text-[11px] text-neutral-400 mb-1">GHE Host <span class="text-neutral-600">(optional)</span></label>
+            <label class="block text-[11px] text-neutral-400 mb-1">API Key <span class="text-red-400">*</span></label>
             <input
-              v-model="form.ghe_host"
-              type="text"
-              placeholder="mercedes-benz.ghe.com"
+              v-model="form.api_token"
+              type="password"
+              placeholder="sk-…"
+              autocomplete="off"
               class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
             />
-            <p class="mt-1 text-[10px] text-neutral-600">Fill in to get a quick-link for creating a token below</p>
+            <p v-if="store.settings.has_token && store.settings.auth_method === 'openai'" class="mt-1 text-[10px] text-green-600 flex items-center gap-1">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Key is set
+            </p>
           </div>
+        </template>
+
+        <!-- Bedrock -->
+        <template v-else-if="form.auth_method === 'bedrock'">
+          <p class="text-[10px] text-neutral-600 leading-relaxed">
+            AWS Bedrock / GenAI Nexus proxy. Uses <code class="text-neutral-500">Authorization: Bearer</code> header.
+          </p>
           <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-[11px] text-neutral-400">Personal Access Token <span class="text-red-400">*</span></label>
-              <a
-                v-if="form.ghe_host"
-                :href="'https://' + form.ghe_host + '/settings/tokens/new?scopes=read%3Auser&description=mdd-ui'"
-                target="_blank"
-                rel="noopener"
-                class="text-[10px] text-blue-400 hover:text-blue-300 underline"
-              >Create token on {{ form.ghe_host }} ↗</a>
-            </div>
+            <label class="block text-[11px] text-neutral-400 mb-1">Bearer Token <span class="text-red-400">*</span></label>
             <input
               v-model="form.api_token"
               type="password"
@@ -396,7 +366,7 @@ function onMessageAreaClick(e: MouseEvent) {
               autocomplete="off"
               class="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
             />
-            <p v-if="store.settings.has_token && store.settings.auth_method === 'token'" class="mt-1 text-[10px] text-green-600 flex items-center gap-1">
+            <p v-if="store.settings.has_token && store.settings.auth_method === 'bedrock'" class="mt-1 text-[10px] text-green-600 flex items-center gap-1">
               <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Token is set
             </p>
           </div>
@@ -417,15 +387,7 @@ function onMessageAreaClick(e: MouseEvent) {
           </p>
         </div>
         <div v-else>
-          <div class="flex items-center justify-between mb-1">
-            <label class="text-[11px] text-neutral-400">API Base URL <span class="text-red-400">*</span></label>
-            <button
-              v-if="form.auth_method === 'ghe' && form.ghe_host"
-              class="text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
-              type="button"
-              @click="form.llm_endpoint = 'https://' + form.ghe_host + '/v1'"
-            >Use GHE host ↗</button>
-          </div>
+          <label class="block text-[11px] text-neutral-400 mb-1">API Base URL <span class="text-red-400">*</span></label>
           <input
             v-model="form.llm_endpoint"
             type="text"

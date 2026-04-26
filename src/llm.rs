@@ -7,6 +7,7 @@
 
 use crate::commands::AppState;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager, State};
 
@@ -17,22 +18,37 @@ use tauri::{AppHandle, Manager, State};
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LlmSettings {
     pub ghe_host: String,
-    pub client_id: String,
     pub llm_endpoint: String,
     pub llm_model: String,
+    /// One of: copilot, azure, openai, bedrock
     pub auth_method: String,
     pub token: Option<String>,
+    /// Azure API version (e.g. "2024-10-21"); only used for Azure OpenAI.
+    #[serde(default)]
+    pub api_version: Option<String>,
+    /// Short-lived Copilot API key obtained via token exchange.
+    #[serde(default)]
+    pub copilot_token: Option<String>,
+    /// Unix timestamp (seconds) when `copilot_token` expires.
+    #[serde(default)]
+    pub copilot_expires_at: Option<i64>,
+    /// API base URL returned by the Copilot token exchange endpoint.
+    #[serde(default)]
+    pub copilot_api_base: Option<String>,
 }
 
 impl Default for LlmSettings {
     fn default() -> Self {
         Self {
             ghe_host: String::new(),
-            client_id: String::new(),
             llm_endpoint: String::new(),
             llm_model: "gpt-4o".to_owned(),
-            auth_method: "ghe".to_owned(),
+            auth_method: "copilot".to_owned(),
             token: None,
+            api_version: None,
+            copilot_token: None,
+            copilot_expires_at: None,
+            copilot_api_base: None,
         }
     }
 }
@@ -41,23 +57,24 @@ impl Default for LlmSettings {
 #[derive(Serialize)]
 pub struct LlmSettingsView {
     pub ghe_host: String,
-    pub client_id: String,
     pub llm_endpoint: String,
     pub llm_model: String,
     pub auth_method: String,
     pub has_token: bool,
+    pub api_version: Option<String>,
 }
 
 /// Received from the frontend to update settings.
 #[derive(Deserialize)]
 pub struct LlmSettingsUpdate {
     pub ghe_host: String,
-    pub client_id: String,
     pub llm_endpoint: String,
     pub llm_model: String,
     pub auth_method: String,
-    /// Only used for auth_method == "token"; leave None/empty to keep existing token.
+    /// API key / token for non-Copilot providers; leave None/empty to keep existing.
     pub api_token: Option<String>,
+    /// Azure API version (e.g. "2024-10-21").
+    pub api_version: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -103,11 +120,11 @@ pub fn get_llm_settings(app: AppHandle) -> LlmSettingsView {
     let s = load_settings(&app);
     LlmSettingsView {
         ghe_host: s.ghe_host,
-        client_id: s.client_id,
         llm_endpoint: s.llm_endpoint,
         llm_model: s.llm_model,
         auth_method: s.auth_method,
         has_token: s.token.is_some(),
+        api_version: s.api_version,
     }
 }
 
@@ -118,16 +135,19 @@ pub fn save_llm_settings(
 ) -> Result<(), String> {
     let mut current = load_settings(&app);
     current.ghe_host = settings.ghe_host;
-    current.client_id = settings.client_id;
     current.llm_endpoint = settings.llm_endpoint;
     current.llm_model = settings.llm_model;
     current.auth_method = settings.auth_method.clone();
-    if settings.auth_method == "token" {
-        if let Some(tok) = settings.api_token.filter(|t| !t.is_empty()) {
-            current.token = Some(tok);
+    current.api_version = settings.api_version;
+    // For non-Copilot providers, store the API key/token if provided.
+    match settings.auth_method.as_str() {
+        "azure" | "openai" | "bedrock" => {
+            if let Some(tok) = settings.api_token.filter(|t| !t.is_empty()) {
+                current.token = Some(tok);
+            }
         }
-    } else if settings.auth_method == "none" {
-        current.token = None;
+        "copilot" => { /* token is set by the device flow, not here */ }
+        _ => {}
     }
     persist_settings(&app, &current)
 }
@@ -136,6 +156,9 @@ pub fn save_llm_settings(
 pub fn clear_llm_token(app: AppHandle) -> Result<(), String> {
     let mut settings = load_settings(&app);
     settings.token = None;
+    settings.copilot_token = None;
+    settings.copilot_expires_at = None;
+    settings.copilot_api_base = None;
     persist_settings(&app, &settings)
 }
 
@@ -258,6 +281,96 @@ pub async fn poll_ghe_device_flow(
 }
 
 // ---------------------------------------------------------------------------
+// Copilot token exchange
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct CopilotTokenResponse {
+    token: String,
+    expires_at: i64,
+    #[serde(default)]
+    endpoints: HashMap<String, String>,
+}
+
+/// Exchange an OAuth access token for a short-lived Copilot API key.
+async fn exchange_copilot_token(
+    ghe_host: &str,
+    oauth_token: &str,
+) -> Result<(String, i64, Option<String>), String> {
+    let client = reqwest::Client::new();
+    let url = format!("https://api.{ghe_host}/copilot_internal/v2/token");
+    let resp = client
+        .get(&url)
+        .header("Authorization", format!("token {oauth_token}"))
+        .header("Accept", "application/json")
+        .header("User-Agent", "mdd-ui")
+        .header("Editor-Version", "vscode/1.85.1")
+        .header("Editor-Plugin-Version", "copilot/1.155.0")
+        .send()
+        .await
+        .map_err(|e| format!("Copilot token exchange failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "Copilot token exchange returned {status}: {body}\n\
+             Hint: verify that Copilot is enabled for your GHE account."
+        ));
+    }
+
+    let data: CopilotTokenResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Copilot token response: {e}"))?;
+
+    let api_base = data.endpoints.get("api").cloned();
+    Ok((data.token, data.expires_at, api_base))
+}
+
+/// Ensure a valid Copilot API key is available, refreshing it if expired.
+/// Returns `(copilot_api_key, api_base_url)`.
+async fn ensure_copilot_key(app: &AppHandle) -> Result<(String, String), String> {
+    let settings = load_settings(app);
+    let oauth_token = settings
+        .token
+        .as_ref()
+        .ok_or_else(|| "Not authenticated. Please log in first.".to_owned())?;
+
+    // Check if existing copilot token is still valid (5 min buffer).
+    if let (Some(copilot_token), Some(expires_at)) =
+        (&settings.copilot_token, settings.copilot_expires_at)
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        if expires_at > now + 300 {
+            let api_base = settings
+                .copilot_api_base
+                .clone()
+                .unwrap_or_else(|| format!("https://copilot-api.{}", settings.ghe_host));
+            return Ok((copilot_token.clone(), api_base));
+        }
+    }
+
+    // Token expired or missing — exchange.
+    let (copilot_token, expires_at, api_base) =
+        exchange_copilot_token(&settings.ghe_host, oauth_token).await?;
+
+    let mut settings = load_settings(app);
+    settings.copilot_token = Some(copilot_token.clone());
+    settings.copilot_expires_at = Some(expires_at);
+    if let Some(ref base) = api_base {
+        settings.copilot_api_base = Some(base.clone());
+    }
+    persist_settings(app, &settings)?;
+
+    let endpoint = api_base.unwrap_or_else(|| format!("https://copilot-api.{}", settings.ghe_host));
+    Ok((copilot_token, endpoint))
+}
+
+// ---------------------------------------------------------------------------
 // Available models
 // ---------------------------------------------------------------------------
 
@@ -274,15 +387,25 @@ struct ModelEntry {
 #[tauri::command]
 pub async fn fetch_llm_models(app: AppHandle) -> Result<Vec<String>, String> {
     let settings = load_settings(&app);
-    if settings.llm_endpoint.is_empty() {
-        return Err("LLM endpoint not configured.".to_owned());
-    }
-    let auth_header = build_auth_header(&settings)?;
+
+    let (endpoint, auth) = if settings.auth_method == "copilot" {
+        let (key, base) = ensure_copilot_key(&app).await?;
+        (base, ("Authorization".to_owned(), format!("Bearer {key}")))
+    } else {
+        if settings.llm_endpoint.is_empty() {
+            return Err("LLM endpoint not configured.".to_owned());
+        }
+        (settings.llm_endpoint.clone(), build_auth_header(&settings)?)
+    };
+
     let client = reqwest::Client::new();
-    let url = format!("{}/models", settings.llm_endpoint.trim_end_matches('/'));
+    let url = format!("{}/models", endpoint.trim_end_matches('/'));
     let mut req = client.get(&url).header("User-Agent", "mdd-ui");
-    if let Some(h) = auth_header {
-        req = req.header("Authorization", h);
+    req = req.header(&auth.0, &auth.1);
+    if settings.auth_method == "copilot" {
+        req = req
+            .header("Editor-Version", "vscode/1.85.1")
+            .header("Editor-Plugin-Version", "copilot/1.155.0");
     }
     let resp = req
         .send()
@@ -349,14 +472,17 @@ pub async fn llm_chat(
     state: State<'_, AppState>,
 ) -> Result<ChatResult, String> {
     let settings = load_settings(&app);
-    let endpoint = settings.llm_endpoint.clone();
     let model = settings.llm_model.clone();
 
-    if endpoint.is_empty() {
-        return Err("LLM endpoint not configured. Please open settings.".to_owned());
-    }
-
-    let auth_header = build_auth_header(&settings)?;
+    let (endpoint, auth) = if settings.auth_method == "copilot" {
+        let (key, base) = ensure_copilot_key(&app).await?;
+        (base, ("Authorization".to_owned(), format!("Bearer {key}")))
+    } else {
+        if settings.llm_endpoint.is_empty() {
+            return Err("LLM endpoint not configured. Please open settings.".to_owned());
+        }
+        (settings.llm_endpoint.clone(), build_auth_header(&settings)?)
+    };
 
     // Build context from the currently loaded MDD file (drop the lock before await).
     let context = {
@@ -392,8 +518,11 @@ pub async fn llm_chat(
         .header("Openai-Intent", "conversation-edits")
         .header("x-initiator", "user")
         .json(&body);
-    if let Some(h) = auth_header {
-        req = req.header("Authorization", h);
+    req = req.header(&auth.0, &auth.1);
+    if settings.auth_method == "copilot" {
+        req = req
+            .header("Editor-Version", "vscode/1.85.1")
+            .header("Editor-Plugin-Version", "copilot/1.155.0");
     }
     let resp = req
         .send()
@@ -434,77 +563,16 @@ pub async fn llm_chat(
     Ok(ChatResult { content })
 }
 
-#[tauri::command]
-pub async fn import_gh_cli_token(ghe_host: String, app: AppHandle) -> Result<(), String> {
-    // Fast path: gh is already authenticated — grab the stored token.
-    let token = gh_get_token(&ghe_host).await.ok().flatten();
-
-    let token = if let Some(t) = token {
-        t
-    } else {
-        // Slow path: open the browser for gh auth login (handles SAML SSO, no app ID needed).
-        let host = ghe_host.clone();
-        let status = tauri::async_runtime::spawn_blocking(move || {
-            std::process::Command::new("gh")
-                .args([
-                    "auth",
-                    "login",
-                    "--hostname",
-                    &host,
-                    "--git-protocol",
-                    "https",
-                    "--web",
-                ])
-                .status()
-        })
-        .await
-        .map_err(|e| format!("Task error: {e}"))?
-        .map_err(|e| format!("gh CLI not found: {e}. Install from https://cli.github.com"))?;
-
-        if !status.success() {
-            return Err(format!(
-                "gh auth login failed. Try manually: gh auth login --hostname {ghe_host} --web"
-            ));
-        }
-
-        gh_get_token(&ghe_host)
-            .await?
-            .ok_or_else(|| "gh auth login succeeded but returned no token.".to_owned())?
-    };
-
-    let mut settings = load_settings(&app);
-    settings.token = Some(token);
-    persist_settings(&app, &settings)
-}
-
-async fn gh_get_token(ghe_host: &str) -> Result<Option<String>, String> {
-    let host = ghe_host.to_owned();
-    let output = tauri::async_runtime::spawn_blocking(move || {
-        std::process::Command::new("gh")
-            .args(["auth", "token", "--hostname", &host])
-            .output()
-    })
-    .await
-    .map_err(|e| format!("Task error: {e}"))?
-    .map_err(|e| format!("gh CLI not found: {e}. Install from https://cli.github.com"))?;
-
-    if !output.status.success() {
-        return Ok(None);
-    }
-    let t = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    Ok(if t.is_empty() { None } else { Some(t) })
-}
-
-fn build_auth_header(settings: &LlmSettings) -> Result<Option<String>, String> {
+/// Resolve auth header (name, value) for non-Copilot providers.
+fn build_auth_header(settings: &LlmSettings) -> Result<(String, String), String> {
+    let token = settings
+        .token
+        .as_ref()
+        .ok_or_else(|| "Not authenticated. Please configure authentication in settings.".to_owned())?;
     match settings.auth_method.as_str() {
-        "none" => Ok(None),
-        _ => {
-            let token = settings
-                .token
-                .as_ref()
-                .ok_or_else(|| "Not authenticated. Please configure authentication in settings.".to_owned())?;
-            Ok(Some(format!("Bearer {token}")))
-        }
+        "azure" => Ok(("api-key".to_owned(), token.clone())),
+        "openai" | "bedrock" => Ok(("Authorization".to_owned(), format!("Bearer {token}"))),
+        other => Err(format!("Unknown auth method: {other}")),
     }
 }
 

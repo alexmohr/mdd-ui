@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 A desktop application and CLI toolbox for MDD diagnostic databases, built with [Tauri](https://tauri.app/) and [Vue.js](https://vuejs.org/). It renders the full ECU diagnostic tree — variants, functional groups, shared data, protocols, services, parameters, and more — in an interactive graphical interface.
 
-![demo](img/demo.gif)
+![demo](img/image.png)
 
 ## Features
 
@@ -25,7 +25,7 @@ A desktop application and CLI toolbox for MDD diagnostic databases, built with [
 
 ### Prerequisites
 
-- Rust **2024 edition** (1.85+)
+- Rust **2024 edition** (1.88+)
 - [Bun](https://bun.sh/) (for the frontend build)
 - [Tauri CLI](https://tauri.app/start/create-project/#manual-setup-tauri-cli) (`cargo install tauri-cli --locked`)
 
@@ -148,9 +148,9 @@ This is a Cargo workspace with two crates:
 
 ## AI Assistant (GitHub Copilot)
 
-The built-in AI assistant supports GitHub Copilot via OAuth Device Flow. The GHE authentication uses the OAuth App Client ID from the [opencode](https://github.com/sst/opencode) project (`Ov23li8tweQw6odWQebz`), borrowed temporarily because it is already approved on enterprise GHE instances with Copilot enabled — avoiding the need for users to go through a corporate OAuth App approval process.
+The built-in AI assistant supports GitHub Copilot via OAuth Device Flow. Authentication uses the VS Code Copilot extension's GitHub App Client ID (`Iv1.b507a08c87ecfe98`), which is pre-approved on every GHE instance with Copilot enabled — no enterprise admin approval needed.
 
-mdd-ui has its own registered OAuth App (`Ov23liMhCri4BIE67Zeh`). Once it has been approved by the relevant enterprise admins, the Client ID in `frontend/src/stores/llm.ts` should be updated accordingly.
+After the OAuth device flow obtains an access token, mdd-ui exchanges it for a short-lived Copilot API key via the `/copilot_internal/v2/token` endpoint. This key (and the API base URL returned by the exchange) are cached and automatically refreshed when they expire.
 
 ## License
 

@@ -92,7 +92,6 @@ fn run_tauri_app() {
             llm::start_ghe_device_flow,
             llm::poll_ghe_device_flow,
             llm::fetch_llm_models,
-            llm::import_gh_cli_token,
             llm::llm_chat,
         ])
         .run(tauri::generate_context!())
