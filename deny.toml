@@ -18,7 +18,38 @@ feature-depth = 1
 # More documentation for the advisories section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
 [advisories]
-
+ignore = [
+  # rand 0.7.3 is a build-time-only dep via tauri's internal kuchikiki fork →
+  # phf_codegen 0.8.0 → phf_generator 0.8.0. No fix exists in the 0.7.x series
+  # and the advisory conditions (custom logger calling rand::rng() during reseed)
+  # cannot be triggered inside a build script.
+  { id = "RUSTSEC-2026-0097", reason = "build-time only via tauri/phf_codegen 0.8; advisory conditions are unreachable in a build-script context" },
+  # GTK3 crates are unmaintained (archived by gtk-rs) but remain transitive
+  # dependencies through Tauri/wry on Linux with no upstream fix available yet.
+  "RUSTSEC-2024-0411", # gtk3 bindings: no longer maintained
+  "RUSTSEC-2024-0412", # gdk
+  "RUSTSEC-2024-0413", # atk
+  "RUSTSEC-2024-0414", # gdkx11-sys
+  "RUSTSEC-2024-0415", # gtk
+  "RUSTSEC-2024-0416", # atk-sys
+  "RUSTSEC-2024-0417", # gdkx11
+  "RUSTSEC-2024-0418", # gdk-sys
+  "RUSTSEC-2024-0419", # gtk3-macros
+  "RUSTSEC-2024-0420", # gtk-sys
+  # glib unsound VariantStrIter (Linux only) - no fix without upgrading Tauri
+  "RUSTSEC-2024-0429", # glib
+  # proc-macro-error unmaintained - via glib-macros/gtk3-macros
+  "RUSTSEC-2024-0370",
+  # fxhash unmaintained - transitive via Tauri
+  "RUSTSEC-2025-0057",
+  # unic-* crates are unmaintained - transitive via tauri-utils -> urlpattern 0.3.0
+  # urlpattern 0.6.0 fixes this but is outside tauri-utils' ^0.3.0 constraint
+  "RUSTSEC-2025-0075", # unic-char-range
+  "RUSTSEC-2025-0080", # unic-common
+  "RUSTSEC-2025-0081", # unic-char-property
+  "RUSTSEC-2025-0098", # unic-ucd-version
+  "RUSTSEC-2025-0100", # unic-ucd-ident
+]
 
 # This section is considered when running `cargo deny check licenses`
 # More documentation for the licenses section can be found here:
