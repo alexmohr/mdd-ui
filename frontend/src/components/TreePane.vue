@@ -168,10 +168,10 @@ function diffBadge(status: string | null): Badge | null {
 function nodeTextClass(node: VisibleNode): string {
   if (node.diff_status === "Removed") return "text-neutral-500 line-through";
   if (node.diff_status === "Unchanged") return "text-neutral-600";
-  if (node.node_type === "SectionHeader") return "text-white font-semibold";
-  if (node.node_type === "Container") return "text-neutral-100 font-medium";
-  if (node.node_type === "ParentRefService") return "text-neutral-500 italic";
-  if (node.node_type === "ParentRefs" || node.node_type === "Dop") return "text-neutral-200 font-medium";
+  if (node.node_type === "SectionHeader") return "text-white";
+  if (node.node_type === "Container") return "text-neutral-100";
+  if (node.node_type === "ParentRefService") return "text-neutral-500";
+  if (node.node_type === "ParentRefs" || node.node_type === "Dop") return "text-neutral-200";
   return "text-neutral-300";
 }
 
@@ -266,7 +266,7 @@ async function onKeydown(e: KeyboardEvent) {
         <!-- Diff badge -->
         <span
           v-if="diffBadge(node.diff_status)"
-          class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-bold leading-none shrink-0"
+          class="inline-flex items-center justify-center rounded py-px text-[9px] font-bold leading-none shrink-0 w-8"
           :class="`${diffBadge(node.diff_status)!.bg} ${diffBadge(node.diff_status)!.fg}`"
         >{{ diffBadge(node.diff_status)!.label }}</span>
 
@@ -274,7 +274,7 @@ async function onKeydown(e: KeyboardEvent) {
         <span
           v-for="(badge, bi) in nodeBadges(node)"
           :key="bi"
-          class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none shrink-0"
+          class="inline-flex items-center justify-center rounded py-px text-[9px] font-semibold leading-none shrink-0 w-8"
           :class="`${badge.bg} ${badge.fg}`"
         >{{ badge.label }}</span>
 

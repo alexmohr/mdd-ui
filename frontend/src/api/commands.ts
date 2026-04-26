@@ -174,6 +174,10 @@ export async function clearRecentFiles(): Promise<void> {
   return invoke("clear_recent_files");
 }
 
+export async function clearAllCaches(): Promise<void> {
+  return invoke("clear_all_caches");
+}
+
 export async function removeRecentFile(path: string): Promise<void> {
   return invoke("remove_recent_file", { path });
 }

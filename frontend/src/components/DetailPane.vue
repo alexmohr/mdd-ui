@@ -103,7 +103,14 @@ function parseNum(s: string): number {
 }
 
 function effectiveSort(): SortState {
-  return currentSort() ?? { col: 0, asc: false };
+  const cur = currentSort();
+  if (cur) return cur;
+  const tbl = activeSection.value ? getTable(activeSection.value.content) : null;
+  if (tbl) {
+    const byteIdx = tbl.header.cells.findIndex(c => /^byte$/i.test(c.text.trim()));
+    if (byteIdx >= 0) return { col: byteIdx, asc: true };
+  }
+  return { col: 0, asc: true };
 }
 
 function sortedRows(rows: DetailRow[]): DetailRow[] {
@@ -265,7 +272,7 @@ async function tableCtxAction(action: string) {
           :class="i === store.selectedTab
             ? 'border-blue-500 text-neutral-100'
             : 'border-transparent text-neutral-500 hover:text-neutral-300'"
-          @click="store.selectedTab = i"
+          @click="store.setSelectedTab(i)"
           @contextmenu.prevent="onTabContextMenu($event, section)"
         >{{ section.title }}</button>
       </div>
@@ -378,7 +385,11 @@ async function tableCtxAction(action: string) {
                     v-for="(cell, ci) in row.cells"
                     :key="ci"
                     class="px-3 py-1 text-neutral-300"
-                    :class="{ 'text-blue-400 cursor-pointer hover:underline': cell.jump_target }"
+                    :class="{
+                      'text-blue-400 cursor-pointer hover:underline': cell.jump_target,
+                      'truncate': !store.wrapTableText,
+                      'break-words whitespace-normal': store.wrapTableText,
+                    }"
                     @click="nav(cell.jump_target)"
                   >
                     <template v-for="p in [cellParts(cell.text)]" :key="0">

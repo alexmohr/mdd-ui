@@ -19,6 +19,14 @@ const categories = [
 function close() {
   store.open = false;
   store.resetRegisterStatus();
+  store.resetClearCacheStatus();
+}
+
+async function handleClearAllCaches() {
+  await store.doClearAllCaches();
+  if (store.clearCacheStatus === 'success') {
+    appStore.clearRecentFiles();
+  }
 }
 </script>
 
@@ -198,6 +206,82 @@ function close() {
               </div>
             </section>
 
+            <!-- Cache -->
+            <section class="space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                  Cache
+                </h4>
+                <p class="text-xs text-neutral-500 leading-relaxed">
+                  Clear all cached data, including recent files and saved preferences.
+                </p>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <button
+                  class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0 disabled:opacity-50"
+                  :class="
+                    store.clearCacheStatus === 'loading'
+                      ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed border border-neutral-700'
+                      : 'bg-neutral-700 hover:bg-neutral-600 text-neutral-200 border border-neutral-600'
+                  "
+                  :disabled="store.clearCacheStatus === 'loading'"
+                  @click="handleClearAllCaches()"
+                >
+                  <span
+                    v-if="store.clearCacheStatus === 'loading'"
+                    class="flex items-center gap-1.5"
+                  >
+                    <svg
+                      class="animate-spin"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                    Clearing…
+                  </span>
+                  <span v-else>Clear All Caches</span>
+                </button>
+
+                <span
+                  v-if="store.clearCacheStatus === 'success'"
+                  class="flex items-center gap-1.5 text-xs text-green-400"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <path d="m9 11 3 3L22 4" />
+                  </svg>
+                  Cleared
+                </span>
+              </div>
+
+              <!-- Error message -->
+              <div
+                v-if="store.clearCacheStatus === 'error'"
+                class="rounded-lg bg-red-900/20 border border-red-800/40 p-3 text-xs text-red-400 leading-relaxed"
+              >
+                {{ store.clearCacheMessage }}
+              </div>
+            </section>
+
             <!-- Recent Files -->
             <section class="space-y-3">
               <div>
@@ -345,13 +429,13 @@ function close() {
                   </p>
                 </div>
                 <button
-                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5"
+                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5 overflow-hidden"
                   :class="appStore.autoExpandFirstLevel ? 'bg-blue-600' : 'bg-neutral-700'"
                   @click="appStore.setAutoExpandFirstLevel(!appStore.autoExpandFirstLevel)"
                 >
                   <span
-                    class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                    :class="appStore.autoExpandFirstLevel ? 'translate-x-4' : 'translate-x-0.5'"
+                    class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    :class="appStore.autoExpandFirstLevel ? 'translate-x-4' : 'translate-x-0'"
                   />
                 </button>
               </div>
@@ -369,13 +453,13 @@ function close() {
                   </p>
                 </div>
                 <button
-                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5"
+                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5 overflow-hidden"
                   :class="appStore.defaultHideUnchanged ? 'bg-blue-600' : 'bg-neutral-700'"
                   @click="appStore.setDefaultHideUnchanged(!appStore.defaultHideUnchanged)"
                 >
                   <span
-                    class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                    :class="appStore.defaultHideUnchanged ? 'translate-x-4' : 'translate-x-0.5'"
+                    class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    :class="appStore.defaultHideUnchanged ? 'translate-x-4' : 'translate-x-0'"
                   />
                 </button>
               </div>
@@ -393,13 +477,13 @@ function close() {
                   </p>
                 </div>
                 <button
-                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5"
+                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5 overflow-hidden"
                   :class="appStore.wrapTableText ? 'bg-blue-600' : 'bg-neutral-700'"
                   @click="appStore.setWrapTableText(!appStore.wrapTableText)"
                 >
                   <span
-                    class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                    :class="appStore.wrapTableText ? 'translate-x-4' : 'translate-x-0.5'"
+                    class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    :class="appStore.wrapTableText ? 'translate-x-4' : 'translate-x-0'"
                   />
                 </button>
               </div>

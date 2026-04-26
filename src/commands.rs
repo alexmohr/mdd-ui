@@ -189,7 +189,8 @@ fn build_visible(state: &CoreState) -> Vec<usize> {
         let all_true = vec![true; state.all_nodes.len()];
         let mut inc: Option<Vec<bool>> = None;
         for entry in &state.search_stack {
-            let fresh = apply_search_filter(&state.all_nodes, &all_true, &entry.query, &entry.scope);
+            let fresh =
+                apply_search_filter(&state.all_nodes, &all_true, &entry.query, &entry.scope);
             inc = Some(match inc {
                 None => fresh,
                 Some(mut cur) => {
@@ -451,12 +452,24 @@ pub fn toggle_expand(index: usize, state: State<'_, AppState>) -> Result<Vec<Vis
 }
 
 #[tauri::command]
-pub fn search(query: String, op: Option<String>, state: State<'_, AppState>) -> Result<SearchResult, String> {
+pub fn search(
+    query: String,
+    op: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<SearchResult, String> {
     let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
     if !query.is_empty() {
         let scope = core.search_scope.clone();
-        let filter_op = if op.as_deref() == Some("or") { FilterOp::Or } else { FilterOp::And };
-        core.search_stack.push(SearchEntry { query, scope, op: filter_op });
+        let filter_op = if op.as_deref() == Some("or") {
+            FilterOp::Or
+        } else {
+            FilterOp::And
+        };
+        core.search_stack.push(SearchEntry {
+            query,
+            scope,
+            op: filter_op,
+        });
     }
     let visible = build_visible(&core);
     core.visible = visible;
@@ -691,7 +704,8 @@ fn sort_children_of(
     nodes.splice(children_start..children_start, sorted);
 }
 
-/// Apply ID-ascending sort to DiagComms, Requests, PosResponses, NegResponses on initial load.
+/// Apply ID-ascending sort to `DiagComms`, `Requests`,
+/// `PosResponses`, `NegResponses` on initial load.
 fn apply_default_sort(nodes: &mut Vec<TreeNode>) {
     sort_diagcomm_nodes(nodes, DiagcommSortMode::IdAsc);
     for list_type in [
@@ -1030,6 +1044,22 @@ pub fn clear_recent_files(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn clear_all_caches(app: AppHandle) -> Result<(), String> {
+    let cache_dir = app
+        .path()
+        .cache_dir()
+        .map_err(|e| format!("Failed to get cache directory: {e}"))?
+        .join("mdd-ui");
+
+    if cache_dir.exists() {
+        fs::remove_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to clear cache directory: {e}"))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn remove_recent_file(path: String, app: AppHandle) -> Result<(), String> {
     let cache_path = get_recent_files_path(&app)?;
     if !cache_path.exists() {
@@ -1070,10 +1100,18 @@ pub struct UiPrefs {
     pub last_tab_title: Option<String>,
 }
 
-fn default_theme() -> String { "dark".to_owned() }
-fn default_split_pct() -> u8 { 35 }
-fn default_row_density() -> String { "comfortable".to_owned() }
-fn default_max_recent_files() -> u8 { 10 }
+fn default_theme() -> String {
+    "dark".to_owned()
+}
+fn default_split_pct() -> u8 {
+    35
+}
+fn default_row_density() -> String {
+    "comfortable".to_owned()
+}
+fn default_max_recent_files() -> u8 {
+    10
+}
 
 impl Default for UiPrefs {
     fn default() -> Self {

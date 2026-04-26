@@ -3,14 +3,17 @@
 
 import { ref } from "vue";
 import { defineStore } from "pinia";
-import { registerMddAssociation } from "../api/commands";
+import { registerMddAssociation, clearAllCaches } from "../api/commands";
 
 export type RegisterStatus = "idle" | "loading" | "success" | "error";
+export type ClearCacheStatus = "idle" | "loading" | "success" | "error";
 
 export const useSettingsStore = defineStore("settings", () => {
   const open = ref(false);
   const registerStatus = ref<RegisterStatus>("idle");
   const registerMessage = ref("");
+  const clearCacheStatus = ref<ClearCacheStatus>("idle");
+  const clearCacheMessage = ref("");
 
   async function doRegisterMddAssociation(): Promise<void> {
     registerStatus.value = "loading";
@@ -30,11 +33,32 @@ export const useSettingsStore = defineStore("settings", () => {
     registerMessage.value = "";
   }
 
+  async function doClearAllCaches(): Promise<void> {
+    clearCacheStatus.value = "loading";
+    clearCacheMessage.value = "";
+    try {
+      await clearAllCaches();
+      clearCacheStatus.value = "success";
+    } catch (e) {
+      clearCacheStatus.value = "error";
+      clearCacheMessage.value = `${e}`;
+    }
+  }
+
+  function resetClearCacheStatus(): void {
+    clearCacheStatus.value = "idle";
+    clearCacheMessage.value = "";
+  }
+
   return {
     open,
     registerStatus,
     registerMessage,
     doRegisterMddAssociation,
     resetRegisterStatus,
+    clearCacheStatus,
+    clearCacheMessage,
+    doClearAllCaches,
+    resetClearCacheStatus,
   };
 });
