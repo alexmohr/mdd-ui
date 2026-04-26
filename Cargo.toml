@@ -61,6 +61,7 @@ rmcp = { version = "1.5", features = [
   "macros",
 ], optional = true }
 tokio = { version = "1", features = ["rt", "macros"], optional = true }
+tauri-plugin-opener = "2"
 
 [patch.crates-io]
 flatbuffers = { git = "https://github.com/alexmohr/flatbuffers.git", rev = "0ba3307d" }

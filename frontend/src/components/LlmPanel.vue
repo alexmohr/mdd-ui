@@ -3,6 +3,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick, reactive } from "vue";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useLlmStore } from "../stores/llm";
 import type { LlmSettingsUpdate } from "../stores/llm";
 import { useAppStore } from "../stores/app";
@@ -107,11 +108,6 @@ async function copyCode() {
   setTimeout(() => {
     copied.value = false;
   }, 2000);
-}
-
-async function copyUrl() {
-  if (!store.deviceFlowInfo) return;
-  await navigator.clipboard.writeText(store.deviceFlowInfo.verification_uri);
 }
 
 function cancelLogin() {
@@ -473,14 +469,11 @@ function onMessageAreaClick(e: MouseEvent) {
       </div>
       <!-- Verification URL -->
       <div class="flex items-center gap-2">
-        <span class="text-[11px] text-neutral-500 truncate flex-1">{{
-          store.deviceFlowInfo.verification_uri
-        }}</span>
         <button
-          class="text-[11px] text-blue-400 hover:text-blue-300 transition-colors shrink-0"
-          @click="copyUrl"
+          class="text-[11px] text-blue-400 hover:text-blue-300 underline transition-colors truncate flex-1 text-left"
+          @click="openUrl(store.deviceFlowInfo.verification_uri)"
         >
-          Copy URL
+          {{ store.deviceFlowInfo.verification_uri }} ↗
         </button>
       </div>
       <button
