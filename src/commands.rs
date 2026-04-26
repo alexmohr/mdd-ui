@@ -1082,6 +1082,7 @@ pub fn remove_recent_file(path: String, app: AppHandle) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct UiPrefs {
     pub font_size: u8,
     #[serde(default = "default_theme")]
