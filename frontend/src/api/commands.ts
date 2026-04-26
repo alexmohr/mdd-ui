@@ -205,3 +205,7 @@ export async function saveUiPrefs(prefs: UiPrefs): Promise<void> {
 export async function registerMddAssociation(): Promise<string> {
   return invoke<string>("register_mdd_association");
 }
+
+export async function getInitialFile(): Promise<string | null> {
+  return invoke<string | null>("get_initial_file");
+}

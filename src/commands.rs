@@ -168,6 +168,8 @@ impl Default for CoreState {
 
 pub struct AppState(pub Mutex<CoreState>);
 
+pub struct InitialFile(pub Mutex<Option<String>>);
+
 impl Default for AppState {
     fn default() -> Self {
         Self(Mutex::new(CoreState::default()))
@@ -1162,6 +1164,11 @@ pub fn save_ui_prefs(prefs: UiPrefs, app: AppHandle) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 // File association registration
 // ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_initial_file(state: State<InitialFile>) -> Option<String> {
+    state.0.lock().ok()?.take()
+}
 
 #[tauri::command]
 pub fn register_mdd_association(_app: AppHandle) -> Result<String, String> {
