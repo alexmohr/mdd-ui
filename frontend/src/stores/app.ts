@@ -16,6 +16,11 @@ export interface HistoryEntry {
   text: string;
 }
 
+export interface SearchFilter {
+  query: string;
+  scope: string;
+}
+
 export const useAppStore = defineStore("app", () => {
   const nodes = ref<VisibleNode[]>([]);
   const ecuName = ref("");
@@ -30,6 +35,8 @@ export const useAppStore = defineStore("app", () => {
   const status = ref("");
   const loading = ref(false);
   const history = ref<HistoryEntry[]>([]);
+  const forwardHistory = ref<HistoryEntry[]>([]);
+  const searchFilters = ref<SearchFilter[]>([]);
   const splitPct = ref(35);
   const fileLoaded = ref(false);
   const filePath = ref("");
@@ -44,6 +51,7 @@ export const useAppStore = defineStore("app", () => {
   );
 
   const canGoBack = computed(() => history.value.length > 0);
+  const canGoForward = computed(() => forwardHistory.value.length > 0);
 
   const breadcrumbs = computed(() => {
     if (selectedIndex.value === null) return [];
@@ -66,9 +74,14 @@ export const useAppStore = defineStore("app", () => {
     return crumbs;
   });
 
-  function pushHistory(index: number, text: string) {
+  function _pushBack(index: number, text: string) {
     if (history.value.length > 50) history.value.shift();
     history.value.push({ index, text });
+  }
+
+  function pushHistory(index: number, text: string) {
+    _pushBack(index, text);
+    forwardHistory.value = [];
   }
 
   async function loadFile(path: string) {
@@ -82,6 +95,8 @@ export const useAppStore = defineStore("app", () => {
       selectedIndex.value = null;
       detailSections.value = [];
       history.value = [];
+      forwardHistory.value = [];
+      searchFilters.value = [];
       fileLoaded.value = true;
       filePath.value = path;
       status.value = `${result.node_count} nodes`;
@@ -105,6 +120,8 @@ export const useAppStore = defineStore("app", () => {
       selectedIndex.value = null;
       detailSections.value = [];
       history.value = [];
+      forwardHistory.value = [];
+      searchFilters.value = [];
       fileLoaded.value = true;
       filePath.value = "";
       status.value = `Diff: ${result.node_count} nodes`;
@@ -156,6 +173,29 @@ export const useAppStore = defineStore("app", () => {
   async function goBack() {
     const entry = history.value.pop();
     if (!entry) return;
+    if (selectedIndex.value !== null && selectedNode.value) {
+      forwardHistory.value.push({ index: selectedNode.value.index, text: selectedNode.value.text });
+    }
+    const prevTitle = activeTabTitle();
+    try {
+      const result = await api.navigateTo({
+        target_type: { TreeNodeByIndex: { index: entry.index, short_name: entry.text } },
+      });
+      nodes.value = result.visible;
+      selectedIndex.value = result.target_index;
+      detailSections.value = result.detail;
+      restoreTab(result.detail, prevTitle);
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    }
+  }
+
+  async function goForward() {
+    const entry = forwardHistory.value.pop();
+    if (!entry) return;
+    if (selectedIndex.value !== null && selectedNode.value) {
+      _pushBack(selectedNode.value.index, selectedNode.value.text);
+    }
     const prevTitle = activeTabTitle();
     try {
       const result = await api.navigateTo({
@@ -184,6 +224,7 @@ export const useAppStore = defineStore("app", () => {
       nodes.value = result.visible;
       searchScope.value = result.scope;
       status.value = `${result.match_count} filter(s) active`;
+      searchFilters.value.push({ query, scope: result.scope });
     } catch (e) {
       status.value = `Error: ${e}`;
     }
@@ -192,7 +233,26 @@ export const useAppStore = defineStore("app", () => {
   async function clearSearch() {
     try {
       nodes.value = await api.clearSearch();
+      searchFilters.value = [];
       status.value = "";
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    }
+  }
+
+  async function removeSearchFilter(idx: number) {
+    const remaining = searchFilters.value.filter((_, i) => i !== idx);
+    try {
+      nodes.value = await api.clearSearch();
+      searchFilters.value = [];
+      for (const f of remaining) {
+        await api.setSearchScope(f.scope);
+        const result = await api.doSearch(f.query);
+        nodes.value = result.visible;
+        searchScope.value = result.scope;
+        searchFilters.value.push(f);
+      }
+      status.value = remaining.length > 0 ? `${remaining.length} filter(s) active` : "";
     } catch (e) {
       status.value = `Error: ${e}`;
     }
@@ -211,6 +271,38 @@ export const useAppStore = defineStore("app", () => {
       searchScope.value = await api.setSearchScope(scope);
     } catch (e) {
       status.value = `Error: ${e}`;
+    }
+  }
+
+  async function nextChange() {
+    if (!isDiff.value) return;
+    const ns = nodes.value;
+    const curPos = selectedIndex.value === null ? -1 : ns.findIndex(n => n.index === selectedIndex.value);
+    for (let i = curPos + 1; i < ns.length; i++) {
+      if (ns[i].diff_status !== null && ns[i].diff_status !== 'Unchanged') {
+        await selectNode(ns[i].index); return;
+      }
+    }
+    for (let i = 0; i <= Math.max(0, curPos - 1); i++) {
+      if (ns[i].diff_status !== null && ns[i].diff_status !== 'Unchanged') {
+        await selectNode(ns[i].index); return;
+      }
+    }
+  }
+
+  async function prevChange() {
+    if (!isDiff.value) return;
+    const ns = nodes.value;
+    const curPos = selectedIndex.value === null ? ns.length : ns.findIndex(n => n.index === selectedIndex.value);
+    for (let i = curPos - 1; i >= 0; i--) {
+      if (ns[i].diff_status !== null && ns[i].diff_status !== 'Unchanged') {
+        await selectNode(ns[i].index); return;
+      }
+    }
+    for (let i = ns.length - 1; i > Math.max(0, curPos); i--) {
+      if (ns[i].diff_status !== null && ns[i].diff_status !== 'Unchanged') {
+        await selectNode(ns[i].index); return;
+      }
     }
   }
 
@@ -304,6 +396,8 @@ export const useAppStore = defineStore("app", () => {
     selectedIndex.value = null;
     detailSections.value = [];
     history.value = [];
+    forwardHistory.value = [];
+    searchFilters.value = [];
     fileLoaded.value = false;
     filePath.value = "";
     status.value = "";
@@ -333,11 +427,14 @@ export const useAppStore = defineStore("app", () => {
   return {
     nodes, ecuName, nodeCount, isDiff, selectedIndex, selectedNode,
     detailSections, selectedTab, searchQuery, searchScope, searchActive,
-    status, loading, history, canGoBack, breadcrumbs, splitPct,
+    status, loading, history, forwardHistory, canGoBack, canGoForward, breadcrumbs, splitPct,
     fileLoaded, filePath, hideUnchanged, fontSize, theme, sortLabel, recentFiles,
-    loadFile, loadDiff, selectNode, goBack, toggleExpand, search,
-    clearSearch, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
+    searchFilters,
+    loadFile, loadDiff, selectNode, goBack, goForward, toggleExpand, search,
+    clearSearch, removeSearchFilter, cycleScope, setScope,
+    expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize, setFontSize, setTheme,
-    navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
+    navigateTo, nextChange, prevChange,
+    loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
   };
 });

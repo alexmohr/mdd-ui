@@ -81,6 +81,9 @@ function handleKeydown(e: KeyboardEvent) {
   switch (e.key) {
     case "/": e.preventDefault(); store.searchActive = true; break;
     case "Backspace": e.preventDefault(); store.goBack(); break;
+    case "f": if (store.canGoForward) { e.preventDefault(); store.goForward(); } break;
+    case "n": if (store.isDiff) store.nextChange(); break;
+    case "p": if (store.isDiff) store.prevChange(); break;
     case "s": store.toggleSort(); break;
     case "e": store.expandAll(); break;
     case "c": store.collapseAll(); break;
@@ -230,6 +233,17 @@ function onSplitMouseDown() {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
         </button>
 
+        <!-- Forward -->
+        <button
+          class="p-1.5 rounded-md transition-colors"
+          :class="store.canGoForward ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-700 cursor-default'"
+          :disabled="!store.canGoForward"
+          title="Forward (f)"
+          @click="store.goForward()"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 5 7 7-7 7"/><path d="M5 12h14"/></svg>
+        </button>
+
         <!-- Breadcrumbs -->
         <div class="flex items-center gap-1 text-xs text-neutral-500 overflow-hidden min-w-0 flex-1" data-tauri-drag-region>
           <template v-for="(crumb, i) in store.breadcrumbs" :key="crumb.index">
@@ -263,15 +277,30 @@ function onSplitMouseDown() {
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
-          <button
-            v-if="store.isDiff"
-            class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
-            :class="store.hideUnchanged ? 'bg-amber-600/20 text-amber-400' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'"
-            title="Toggle unchanged (u)"
-            @click="store.toggleHideUnchanged()"
-          >
-            Hide unchanged
-          </button>
+          <template v-if="store.isDiff">
+            <button
+              class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
+              title="Prev change (p)"
+              @click="store.prevChange()"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button
+              class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
+              title="Next change (n)"
+              @click="store.nextChange()"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <button
+              class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
+              :class="store.hideUnchanged ? 'bg-amber-600/20 text-amber-400' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'"
+              title="Toggle unchanged (u)"
+              @click="store.toggleHideUnchanged()"
+            >
+              Hide unchanged
+            </button>
+          </template>
           <button
             class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
             title="Open file"
@@ -290,7 +319,7 @@ function onSplitMouseDown() {
       </div>
 
       <!-- Search -->
-      <SearchBar v-if="store.searchActive" />
+      <SearchBar v-if="store.searchActive || store.searchFilters.length > 0" />
 
       <!-- Resizable split -->
       <div class="flex flex-1 min-h-0">

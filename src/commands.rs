@@ -6,7 +6,7 @@
 
 use std::{fs, path::PathBuf, sync::Mutex};
 
-use mdd_core::tree::{DetailSectionData, DiffStatus, NodeType, TreeNode};
+use mdd_core::tree::{DetailSectionData, DiffStatus, NodeType, ServiceListType, TreeNode};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -343,6 +343,8 @@ pub async fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadRe
     core.hide_unchanged = false;
     core.search_stack.clear();
     core.diagcomm_sort = DiagcommSortMode::IdAsc;
+    apply_default_sort(&mut core.all_nodes);
+    mdd_core::tree::resolve_all_indices(&mut core.all_nodes);
     core.visible = build_visible(&core);
 
     Ok(LoadResult {
@@ -378,6 +380,9 @@ pub async fn load_diff(
     core.is_diff_mode = true;
     core.hide_unchanged = false;
     core.search_stack.clear();
+    core.diagcomm_sort = DiagcommSortMode::IdAsc;
+    apply_default_sort(&mut core.all_nodes);
+    mdd_core::tree::resolve_all_indices(&mut core.all_nodes);
     core.visible = build_visible(&core);
 
     Ok(LoadResult {
@@ -657,6 +662,63 @@ fn sort_children_of(
 
     let sorted: Vec<TreeNode> = groups.into_iter().flatten().collect();
     nodes.splice(children_start..children_start, sorted);
+}
+
+/// Apply ID-ascending sort to DiagComms, Requests, PosResponses, NegResponses on initial load.
+fn apply_default_sort(nodes: &mut Vec<TreeNode>) {
+    sort_diagcomm_nodes(nodes, DiagcommSortMode::IdAsc);
+    for list_type in [
+        ServiceListType::Requests,
+        ServiceListType::PosResponses,
+        ServiceListType::NegResponses,
+    ] {
+        sort_service_section_by_id(nodes, list_type);
+    }
+}
+
+/// Sort direct children of service-list sections (Requests / Responses) by service ID,
+/// preserving each top-level child together with all its descendants as a group.
+fn sort_service_section_by_id(nodes: &mut Vec<TreeNode>, list_type: ServiceListType) {
+    let sections: Vec<(usize, usize)> = nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.service_list_type() == Some(list_type))
+        .map(|(i, n)| {
+            let depth = n.depth;
+            let start = i.saturating_add(1);
+            let end = nodes
+                .iter()
+                .skip(start)
+                .position(|m| m.depth <= depth)
+                .map_or(nodes.len(), |pos| start.saturating_add(pos));
+            (start, end)
+        })
+        .collect();
+
+    for (start, end) in sections.into_iter().rev() {
+        if end <= start {
+            continue;
+        }
+        let direct_depth = nodes.get(start).map_or(0, |n| n.depth);
+        let all_children: Vec<TreeNode> = nodes.drain(start..end).collect();
+
+        let mut groups: Vec<Vec<TreeNode>> = Vec::new();
+        let mut current: Vec<TreeNode> = Vec::new();
+        for node in all_children {
+            if node.depth == direct_depth && !current.is_empty() {
+                groups.push(std::mem::take(&mut current));
+            }
+            current.push(node);
+        }
+        if !current.is_empty() {
+            groups.push(current);
+        }
+
+        groups.sort_by_key(|g| g.first().and_then(|n| extract_service_id(&n.text)));
+
+        let sorted: Vec<TreeNode> = groups.into_iter().flatten().collect();
+        nodes.splice(start..start, sorted);
+    }
 }
 
 fn extract_service_id(text: &str) -> Option<u32> {

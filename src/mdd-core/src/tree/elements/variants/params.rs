@@ -587,8 +587,8 @@ pub fn build_service_list_table_section(
     node_indices: &std::collections::HashMap<String, usize>,
 ) -> DetailSectionData {
     let header = DetailRow::header(vec![
-        DetailCell::text("Short Name"),
         DetailCell::text("ID"),
+        DetailCell::text("Short Name"),
         DetailCell::text("Inherited"),
     ]);
 
@@ -607,8 +607,8 @@ pub fn build_service_list_table_section(
         });
         Some(DetailRow::normal(
             vec![
-                DetailCell::new(name, CellType::ParameterName).with_jump(jump),
                 DetailCell::text(id),
+                DetailCell::new(name, CellType::ParameterName).with_jump(jump),
                 DetailCell::text(inherited),
             ],
             0,
@@ -633,8 +633,8 @@ pub fn build_service_list_table_section(
             header,
             rows,
             constraints: vec![
-                ColumnConstraint::Percentage(60),
                 ColumnConstraint::Percentage(20),
+                ColumnConstraint::Percentage(60),
                 ColumnConstraint::Percentage(20),
             ],
             use_row_selection: true,
