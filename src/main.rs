@@ -84,6 +84,7 @@ fn run_tauri_app() {
             commands::get_recent_files,
             commands::add_recent_file,
             commands::clear_recent_files,
+            commands::clear_all_caches,
             commands::remove_recent_file,
             commands::get_ui_prefs,
             commands::save_ui_prefs,

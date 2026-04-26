@@ -169,7 +169,7 @@ function onSplitMouseDown() {
           </div>
           <div v-if="store.displayedRecentFiles.length > 0" class="mt-8">
             <div class="text-neutral-500 text-xs uppercase tracking-wider mb-3">Recent Files</div>
-            <div class="flex flex-col gap-2 items-center">
+            <div class="flex flex-col gap-2 items-center overflow-y-auto max-h-64">
               <div
                 v-for="file in store.displayedRecentFiles"
                 :key="file.path"

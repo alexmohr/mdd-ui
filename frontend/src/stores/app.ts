@@ -52,6 +52,7 @@ export const useAppStore = defineStore("app", () => {
   const maxRecentFiles = ref(10);
   const wrapTableText = ref(false);
   const lastTabTitle = ref<string | null>(null);
+  const lastTabKey = ref<{ title: string; section_type: string } | null>(null);
 
   const selectedNode = computed(() =>
     nodes.value.find((n: VisibleNode) => n.index === selectedIndex.value) ?? null,
@@ -117,15 +118,6 @@ export const useAppStore = defineStore("app", () => {
   });
 
   let _tabTitleTimer: ReturnType<typeof setTimeout> | null = null;
-  watch(selectedTab, (tab) => {
-    const tabs = tabSectionsOf(detailSections.value);
-    const title = tabs[tab]?.title ?? null;
-    if (title) {
-      lastTabTitle.value = title;
-      if (_tabTitleTimer) clearTimeout(_tabTitleTimer);
-      _tabTitleTimer = setTimeout(persistPrefs, 500);
-    }
-  });
 
   function pushHistory(index: number, text: string) {
     _pushBack(index, text);
@@ -198,16 +190,38 @@ export const useAppStore = defineStore("app", () => {
     return sections;
   }
 
-  function activeTabTitle(): string | null {
-    const tabs = tabSectionsOf(detailSections.value);
-    return tabs[selectedTab.value]?.title ?? null;
+  function restoreTab(
+    sections: import('../api/commands').DetailSection[],
+    key: { title: string; section_type: string } | null,
+  ) {
+    if (!key) { selectedTab.value = 0; return; }
+    const tabs = tabSectionsOf(sections);
+    // Prefer exact title match, fall back to same section type
+    let idx = key.title ? tabs.findIndex(t => t.title === key.title) : -1;
+    if (idx < 0 && key.section_type) {
+      idx = tabs.findIndex(t => t.section_type === key.section_type);
+    }
+    selectedTab.value = idx >= 0 ? idx : 0;
+    if (idx >= 0) {
+      const matched = tabs[idx];
+      lastTabKey.value = { title: matched.title, section_type: matched.section_type };
+      lastTabTitle.value = matched.title;
+      if (_tabTitleTimer) clearTimeout(_tabTitleTimer);
+      _tabTitleTimer = setTimeout(persistPrefs, 500);
+    }
+    // fallback to 0: intentionally do NOT update lastTabKey so the memory is preserved
   }
 
-  function restoreTab(sections: import('../api/commands').DetailSection[], title: string | null) {
-    if (title === null) { selectedTab.value = 0; return; }
-    const tabs = tabSectionsOf(sections);
-    const idx = tabs.findIndex(t => t.title === title);
-    selectedTab.value = idx >= 0 ? idx : 0;
+  function setSelectedTab(index: number) {
+    selectedTab.value = index;
+    const tabs = tabSectionsOf(detailSections.value);
+    const tab = tabs[index];
+    if (tab) {
+      lastTabKey.value = { title: tab.title, section_type: tab.section_type };
+      lastTabTitle.value = tab.title;
+      if (_tabTitleTimer) clearTimeout(_tabTitleTimer);
+      _tabTitleTimer = setTimeout(persistPrefs, 500);
+    }
   }
 
   async function selectNode(index: number) {
@@ -215,12 +229,12 @@ export const useAppStore = defineStore("app", () => {
       const prev = selectedNode.value;
       if (prev) pushHistory(prev.index, prev.text);
     }
-    const prevTitle = activeTabTitle() ?? lastTabTitle.value;
+    const prevKey = lastTabKey.value;
     selectedIndex.value = index;
     try {
       const sections = await api.getNodeDetail(index);
       detailSections.value = sections;
-      restoreTab(sections, prevTitle);
+      restoreTab(sections, prevKey);
     } catch (e) {
       detailSections.value = [];
       selectedTab.value = 0;
@@ -234,7 +248,7 @@ export const useAppStore = defineStore("app", () => {
     if (selectedIndex.value !== null && selectedNode.value) {
       forwardHistory.value.push({ index: selectedNode.value.index, text: selectedNode.value.text });
     }
-    const prevTitle = activeTabTitle();
+    const prevKey = lastTabKey.value;
     try {
       const result = await api.navigateTo({
         target_type: { TreeNodeByIndex: { index: entry.index, short_name: entry.text } },
@@ -242,7 +256,7 @@ export const useAppStore = defineStore("app", () => {
       nodes.value = result.visible;
       selectedIndex.value = result.target_index;
       detailSections.value = result.detail;
-      restoreTab(result.detail, prevTitle);
+      restoreTab(result.detail, prevKey);
     } catch (e) {
       status.value = `Error: ${e}`;
     }
@@ -254,7 +268,7 @@ export const useAppStore = defineStore("app", () => {
     if (selectedIndex.value !== null && selectedNode.value) {
       _pushBack(selectedNode.value.index, selectedNode.value.text);
     }
-    const prevTitle = activeTabTitle();
+    const prevKey = lastTabKey.value;
     try {
       const result = await api.navigateTo({
         target_type: { TreeNodeByIndex: { index: entry.index, short_name: entry.text } },
@@ -262,7 +276,7 @@ export const useAppStore = defineStore("app", () => {
       nodes.value = result.visible;
       selectedIndex.value = result.target_index;
       detailSections.value = result.detail;
-      restoreTab(result.detail, prevTitle);
+      restoreTab(result.detail, prevKey);
     } catch (e) {
       status.value = `Error: ${e}`;
     }
@@ -484,6 +498,7 @@ export const useAppStore = defineStore("app", () => {
       maxRecentFiles.value = prefs.max_recent_files ?? 10;
       wrapTableText.value = prefs.wrap_table_text ?? false;
       lastTabTitle.value = prefs.last_tab_title ?? null;
+      lastTabKey.value = lastTabTitle.value ? { title: lastTabTitle.value, section_type: '' } : null;
     } catch (e) {
       console.error("Failed to load prefs:", e);
     }
@@ -535,7 +550,7 @@ export const useAppStore = defineStore("app", () => {
     loadFile, loadDiff, selectNode, goBack, goForward, toggleExpand, search, searchFilters,
     clearSearch, removeSearchFilter, toggleFilterOp, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize, setFontSize, setTheme,
-    setRowDensity, setDefaultHideUnchanged, setAutoExpandFirstLevel, setMaxRecentFiles, setWrapTableText,
+    setRowDensity, setDefaultHideUnchanged, setAutoExpandFirstLevel, setMaxRecentFiles, setWrapTableText, setSelectedTab,
     navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
     nextChange, prevChange,
   };
