@@ -1100,6 +1100,8 @@ pub struct UiPrefs {
     pub wrap_table_text: bool,
     #[serde(default)]
     pub last_tab_title: Option<String>,
+    #[serde(default)]
+    pub auto_check_updates: bool,
 }
 
 fn default_theme() -> String {
@@ -1127,6 +1129,7 @@ impl Default for UiPrefs {
             max_recent_files: 10,
             wrap_table_text: false,
             last_tab_title: None,
+            auto_check_updates: false,
         }
     }
 }
@@ -1187,8 +1190,17 @@ fn register_mdd_association_impl() -> Result<String, String> {
             "Not running from an installed .app bundle. Build and install MDD UI first.".to_owned()
         })?;
 
-    let lsregister =
-        "/System/Library/Frameworks/CoreServices.framework/Versions/A/Support/lsregister";
+    let lsregister_candidates = [
+        "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.\
+         framework/Versions/A/Support/lsregister",
+        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/\
+         Support/lsregister",
+        "/System/Library/Frameworks/CoreServices.framework/Versions/A/Support/lsregister",
+    ];
+    let lsregister = lsregister_candidates
+        .iter()
+        .find(|p| std::path::Path::new(p).exists())
+        .ok_or_else(|| "Cannot locate lsregister on this system".to_owned())?;
     let bundle_str = bundle_path
         .to_str()
         .ok_or_else(|| "Bundle path contains invalid UTF-8".to_owned())?;

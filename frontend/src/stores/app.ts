@@ -52,6 +52,7 @@ export const useAppStore = defineStore("app", () => {
   const maxRecentFiles = ref(10);
   const wrapTableText = ref(false);
   const lastTabTitle = ref<string | null>(null);
+  const autoCheckUpdates = ref(false);
   const lastTabKey = ref<{ title: string; section_type: string } | null>(null);
 
   const selectedNode = computed(() =>
@@ -108,6 +109,7 @@ export const useAppStore = defineStore("app", () => {
       max_recent_files: maxRecentFiles.value,
       wrap_table_text: wrapTableText.value,
       last_tab_title: lastTabTitle.value,
+      auto_check_updates: autoCheckUpdates.value,
     }).catch(() => {});
   }
 
@@ -439,6 +441,10 @@ export const useAppStore = defineStore("app", () => {
     wrapTableText.value = v;
     persistPrefs();
   }
+  function setAutoCheckUpdates(v: boolean) {
+    autoCheckUpdates.value = v;
+    persistPrefs();
+  }
 
   async function toggleSort(nodeIndex?: number) {
     try {
@@ -499,6 +505,7 @@ export const useAppStore = defineStore("app", () => {
       wrapTableText.value = prefs.wrap_table_text ?? false;
       lastTabTitle.value = prefs.last_tab_title ?? null;
       lastTabKey.value = lastTabTitle.value ? { title: lastTabTitle.value, section_type: '' } : null;
+      autoCheckUpdates.value = prefs.auto_check_updates ?? false;
     } catch (e) {
       console.error("Failed to load prefs:", e);
     }
@@ -546,11 +553,12 @@ export const useAppStore = defineStore("app", () => {
     status, loading, history, canGoBack, canGoForward, breadcrumbs, splitPct,
     fileLoaded, filePath, hideUnchanged, fontSize, theme, sortLabel, recentFiles,
     rowDensity, rowHeightPx, defaultHideUnchanged, autoExpandFirstLevel,
-    maxRecentFiles, wrapTableText, lastTabTitle, displayedRecentFiles,
+    maxRecentFiles, wrapTableText, lastTabTitle, displayedRecentFiles, autoCheckUpdates,
     loadFile, loadDiff, selectNode, goBack, goForward, toggleExpand, search, searchFilters,
     clearSearch, removeSearchFilter, toggleFilterOp, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize, setFontSize, setTheme,
     setRowDensity, setDefaultHideUnchanged, setAutoExpandFirstLevel, setMaxRecentFiles, setWrapTableText, setSelectedTab,
+    setAutoCheckUpdates,
     navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
     nextChange, prevChange,
   };

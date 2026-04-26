@@ -7,6 +7,7 @@ import { useAppStore } from "./stores/app";
 import { useLlmStore } from "./stores/llm";
 import { useSettingsStore } from "./stores/settings";
 import { open } from "@tauri-apps/plugin-dialog";
+import { check } from "@tauri-apps/plugin-updater";
 import * as api from "./api/commands";
 import TreePane from "./components/TreePane.vue";
 import DetailPane from "./components/DetailPane.vue";
@@ -20,6 +21,7 @@ const llmStore = useLlmStore();
 const settingsStore = useSettingsStore();
 const dragging = ref(false);
 const isMac = navigator.platform.toLowerCase().includes('mac');
+const updateAvailable = ref<{ version: string } | null>(null);
 
 watch(() => store.theme, (t) => {
   document.documentElement.classList.toggle('light', t === 'light');
@@ -30,6 +32,11 @@ onMounted(async () => {
   window.addEventListener("keydown", handleKeydown);
   const initialFile = await api.getInitialFile();
   if (initialFile) await store.loadFile(initialFile);
+  if (store.autoCheckUpdates) {
+    check().then((update) => {
+      if (update) updateAvailable.value = { version: update.version };
+    }).catch(() => {});
+  }
 });
 
 onUnmounted(() => {
@@ -337,6 +344,28 @@ function onSplitMouseDown() {
       <!-- Status bar -->
       <StatusBar />
     </template>
+
+    <!-- Update available banner -->
+    <div
+      v-if="updateAvailable"
+      class="fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl bg-neutral-800 border border-blue-500/40 shadow-2xl text-sm"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-400 shrink-0"><path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg>
+      <span class="text-neutral-200">Update <strong class="text-blue-300">v{{ updateAvailable.version }}</strong> available</span>
+      <button
+        class="px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+        @click="settingsStore.open = true; updateAvailable = null"
+      >
+        Details
+      </button>
+      <button
+        class="p-1 rounded-md text-neutral-500 hover:text-neutral-300 transition-colors"
+        title="Dismiss"
+        @click="updateAvailable = null"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
 
     <!-- AI panel (overlay, always available) -->
     <LlmPanel v-if="llmStore.panelOpen" />
