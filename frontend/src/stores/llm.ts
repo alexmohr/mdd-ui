@@ -7,20 +7,20 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface LlmSettingsView {
   ghe_host: string;
-  client_id: string;
   llm_endpoint: string;
   llm_model: string;
   auth_method: string;
   has_token: boolean;
+  api_version?: string;
 }
 
 export interface LlmSettingsUpdate {
   ghe_host: string;
-  client_id: string;
   llm_endpoint: string;
   llm_model: string;
   auth_method: string;
   api_token?: string;
+  api_version?: string;
 }
 
 export interface ChatMessage {
@@ -42,10 +42,9 @@ export const useLlmStore = defineStore("llm", () => {
   const settingsOpen = ref(false);
   const settings = ref<LlmSettingsView>({
     ghe_host: "",
-    client_id: "",
     llm_endpoint: "",
     llm_model: "gpt-4o",
-    auth_method: "ghe",
+    auth_method: "copilot",
     has_token: false,
   });
   const messages = ref<ChatMessage[]>([]);
@@ -56,13 +55,12 @@ export const useLlmStore = defineStore("llm", () => {
   const availableModels = ref<string[]>([]);
   const modelsLoading = ref(false);
 
-  const isAuthenticated = computed(
-    () => settings.value.auth_method === "none" || settings.value.has_token,
-  );
+  const isAuthenticated = computed(() => settings.value.has_token);
 
   async function fetchModels(): Promise<void> {
-    if (!settings.value.llm_endpoint) return;
-    if (settings.value.auth_method !== "none" && !settings.value.has_token) return;
+    // For copilot, the endpoint is auto-derived; for others, check it's set.
+    if (settings.value.auth_method !== "copilot" && !settings.value.llm_endpoint) return;
+    if (!settings.value.has_token) return;
     modelsLoading.value = true;
     try {
       availableModels.value = await invoke<string[]>("fetch_llm_models");
@@ -91,15 +89,13 @@ export const useLlmStore = defineStore("llm", () => {
       settings.value = {
         ...settings.value,
         ghe_host: update.ghe_host,
-        client_id: update.client_id,
         llm_endpoint: update.llm_endpoint,
         llm_model: update.llm_model,
         auth_method: update.auth_method,
+        api_version: update.api_version,
       };
-      if (update.auth_method === "token" && update.api_token) {
+      if (["azure", "openai", "bedrock"].includes(update.auth_method) && update.api_token) {
         settings.value.has_token = true;
-      } else if (update.auth_method === "none") {
-        settings.value.has_token = false;
       }
     } catch (e) {
       error.value = `Failed to save settings: ${e}`;
@@ -128,32 +124,17 @@ export const useLlmStore = defineStore("llm", () => {
     }
   }
 
-  // NOTE: This Client ID belongs to the opencode project (https://github.com/sst/opencode).
-  // We borrow it temporarily because it is already approved on enterprise GHE instances
-  // that have Copilot enabled, which avoids requiring users to go through a corporate
-  // OAuth App approval process for mdd-ui.
-  // Replace this with mdd-ui's own Client ID (Ov23liMhCri4BIE67Zeh) once it has been
-  // approved by the relevant enterprise admins.
-  const MDD_UI_CLIENT_ID = "Ov23li8tweQw6odWQebz";
+  // VS Code Copilot extension's GitHub App Client ID.
+  // Pre-approved on every GHE instance with Copilot enabled — no admin approval needed.
+  const COPILOT_CLIENT_ID = "Iv1.b507a08c87ecfe98";
 
   async function startCopilotLogin(gheHost: string): Promise<void> {
     if (!gheHost) {
       error.value = "Please enter your GHE host first.";
       return;
     }
-    settings.value = { ...settings.value, ghe_host: gheHost, client_id: MDD_UI_CLIENT_ID };
-    // Device flow goes directly to the enterprise host
-    await runDeviceFlow(gheHost, MDD_UI_CLIENT_ID);
-  }
-
-  async function startLogin(): Promise<void> {
-    if (!settings.value.ghe_host || !settings.value.client_id) {
-      error.value =
-        "Please configure GHE Host and OAuth Client ID in settings first.";
-      settingsOpen.value = true;
-      return;
-    }
-    await runDeviceFlow(settings.value.ghe_host, settings.value.client_id);
+    settings.value = { ...settings.value, ghe_host: gheHost };
+    await runDeviceFlow(gheHost, COPILOT_CLIENT_ID);
   }
 
   async function runDeviceFlow(authHost: string, clientId: string): Promise<void> {
@@ -194,7 +175,7 @@ export const useLlmStore = defineStore("llm", () => {
     try {
       const result = await invoke<{ status: string }>("poll_ghe_device_flow", {
         gheHost: currentAuthHost,
-        clientId: settings.value.client_id,
+        clientId: COPILOT_CLIENT_ID,
         deviceCode: deviceFlowInfo.value.device_code,
       });
       if (result.status === "authorized") {
@@ -241,22 +222,6 @@ export const useLlmStore = defineStore("llm", () => {
     error.value = "";
   }
 
-  async function importGhCliToken(gheHost: string): Promise<void> {
-    isLoading.value = true;
-    error.value = "";
-    try {
-      await invoke("import_gh_cli_token", { gheHost });
-      settings.value = { ...settings.value, has_token: true };
-      loginState.value = "authorized";
-      void fetchModels();
-    } catch (e) {
-      error.value = `${e}`;
-      loginState.value = "error";
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
   return {
     panelOpen,
     settingsOpen,
@@ -272,12 +237,10 @@ export const useLlmStore = defineStore("llm", () => {
     loadSettings,
     saveSettings,
     logout,
-    startLogin,
     sendMessage,
     clearMessages,
     stopPolling,
     fetchModels,
-    importGhCliToken,
     startCopilotLogin,
   };
 });
