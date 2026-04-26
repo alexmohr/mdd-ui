@@ -102,9 +102,12 @@ function parseNum(s: string): number {
   return parseFloat(s);
 }
 
+function effectiveSort(): SortState {
+  return currentSort() ?? { col: 0, asc: false };
+}
+
 function sortedRows(rows: DetailRow[]): DetailRow[] {
-  const s = currentSort();
-  if (!s) return rows;
+  const s = effectiveSort();
   const { col, asc } = s;
   return [...rows].sort((a, b) => {
     const at = a.cells[col]?.text ?? "";
@@ -291,7 +294,7 @@ async function tableCtxAction(action: string) {
                   @click="toggleSort(ci)"
                 >
                   <span>{{ cell.text }}</span>
-                  <span v-if="currentSort()?.col === ci" class="ml-1 text-blue-400">{{ currentSort()?.asc ? '▲' : '▼' }}</span>
+                  <span v-if="effectiveSort().col === ci" class="ml-1 text-blue-400">{{ effectiveSort().asc ? '▲' : '▼' }}</span>
                   <span
                     class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/40 opacity-0 group-hover:opacity-100"
                     @mousedown="onColResize($event, ci, sectionKey())"

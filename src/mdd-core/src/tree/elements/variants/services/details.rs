@@ -73,8 +73,8 @@ pub(super) fn build_diag_comms_table_section(
     node_indices: &std::collections::HashMap<String, usize>,
 ) -> DetailSectionData {
     let header = DetailRow::header(vec![
-        DetailCell::text("Short Name"),
         DetailCell::text("ID"),
+        DetailCell::text("Short Name"),
         DetailCell::text("Funct Class"),
         DetailCell::text("Type"),
         DetailCell::text("Inherited"),
@@ -103,8 +103,8 @@ pub(super) fn build_diag_comms_table_section(
 
         Some(DetailRow::normal(
             vec![
-                DetailCell::new(name, CellType::ParameterName).with_jump(jump),
                 DetailCell::text(id),
+                DetailCell::new(name, CellType::ParameterName).with_jump(jump),
                 DetailCell::text(funct_class),
                 DetailCell::text("Service"),
                 DetailCell::text(inherited),
@@ -129,8 +129,8 @@ pub(super) fn build_diag_comms_table_section(
         let jump = make_index_jump(job_name, node_indices);
         DetailRow::normal(
             vec![
-                DetailCell::new(job_name.clone(), CellType::ParameterName).with_jump(jump),
                 DetailCell::text("-"),
+                DetailCell::new(job_name.clone(), CellType::ParameterName).with_jump(jump),
                 DetailCell::text("-"),
                 DetailCell::text("Job"),
                 DetailCell::text("false"),
@@ -151,8 +151,8 @@ pub(super) fn build_diag_comms_table_section(
             header,
             rows,
             constraints: vec![
-                ColumnConstraint::Percentage(35),
                 ColumnConstraint::Percentage(12),
+                ColumnConstraint::Percentage(35),
                 ColumnConstraint::Percentage(20),
                 ColumnConstraint::Percentage(13),
                 ColumnConstraint::Percentage(20),
