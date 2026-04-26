@@ -313,10 +313,12 @@ async function tableCtxAction(action: string) {
                 <td
                   v-for="(cell, ci) in row.cells"
                   :key="ci"
-                  class="px-3 py-1.5 text-neutral-300 truncate"
+                  class="px-3 py-1.5 text-neutral-300"
                   :class="{
                     'text-blue-400 cursor-pointer hover:text-blue-300 hover:underline': cell.jump_target,
                     'text-neutral-100 font-medium': cell.cell_type === 'ParameterName',
+                    'truncate': !store.wrapTableText,
+                    'break-words whitespace-normal': store.wrapTableText,
                   }"
                   :style="{ ...(ci === 0 && row.indent > 0 ? { paddingLeft: `${row.indent * 10 + 12}px` } : {}), ...colStyle(ci, sectionKey()) }"
                   @click="nav(cell.jump_target)"

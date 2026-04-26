@@ -116,8 +116,8 @@ export async function toggleExpand(
   return invoke<VisibleNode[]>("toggle_expand", { index });
 }
 
-export async function doSearch(query: string): Promise<SearchResult> {
-  return invoke<SearchResult>("search", { query });
+export async function doSearch(query: string, op: 'and' | 'or' = 'and'): Promise<SearchResult> {
+  return invoke<SearchResult>("search", { query, op });
 }
 
 export async function clearSearch(): Promise<VisibleNode[]> {
@@ -138,6 +138,10 @@ export async function toggleSort(nodeIndex?: number): Promise<ToggleSortResult> 
 
 export async function expandAll(): Promise<VisibleNode[]> {
   return invoke<VisibleNode[]>("expand_all");
+}
+
+export async function expandFirstLevel(): Promise<VisibleNode[]> {
+  return invoke<VisibleNode[]>("expand_first_level");
 }
 
 export async function collapseAll(): Promise<VisibleNode[]> {
@@ -177,6 +181,13 @@ export async function removeRecentFile(path: string): Promise<void> {
 export interface UiPrefs {
   font_size: number;
   theme: string;
+  split_pct: number;
+  row_density: string;
+  default_hide_unchanged: boolean;
+  auto_expand_first_level: boolean;
+  max_recent_files: number;
+  wrap_table_text: boolean;
+  last_tab_title: string | null;
 }
 
 export async function getUiPrefs(): Promise<UiPrefs> {

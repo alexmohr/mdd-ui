@@ -243,11 +243,11 @@ async function onKeydown(e: KeyboardEvent) {
         v-for="node in store.nodes"
         :key="node.index"
         :data-index="node.index"
-        class="flex items-center h-[24px] cursor-pointer transition-colors group gap-1"
+        class="flex items-center cursor-pointer transition-colors group gap-1"
+        :style="{ height: store.rowHeightPx + 'px', paddingLeft: `${node.depth * 14 + 6}px` }"
         :class="node.index === store.selectedIndex
           ? 'bg-neutral-800'
           : 'hover:bg-neutral-900'"
-        :style="{ paddingLeft: `${node.depth * 14 + 6}px` }"
         @click="onClick(node)"
         @dblclick="onDblClick(node)"
         @contextmenu="onContextMenu($event, node)"

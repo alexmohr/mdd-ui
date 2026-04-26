@@ -76,6 +76,7 @@ fn run_tauri_app() {
             commands::set_search_scope,
             commands::toggle_sort,
             commands::expand_all,
+            commands::expand_first_level,
             commands::collapse_all,
             commands::toggle_hide_unchanged,
             commands::navigate_to,
