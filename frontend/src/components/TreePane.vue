@@ -279,7 +279,7 @@ async function onKeydown(e: KeyboardEvent) {
         >{{ badge.label }}</span>
 
         <!-- Label -->
-        <span class="truncate text-[1em] leading-tight" :class="nodeTextClass(node)">{{ nodeDisplayText(node) }}</span>
+        <span class="truncate text-sm leading-tight" :class="nodeTextClass(node)">{{ nodeDisplayText(node) }}</span>
       </div>
     </div>
 
@@ -287,7 +287,7 @@ async function onKeydown(e: KeyboardEvent) {
     <Teleport to="body">
       <div
         v-if="ctxMenu"
-        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-[1em]"
+        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-sm"
         :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
       >
         <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('select')">

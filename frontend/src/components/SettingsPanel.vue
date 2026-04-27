@@ -87,7 +87,7 @@ async function handleClearAllCaches() {
     <!-- Dialog -->
     <div
       class="w-full max-w-2xl bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl flex overflow-hidden"
-      style="max-height: 80vh"
+      style="height: 80vh"
     >
       <!-- Left sidebar -->
       <div class="w-44 bg-neutral-950 border-r border-neutral-800 flex flex-col shrink-0">
@@ -98,7 +98,7 @@ async function handleClearAllCaches() {
           <button
             v-for="cat in categories"
             :key="cat.id"
-            class="w-full text-left px-3 py-1.5 rounded-md text-xs transition-colors"
+            class="w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors"
             :class="
               activeCategory === cat.id
                 ? 'bg-blue-600/20 text-blue-300 font-medium'
