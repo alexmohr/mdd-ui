@@ -55,9 +55,6 @@ jobs:
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
             rust_targets: 'aarch64-apple-darwin'
-          - platform: macos-13
-            args: '--target x86_64-apple-darwin'
-            rust_targets: 'x86_64-apple-darwin'
           - platform: windows-latest
             args: ''
             rust_targets: ''
@@ -151,7 +148,6 @@ jobs:
             // Map Tauri bundle suffixes → updater platform keys
             const platformPatterns = {
               'darwin-aarch64': [/aarch64\.dmg$/i, /aarch64\.app\.tar\.gz$/i],
-              'darwin-x86_64':  [/x86_64\.dmg$/i,  /x64\.dmg$/i, /x86_64\.app\.tar\.gz$/i],
               'linux-x86_64':   [/amd64\.AppImage$/i, /x86_64\.AppImage$/i],
               'windows-x86_64': [/x64-setup\.exe$/i, /x64\.msi$/i],
             };
