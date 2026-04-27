@@ -98,62 +98,107 @@ jobs:
 
   # ── Step 2: merge per-platform signatures into one latest.json ─────────────
   merge-updater-json:
-    needs: build-tauri
+    needs:
+      - build-tauri
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Generate multi-platform latest.json
+      - name: Rename assets and generate latest.json
         uses: actions/github-script@v7
         with:
           script: |
             const tagName = context.ref.replace('refs/tags/', '');
             const version  = tagName.replace(/^v/, '');
+            const owner    = context.repo.owner;
+            const repo     = context.repo.repo;
 
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag: tagName,
-            });
+            const { data: release } = await github.rest.repos.getReleaseByTag({ owner, repo, tag: tagName });
             const releaseId = release.id;
 
             const { data: assets } = await github.rest.repos.listReleaseAssets({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: releaseId,
-              per_page: 100,
+              owner, repo, release_id: releaseId, per_page: 100,
             });
 
-            // Map Tauri bundle suffixes → updater platform keys
-            const platformPatterns = {
-              'darwin-aarch64': [/aarch64\.app\.tar\.gz$/i, /aarch64\.dmg$/i],
-              'linux-x86_64':   [/amd64\.AppImage\.tar\.gz$/i, /x86_64\.AppImage\.tar\.gz$/i, /amd64\.AppImage$/i, /x86_64\.AppImage$/i],
-              'windows-x86_64': [/x64-setup\.exe$/i, /x64\.msi$/i],
-            };
+            // Each rule matches the Tauri-generated bundle name, provides the
+            // new name (with OS platform identifier) and the updater platform
+            // key — null means the bundle is for direct download only.
+            const bundleRules = [
+              {
+                match:      /^mdd-ui_aarch64\.app\.tar\.gz$/i,
+                newName:    `mdd-ui_${version}_darwin_aarch64.app.tar.gz`,
+                updaterKey: 'darwin-aarch64-app',
+              },
+              {
+                match:      /^mdd-ui_[\d.]+_aarch64\.dmg$/i,
+                newName:    `mdd-ui_${version}_darwin_aarch64.dmg`,
+                updaterKey: null,
+              },
+              {
+                match:      /^mdd-ui_[\d.]+_amd64\.AppImage$/i,
+                newName:    `mdd-ui_${version}_linux_amd64.AppImage`,
+                updaterKey: 'linux-x86_64',
+              },
+              {
+                match:      /^mdd-ui_[\d.]+_amd64\.deb$/i,
+                newName:    `mdd-ui_${version}_linux_amd64.deb`,
+                updaterKey: null,
+              },
+              {
+                match:      /^mdd-ui-[\d.]+-1\.x86_64\.rpm$/i,
+                newName:    `mdd-ui-${version}-1_linux_x86_64.rpm`,
+                updaterKey: null,
+              },
+              {
+                match:      /^mdd-ui_[\d.]+_x64-setup\.exe$/i,
+                newName:    `mdd-ui_${version}_windows_x64-setup.exe`,
+                updaterKey: 'windows-x86_64',
+              },
+              {
+                match:      /^mdd-ui_[\d.]+_x64_en-US\.msi$/i,
+                newName:    `mdd-ui_${version}_windows_x64_en-US.msi`,
+                updaterKey: null,
+              },
+            ];
 
             const platforms = {};
 
-            for (const [platform, patterns] of Object.entries(platformPatterns)) {
-              const bundle = assets.find(a => patterns.some(p => p.test(a.name)));
-              if (!bundle) { core.warning(`No bundle found for ${platform}`); continue; }
+            for (const rule of bundleRules) {
+              const bundle = assets.find(a => rule.match.test(a.name));
+              if (!bundle) {
+                core.warning(`No asset matched pattern ${rule.match} — skipping`);
+                continue;
+              }
 
-              const sig = assets.find(a => a.name === bundle.name + '.sig');
-              if (!sig) { core.warning(`No .sig found for ${bundle.name}`); continue; }
-
-              // Download signature (small text file)
-              const sigResp = await github.request(`GET /repos/${context.repo.owner}/${context.repo.repo}/releases/assets/${sig.id}`, {
-                headers: { accept: 'application/octet-stream' },
+              // Rename bundle (no binary download required)
+              const { data: renamed } = await github.rest.repos.updateReleaseAsset({
+                owner, repo, asset_id: bundle.id, name: rule.newName,
               });
-              const signature = Buffer.from(sigResp.data).toString('utf-8').trim();
+              core.info(`Renamed: ${bundle.name} → ${rule.newName}`);
 
-              platforms[platform] = {
-                signature,
-                url: bundle.browser_download_url,
-              };
+              // Rename the companion .sig file if present
+              const sig = assets.find(a => a.name === `${bundle.name}.sig`);
+              if (sig) {
+                await github.rest.repos.updateReleaseAsset({
+                  owner, repo, asset_id: sig.id, name: `${rule.newName}.sig`,
+                });
+                core.info(`Renamed: ${sig.name} → ${rule.newName}.sig`);
+
+                if (rule.updaterKey) {
+                  const sigResp = await github.request(
+                    `GET /repos/${owner}/${repo}/releases/assets/${sig.id}`,
+                    { headers: { accept: 'application/octet-stream' } },
+                  );
+                  const signature = Buffer.from(sigResp.data).toString('utf-8').trim();
+                  platforms[rule.updaterKey] = { signature, url: renamed.browser_download_url };
+                }
+              } else if (rule.updaterKey) {
+                core.warning(`No .sig found for ${bundle.name} — skipping updater entry`);
+              }
             }
 
             if (Object.keys(platforms).length === 0) {
-              core.setFailed('No platform bundles found — cannot generate latest.json');
+              core.setFailed('No updater platform entries found — cannot generate latest.json');
               return;
             }
 
@@ -164,20 +209,16 @@ jobs:
               platforms,
             };
 
-            // Remove stale latest.json (written per-platform by tauri-action)
+            // Remove stale latest.json uploaded per-platform by tauri-action
             const existing = assets.find(a => a.name === 'latest.json');
             if (existing) {
               await github.rest.repos.deleteReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                asset_id: existing.id,
+                owner, repo, asset_id: existing.id,
               });
             }
 
             await github.rest.repos.uploadReleaseAsset({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: releaseId,
+              owner, repo, release_id: releaseId,
               name: 'latest.json',
               data: JSON.stringify(updaterJson, null, 2),
             });
