@@ -259,7 +259,7 @@ async function tableCtxAction(action: string) {
         <div
           v-for="(line, i) in text(headerSection.content)"
           :key="i"
-          class="text-[1em] text-neutral-400 leading-relaxed"
+          class="text-sm text-neutral-400 leading-relaxed"
         >{{ line }}</div>
       </div>
 
@@ -268,7 +268,7 @@ async function tableCtxAction(action: string) {
         <button
           v-for="(section, i) in tabSections"
           :key="i"
-          class="px-4 py-2 text-[1em] whitespace-nowrap border-b-2 transition-colors"
+          class="px-4 py-2 text-sm whitespace-nowrap border-b-2 transition-colors"
           :class="i === store.selectedTab
             ? 'border-blue-500 text-neutral-100'
             : 'border-transparent text-neutral-500 hover:text-neutral-300'"
@@ -284,19 +284,19 @@ async function tableCtxAction(action: string) {
           <p
             v-for="(line, i) in text(activeSection.content)"
             :key="i"
-            class="text-[1em] text-neutral-300 leading-relaxed"
+            class="text-sm text-neutral-300 leading-relaxed"
           >{{ line || "\u00A0" }}</p>
         </div>
 
         <!-- Table -->
         <div v-else-if="getTable(activeSection.content)" @contextmenu="onTableContextMenu($event, getTable(activeSection.content)!.header, sortedRows(getTable(activeSection.content)!.rows))">
-          <table class="text-[1em]" style="table-layout: fixed;">
+          <table class="text-sm" style="table-layout: fixed;">
             <thead class="sticky top-0 bg-neutral-950 z-10">
               <tr class="border-b border-gray-800/80">
                 <th
                   v-for="(cell, ci) in getTable(activeSection.content)!.header.cells"
                   :key="ci"
-                  class="text-left px-3 py-2 text-[0.85em] text-neutral-500 font-medium uppercase tracking-wider cursor-pointer hover:text-neutral-200 select-none relative group"
+                  class="text-left px-3 py-2 text-xs text-neutral-500 font-medium uppercase tracking-wider cursor-pointer hover:text-neutral-200 select-none relative group"
                   :style="colStyle(ci, sectionKey())"
                   @click="toggleSort(ci)"
                 >
@@ -346,23 +346,23 @@ async function tableCtxAction(action: string) {
             :key="si"
             class="rounded-lg border border-neutral-800/50 overflow-hidden"
           >
-            <div class="px-3 py-1.5 bg-neutral-800/20 text-[0.85em] text-neutral-400 font-medium uppercase tracking-wider">
+            <div class="px-3 py-1.5 bg-neutral-800/20 text-xs text-neutral-400 font-medium uppercase tracking-wider">
               {{ sub.title }}
             </div>
             <div v-if="text(sub.content)" class="px-3 py-2">
               <p
                 v-for="(line, li) in text(sub.content)"
                 :key="li"
-                class="text-[1em] text-neutral-300"
+                class="text-sm text-neutral-300"
               >{{ line || "\u00A0" }}</p>
             </div>
-            <table v-else-if="getTable(sub.content)" class="w-full text-[1em]" style="table-layout: fixed;" @contextmenu="onTableContextMenu($event, getTable(sub.content)!.header, getTable(sub.content)!.rows)">
+            <table v-else-if="getTable(sub.content)" class="w-full text-sm" style="table-layout: fixed;" @contextmenu="onTableContextMenu($event, getTable(sub.content)!.header, getTable(sub.content)!.rows)">
               <thead>
                 <tr class="border-b border-neutral-800/50">
                   <th
                     v-for="(cell, ci) in getTable(sub.content)!.header.cells"
                     :key="ci"
-                    class="text-left px-3 py-1.5 text-[0.85em] text-neutral-500 font-medium relative group select-none"
+                    class="text-left px-3 py-1.5 text-xs text-neutral-500 font-medium relative group select-none"
                     :style="colStyle(ci, sectionKey() + '-' + si)"
                   >
                     {{ cell.text }}
@@ -411,7 +411,7 @@ async function tableCtxAction(action: string) {
     <Teleport to="body">
       <div
         v-if="tabCtxMenu"
-        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-[1em]"
+        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-sm"
         :style="{ left: tabCtxMenu.x + 'px', top: tabCtxMenu.y + 'px' }"
       >
         <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="tabCtxAction('copyMarkdown')">
@@ -423,7 +423,7 @@ async function tableCtxAction(action: string) {
     <Teleport to="body">
       <div
         v-if="tableCtxMenu"
-        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-[1em]"
+        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-sm"
         :style="{ left: tableCtxMenu.x + 'px', top: tableCtxMenu.y + 'px' }"
       >
         <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="tableCtxAction('copyMarkdown')">
