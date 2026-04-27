@@ -9,6 +9,11 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
+svg:not(.icon-fixed) {
+  width: 1em;
+  height: 1em;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
