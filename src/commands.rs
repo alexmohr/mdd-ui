@@ -6,7 +6,7 @@
 
 use std::{fs, path::PathBuf, sync::Mutex};
 
-use mdd_core::tree::{DetailSectionData, DiffStatus, NodeType, ServiceListType, TreeNode};
+use mdd_core::tree::{CellJumpTargetType, DetailContent, DetailRow, DetailSectionData, DiffStatus, NodeType, ServiceListType, TreeNode};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -180,42 +180,176 @@ impl Default for AppState {
 // Helper functions
 // ---------------------------------------------------------------------------
 
+/// Compute the search include bitmap from the active search stack.
+/// Returns `None` when no search filters are present (all nodes implicitly included).
+fn compute_include(state: &CoreState) -> Option<Vec<bool>> {
+    if state.search_stack.is_empty() {
+        return None;
+    }
+    let all_true = vec![true; state.all_nodes.len()];
+    let mut inc: Option<Vec<bool>> = None;
+    for entry in &state.search_stack {
+        let fresh =
+            apply_search_filter(&state.all_nodes, &all_true, &entry.query, &entry.scope);
+        inc = Some(match inc {
+            None => fresh,
+            Some(mut cur) => {
+                match entry.op {
+                    FilterOp::And => {
+                        for (a, b) in cur.iter_mut().zip(fresh.iter()) {
+                            *a = *a && *b;
+                        }
+                    }
+                    FilterOp::Or => {
+                        for (a, b) in cur.iter_mut().zip(fresh.iter()) {
+                            *a = *a || *b;
+                        }
+                    }
+                }
+                cur
+            }
+        });
+    }
+    inc
+}
+
+/// Count direct children (depth = `header_depth + 1`) of the node at `header_idx`
+/// that pass the active filters (search bitmap + hide-unchanged).
+fn count_filtered_direct_children(
+    all_nodes: &[TreeNode],
+    include: Option<&[bool]>,
+    hide_unchanged: bool,
+    header_idx: usize,
+    header_depth: usize,
+) -> usize {
+    let child_depth = header_depth + 1;
+    let mut count = 0;
+    for i in (header_idx + 1)..all_nodes.len() {
+        let Some(n) = all_nodes.get(i) else { break };
+        if n.depth <= header_depth {
+            break;
+        }
+        if n.depth == child_depth {
+            let passes_search = include.map_or(true, |inc| inc.get(i).copied().unwrap_or(false));
+            let passes_diff =
+                !hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged));
+            if passes_search && passes_diff {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+/// Filter the rows of a service-list overview table, keeping only rows whose
+/// service matches the active search / diff filter.
+///
+/// Matching is done by **short name** (from the row's `TreeNodeByIndex` jump
+/// target) looked up against the header's **actual direct children** in
+/// `all_nodes`.  Using the stored jump-target index directly would be unreliable
+/// because `resolve_all_indices` uses `or_insert` and can map a short name to a
+/// different variant's node when services share names across layers.
+///
+/// Rows without a `TreeNodeByIndex` reference (separator rows, etc.) are always
+/// kept.  Only `Table` content is filtered; `Composite` and `PlainText` are
+/// returned as-is.  The section title count is updated to match.
+fn filter_service_list_rows(
+    section: &DetailSectionData,
+    include: Option<&[bool]>,
+    hide_unchanged: bool,
+    all_nodes: &[TreeNode],
+    header_idx: usize,
+) -> DetailSectionData {
+    let DetailContent::Table {
+        header,
+        rows,
+        constraints,
+        use_row_selection,
+    } = &section.content
+    else {
+        return section.clone();
+    };
+
+    // Build short_name → passes_filter from the header's real direct children.
+    let header_depth = all_nodes.get(header_idx).map_or(0, |n| n.depth);
+    let child_depth = header_depth + 1;
+    let mut name_passes: std::collections::HashMap<&str, bool> =
+        std::collections::HashMap::new();
+    for i in (header_idx + 1)..all_nodes.len() {
+        let Some(n) = all_nodes.get(i) else { break };
+        if n.depth <= header_depth {
+            break;
+        }
+        if n.depth == child_depth {
+            let passes = include.map_or(true, |inc| inc.get(i).copied().unwrap_or(false))
+                && (!hide_unchanged
+                    || !matches!(n.diff_status, Some(DiffStatus::Unchanged)));
+            let key = n.service_short_name().unwrap_or(n.text.as_str());
+            name_passes.insert(key, passes);
+        }
+    }
+
+    let filtered: Vec<DetailRow> = rows
+        .iter()
+        .filter(|row| {
+            let sn = row
+                .cells
+                .iter()
+                .filter_map(|cell| cell.jump_target.as_ref())
+                .find_map(|jt| match &jt.target_type {
+                    CellJumpTargetType::TreeNodeByIndex { short_name, .. } => {
+                        Some(short_name.as_str())
+                    }
+                    _ => None,
+                });
+            match sn {
+                None => true,
+                Some(name) => name_passes.get(name).copied().unwrap_or(true),
+            }
+        })
+        .cloned()
+        .collect();
+
+    let row_count = filtered.len();
+    DetailSectionData {
+        title: replace_header_count(&section.title, row_count),
+        content: DetailContent::Table {
+            header: header.clone(),
+            rows: filtered,
+            constraints: constraints.clone(),
+            use_row_selection: *use_row_selection,
+        },
+        render_as_header: section.render_as_header,
+        section_type: section.section_type,
+    }
+}
+
+/// Strip a trailing `(…)` count suffix from a service-list header's display
+/// text, leaving the base name.  Used when building node paths.
+fn strip_count_suffix(text: &str) -> &str {
+    if let Some(pos) = text.rfind('(') {
+        if text.ends_with(')') {
+            return text[..pos].trim_end();
+        }
+    }
+    text
+}
+
+/// Replace the trailing `(…)` of a service-list header's display text with `(new_count)`.
+fn replace_header_count(text: &str, new_count: usize) -> String {
+    if let Some(open) = text.rfind('(') {
+        if text.ends_with(')') {
+            return format!("{}({new_count})", &text[..open]);
+        }
+    }
+    format!("{text} ({new_count})")
+}
+
 fn build_visible(state: &CoreState) -> Vec<usize> {
     let mut visible = Vec::new();
     let mut collapsed_below: Option<usize> = None;
 
-    let has_search = !state.search_stack.is_empty();
-
-    // When searching, first compute include flags
-    let include = if has_search {
-        let all_true = vec![true; state.all_nodes.len()];
-        let mut inc: Option<Vec<bool>> = None;
-        for entry in &state.search_stack {
-            let fresh =
-                apply_search_filter(&state.all_nodes, &all_true, &entry.query, &entry.scope);
-            inc = Some(match inc {
-                None => fresh,
-                Some(mut cur) => {
-                    match entry.op {
-                        FilterOp::And => {
-                            for (a, b) in cur.iter_mut().zip(fresh.iter()) {
-                                *a = *a && *b;
-                            }
-                        }
-                        FilterOp::Or => {
-                            for (a, b) in cur.iter_mut().zip(fresh.iter()) {
-                                *a = *a || *b;
-                            }
-                        }
-                    }
-                    cur
-                }
-            });
-        }
-        inc
-    } else {
-        None
-    };
+    let include = compute_include(state);
 
     for (i, node) in state.all_nodes.iter().enumerate() {
         // If search is active, skip nodes not in the include set
@@ -332,19 +466,36 @@ fn node_matches_scope(node: &TreeNode, scope: &SearchScope) -> bool {
 }
 
 fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
+    let any_filter = !state.search_stack.is_empty() || state.hide_unchanged;
+    let include = if any_filter { compute_include(state) } else { None };
+
     state
         .visible
         .iter()
         .filter_map(|&idx| {
-            state.all_nodes.get(idx).map(|node| VisibleNode {
-                index: idx,
-                depth: node.depth,
-                text: node.text.clone(),
-                expanded: node.expanded,
-                has_children: node.has_children,
-                node_type: node.node_type,
-                diff_status: node.diff_status,
-                is_sortable: node.service_list_type().is_some(),
+            state.all_nodes.get(idx).map(|node| {
+                let text = if any_filter && node.service_list_type().is_some() {
+                    let count = count_filtered_direct_children(
+                        &state.all_nodes,
+                        include.as_deref(),
+                        state.hide_unchanged,
+                        idx,
+                        node.depth,
+                    );
+                    replace_header_count(&node.text, count)
+                } else {
+                    node.text.clone()
+                };
+                VisibleNode {
+                    index: idx,
+                    depth: node.depth,
+                    text,
+                    expanded: node.expanded,
+                    has_children: node.has_children,
+                    node_type: node.node_type,
+                    diff_status: node.diff_status,
+                    is_sortable: node.service_list_type().is_some(),
+                }
             })
         })
         .collect()
@@ -438,7 +589,28 @@ pub fn get_node_detail(
         .all_nodes
         .get(index)
         .ok_or_else(|| format!("Node index {index} out of range"))?;
-    Ok(node.detail_sections.to_vec())
+
+    // Only filter overview (service-list header) nodes when a filter is active.
+    // Individual service/response detail sections are left untouched.
+    let any_filter = !core.search_stack.is_empty() || core.hide_unchanged;
+    if !any_filter || node.service_list_type().is_none() {
+        return Ok(node.detail_sections.to_vec());
+    }
+
+    let include = compute_include(&core);
+    Ok(node
+        .detail_sections
+        .iter()
+        .map(|section| {
+            filter_service_list_rows(
+                section,
+                include.as_deref(),
+                core.hide_unchanged,
+                &core.all_nodes,
+                index,
+            )
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -924,7 +1096,12 @@ pub fn get_node_path(index: usize, state: State<'_, AppState>) -> Result<String,
         .get(index)
         .ok_or_else(|| format!("Node index {index} out of range"))?;
 
-    let mut parts = vec![node.text.clone()];
+    let node_text = if node.service_list_type().is_some() {
+        strip_count_suffix(&node.text).to_owned()
+    } else {
+        node.text.clone()
+    };
+    let mut parts = vec![node_text];
     let mut depth_needed = node.depth;
 
     if depth_needed > 0 {
@@ -933,7 +1110,12 @@ pub fn get_node_path(index: usize, state: State<'_, AppState>) -> Result<String,
                 continue;
             };
             if ancestor.depth < depth_needed {
-                parts.push(ancestor.text.clone());
+                let ancestor_text = if ancestor.service_list_type().is_some() {
+                    strip_count_suffix(&ancestor.text).to_owned()
+                } else {
+                    ancestor.text.clone()
+                };
+                parts.push(ancestor_text);
                 depth_needed = ancestor.depth;
                 if depth_needed == 0 {
                     break;
