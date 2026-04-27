@@ -39,6 +39,18 @@ cargo tauri build
 
 The bundled application is placed at `target/release/bundle/`.
 
+### macOS — "app is damaged" warning
+
+Pre-built releases are not code-signed with an Apple Developer certificate. macOS Gatekeeper will therefore block the app on first launch with a "damaged" message.
+
+Run the following command once after copying the app to `/Applications`:
+
+```sh
+xattr -cr /Applications/mdd-ui.app
+```
+
+Subsequent updates via the built-in auto-updater are downloaded programmatically and are **not** affected by this — they install silently without any manual step.
+
 #### Build without code signing
 
 Signing is required when `createUpdaterArtifacts` is enabled. To skip it without modifying [tauri.conf.json](cci:7://file:///Users/MOHALEX/dev/mdd-ui/tauri.conf.json:0:0-0:0), pass a config override via the shell:
