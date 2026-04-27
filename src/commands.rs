@@ -6,7 +6,10 @@
 
 use std::{fs, path::PathBuf, sync::Mutex};
 
-use mdd_core::tree::{CellJumpTargetType, DetailContent, DetailRow, DetailSectionData, DiffStatus, NodeType, ServiceListType, TreeNode};
+use mdd_core::tree::{
+    CellJumpTargetType, DetailContent, DetailRow, DetailSectionData, DiffStatus, NodeType,
+    ServiceListType, TreeNode,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -189,8 +192,7 @@ fn compute_include(state: &CoreState) -> Option<Vec<bool>> {
     let all_true = vec![true; state.all_nodes.len()];
     let mut inc: Option<Vec<bool>> = None;
     for entry in &state.search_stack {
-        let fresh =
-            apply_search_filter(&state.all_nodes, &all_true, &entry.query, &entry.scope);
+        let fresh = apply_search_filter(&state.all_nodes, &all_true, &entry.query, &entry.scope);
         inc = Some(match inc {
             None => fresh,
             Some(mut cur) => {
@@ -273,8 +275,7 @@ fn filter_service_list_rows(
     // Build short_name → passes_filter from the header's real direct children.
     let header_depth = all_nodes.get(header_idx).map_or(0, |n| n.depth);
     let child_depth = header_depth + 1;
-    let mut name_passes: std::collections::HashMap<&str, bool> =
-        std::collections::HashMap::new();
+    let mut name_passes: std::collections::HashMap<&str, bool> = std::collections::HashMap::new();
     for i in (header_idx + 1)..all_nodes.len() {
         let Some(n) = all_nodes.get(i) else { break };
         if n.depth <= header_depth {
@@ -282,8 +283,7 @@ fn filter_service_list_rows(
         }
         if n.depth == child_depth {
             let passes = include.map_or(true, |inc| inc.get(i).copied().unwrap_or(false))
-                && (!hide_unchanged
-                    || !matches!(n.diff_status, Some(DiffStatus::Unchanged)));
+                && (!hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged)));
             let key = n.service_short_name().unwrap_or(n.text.as_str());
             name_passes.insert(key, passes);
         }
@@ -467,7 +467,11 @@ fn node_matches_scope(node: &TreeNode, scope: &SearchScope) -> bool {
 
 fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
     let any_filter = !state.search_stack.is_empty() || state.hide_unchanged;
-    let include = if any_filter { compute_include(state) } else { None };
+    let include = if any_filter {
+        compute_include(state)
+    } else {
+        None
+    };
 
     state
         .visible
