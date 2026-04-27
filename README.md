@@ -39,6 +39,22 @@ cargo tauri build
 
 The bundled application is placed at `target/release/bundle/`.
 
+#### Build without code signing
+
+Signing is required when `createUpdaterArtifacts` is enabled. To skip it without modifying [tauri.conf.json](cci:7://file:///Users/MOHALEX/dev/mdd-ui/tauri.conf.json:0:0-0:0), pass a config override via the shell:
+
+```sh
+cargo tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+#### Linux: distributions that strip binaries (Arch, CachyOS, NixOS, …)
+
+Some Linux distributions (e.g. Arch Linux, CachyOS, NixOS) strip debug symbols from binaries during the build process, which can break Tauri's bundler. Set `NO_STRIP=true` to prevent this:
+
+```sh
+NO_STRIP=true cargo tauri build
+```
+
 ## Usage
 
 ### Desktop UI (default)
