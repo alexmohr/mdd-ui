@@ -604,8 +604,8 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
 
     if core.is_diff_mode {
         lines.push(
-            "MDD diff (only changed nodes shown with ancestors for context; \
-             + added, - removed, ~ modified):"
+            "MDD diff (only changed nodes shown with ancestors for context; + added, - removed, ~ \
+             modified):"
                 .to_owned(),
         );
 
@@ -656,7 +656,10 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
                 Some(DiffStatus::Unchanged) | None => "  ",
             };
             let indent = "  ".repeat(node.depth);
-            lines.push(format!("{diff_marker}{indent}[{:?}] {}", node.node_type, node.text));
+            lines.push(format!(
+                "{diff_marker}{indent}[{:?}] {}",
+                node.node_type, node.text
+            ));
         }
     } else {
         lines.push("MDD structure (containers, services, and sub-services):".to_owned());
@@ -674,8 +677,8 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
     if result.len() > MAX_CONTEXT_CHARS {
         let mut truncated = result[..MAX_CONTEXT_CHARS].to_owned();
         truncated.push_str(
-            "\n\n[Context truncated — database too large to fit in one request. \
-             Ask specific questions about services or nodes by name.]",
+            "\n\n[Context truncated — database too large to fit in one request. Ask specific \
+             questions about services or nodes by name.]",
         );
         truncated
     } else {
