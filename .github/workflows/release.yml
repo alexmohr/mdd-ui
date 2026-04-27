@@ -92,11 +92,11 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'MDD UI ${{ github.ref_name }}'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
-  # ── Step 2: merge per-platform signatures into one latest.json ──────────────
+  # ── Step 2: merge per-platform signatures into one latest.json ─────────────
   merge-updater-json:
     needs: build-tauri
     runs-on: ubuntu-latest
@@ -140,7 +140,7 @@ jobs:
               const sig = assets.find(a => a.name === bundle.name + '.sig');
               if (!sig) { core.warning(`No .sig found for ${bundle.name}`); continue; }
 
-              // Download signature (small text file, public asset on draft release via token)
+              // Download signature (small text file)
               const sigResp = await github.request(`GET /repos/${context.repo.owner}/${context.repo.repo}/releases/assets/${sig.id}`, {
                 headers: { accept: 'application/octet-stream' },
               });
@@ -184,26 +184,3 @@ jobs:
 
             core.info(`Uploaded latest.json with platforms: ${Object.keys(platforms).join(', ')}`);
 
-  # ── Step 3: publish the release ─────────────────────────────────────────────
-  publish-release:
-    needs: merge-updater-json
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Publish release
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const tagName = context.ref.replace('refs/tags/', '');
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag: tagName,
-            });
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: release.id,
-              draft: false,
-            });
