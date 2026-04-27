@@ -28,16 +28,33 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const { data } = await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: context.ref.replace('refs/tags/', ''),
-              name: `MDD UI ${context.ref.replace('refs/tags/', '')}`,
-              draft: true,
-              prerelease: false,
-              generate_release_notes: true,
-            });
-            return data.id;
+            const tagName = context.ref.replace('refs/tags/', '');
+            let releaseId;
+            try {
+              const { data } = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tagName,
+                name: `MDD UI ${tagName}`,
+                draft: true,
+                prerelease: false,
+                generate_release_notes: true,
+              });
+              releaseId = data.id;
+            } catch (err) {
+              if (err.status === 422) {
+                core.warning(`Release for ${tagName} already exists — reusing it.`);
+                const { data } = await github.rest.repos.getReleaseByTag({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag: tagName,
+                });
+                releaseId = data.id;
+              } else {
+                throw err;
+              }
+            }
+            return String(releaseId);
           result-encoding: string
 
   # ── Step 2: build Tauri bundles for every platform ──────────────────────────
@@ -147,8 +164,8 @@ jobs:
 
             // Map Tauri bundle suffixes → updater platform keys
             const platformPatterns = {
-              'darwin-aarch64': [/aarch64\.dmg$/i, /aarch64\.app\.tar\.gz$/i],
-              'linux-x86_64':   [/amd64\.AppImage$/i, /x86_64\.AppImage$/i],
+              'darwin-aarch64': [/aarch64\.app\.tar\.gz$/i, /aarch64\.dmg$/i],
+              'linux-x86_64':   [/amd64\.AppImage\.tar\.gz$/i, /x86_64\.AppImage\.tar\.gz$/i, /amd64\.AppImage$/i, /x86_64\.AppImage$/i],
               'windows-x86_64': [/x64-setup\.exe$/i, /x64\.msi$/i],
             };
 
