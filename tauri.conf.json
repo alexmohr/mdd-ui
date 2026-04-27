@@ -50,7 +50,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzM0Y5QjVEMjQ3NUQyRTUKUldUbDBuVWtYWnMvMC9VdmtoM09uYXp2Y2FXQWxwSlFvUXFybm1KaWxxMkd0aU5SMFIrTG85bW0K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENERTVGRjAyOTAzMTM4OUEKUldTYU9ER1FBdi9semR0SDlJSjl1aWYyaTdQaHEvbW9mVWxMa1ZLNXE2VWV6UWV1OVM2Vnk2NmIK",
       "endpoints": [
         "https://github.com/alexmohr/mdd-ui/releases/latest/download/latest.json"
       ],
