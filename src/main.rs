@@ -61,6 +61,14 @@ fn main() -> Result<()> {
 }
 
 fn run_tauri_app(initial_file: Option<String>) {
+    // Work around WebKit2GTK black screen on Linux systems where
+    // GPU DMA-BUF rendering fails silently. Must be set before GTK/WebKit init.
+    #[cfg(target_os = "linux")]
+    // SAFETY: called before any threads are spawned
+    unsafe {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -102,6 +110,36 @@ fn run_tauri_app(initial_file: Option<String>) {
             llm::fetch_llm_models,
             llm::llm_chat,
         ])
+        .setup(|app| {
+            use tauri::Manager;
+
+            let icon_bytes = include_bytes!("../icons/128x128.png");
+
+            // Set the GTK default window icon (affects taskbar on GTK-based DEs)
+            // and force dark theme variant for WebKit's prefers-color-scheme.
+            #[cfg(target_os = "linux")]
+            {
+                use gtk::{gdk_pixbuf::PixbufLoader, prelude::*};
+                let loader = PixbufLoader::with_type("png")?;
+                loader.write(icon_bytes)?;
+                loader.close()?;
+                let pixbuf = loader.pixbuf().expect("Failed to get pixbuf");
+                gtk::Window::set_default_icon(&pixbuf);
+
+                if let Some(settings) = gtk::Settings::default() {
+                    settings.set_gtk_application_prefer_dark_theme(true);
+                }
+            }
+
+            // Also set the individual window icon via Tauri API
+            let window = app
+                .get_webview_window("main")
+                .expect("main window not found");
+            let icon = tauri::image::Image::from_bytes(icon_bytes)?;
+            window.set_icon(icon)?;
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

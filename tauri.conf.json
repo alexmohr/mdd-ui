@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicxlasj/tauri-settings-schema/refs/heads/main/schema.json",
-  "productName": "MDD UI",
+  "productName": "mdd-ui",
   "version": "0.1.0",
   "identifier": "io.github.alexmohr.mdd-ui",
   "build": {
