@@ -27,6 +27,10 @@ watch(() => store.theme, (t) => {
   document.documentElement.classList.toggle('light', t === 'light');
 }, { immediate: true });
 
+watch(() => store.fontSize, (size) => {
+  document.documentElement.style.fontSize = (16 * size / 13).toFixed(2) + 'px';
+}, { immediate: true });
+
 onMounted(async () => {
   await Promise.all([store.loadRecentFiles(), store.loadPrefs(), llmStore.loadSettings()]);
   window.addEventListener("keydown", handleKeydown);
@@ -124,7 +128,6 @@ function onSplitMouseDown() {
   <div
     class="flex flex-col h-screen bg-neutral-950 text-neutral-200 antialiased"
     :class="{ 'select-none': dragging }"
-    :style="{ fontSize: store.fontSize + 'px' }"
   >
     <!-- Loading overlay -->
     <div
@@ -220,7 +223,8 @@ function onSplitMouseDown() {
       <!-- Top bar -->
       <div
         class="flex items-center h-10 bg-neutral-900 border-b border-neutral-800/60 gap-2 shrink-0"
-        :class="isMac ? 'pl-20 pr-3' : 'px-3'"
+        :class="isMac ? 'pr-3' : 'px-3'"
+        :style="isMac ? { paddingLeft: '80px' } : {}"
         data-tauri-drag-region
       >
         <!-- Close file / back to home -->
@@ -255,7 +259,7 @@ function onSplitMouseDown() {
         </button>
 
         <!-- Breadcrumbs -->
-        <div class="flex items-center gap-1 text-xs text-neutral-500 overflow-hidden min-w-0 flex-1" data-tauri-drag-region>
+        <div class="flex items-center gap-1 text-sm text-neutral-500 overflow-hidden min-w-0 flex-1" data-tauri-drag-region>
           <template v-for="(crumb, i) in store.breadcrumbs" :key="crumb.index">
             <span v-if="i > 0" class="text-neutral-700">/</span>
             <button
