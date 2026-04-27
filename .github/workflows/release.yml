@@ -183,4 +183,3 @@ jobs:
             });
 
             core.info(`Uploaded latest.json with platforms: ${Object.keys(platforms).join(', ')}`);
-
