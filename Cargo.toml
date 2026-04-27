@@ -37,7 +37,7 @@ tauri-build = { version = "2", features = [] }
 mdd-core = { path = "src/mdd-core" }
 
 # Desktop UI
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 
@@ -63,6 +63,9 @@ rmcp = { version = "1.5", features = [
 tokio = { version = "1", features = ["rt", "macros"], optional = true }
 tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
 
 [patch.crates-io]
 flatbuffers = { git = "https://github.com/alexmohr/flatbuffers.git", rev = "0ba3307d" }
