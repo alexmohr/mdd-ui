@@ -35,6 +35,24 @@ const appStore = useAppStore();
 const messagesEl = ref<HTMLElement | null>(null);
 const inputText = ref("");
 const copied = ref(false);
+const panelWidth = ref(420);
+const resizing = ref(false);
+
+function onResizeMouseDown(e: MouseEvent) {
+  e.preventDefault();
+  resizing.value = true;
+  const onMove = (ev: MouseEvent) => {
+    const w = window.innerWidth - ev.clientX;
+    panelWidth.value = Math.max(280, Math.min(Math.round(window.innerWidth * 0.75), w));
+  };
+  const onUp = () => {
+    resizing.value = false;
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
 
 const form = reactive<LlmSettingsUpdate & { api_token: string }>({
   ghe_host: store.settings.ghe_host,
@@ -137,8 +155,14 @@ function onMessageAreaClick(e: MouseEvent) {
 <template>
   <div
     class="fixed top-0 right-0 h-screen flex flex-col bg-neutral-900 border-l border-neutral-800 z-50 text-sm"
-    style="width: 420px"
+    :class="{ 'select-none': resizing }"
+    :style="{ width: panelWidth + 'px' }"
   >
+    <!-- Resize handle -->
+    <div
+      class="absolute top-0 left-0 h-full w-1 cursor-col-resize bg-neutral-800/40 hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+      @mousedown.prevent="onResizeMouseDown"
+    />
     <!-- Header -->
     <div
       class="flex items-center h-10 px-3 border-b border-neutral-800 shrink-0 gap-1"
