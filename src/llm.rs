@@ -7,6 +7,7 @@
 
 use std::{collections::HashMap, fs, path::PathBuf};
 
+use mdd_core::tree::DiffStatus;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -600,12 +601,84 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
     lines.push(format!("ECU: {}", core.ecu_name));
     lines.push(format!("Total nodes: {}", core.all_nodes.len()));
     lines.push(String::new());
-    lines.push("MDD structure (containers, services, and sub-services):".to_owned());
-    for node in &core.all_nodes {
-        if node.depth <= 3 {
+
+    if core.is_diff_mode {
+        lines.push(
+            "MDD diff (only changed nodes shown with ancestors for context; \
+             + added, - removed, ~ modified):"
+                .to_owned(),
+        );
+
+        // Determine which nodes to show: changed nodes + their ancestors.
+        // This mirrors the MCP diff_mdd tool which annotates the diff tree and
+        // supports max_depth filtering — here we filter by diff status instead.
+        let node_count = core.all_nodes.len();
+        let mut show = vec![false; node_count];
+
+        // Pass 1: mark all changed (non-Unchanged) nodes.
+        for (i, node) in core.all_nodes.iter().enumerate() {
+            if !matches!(node.diff_status, Some(DiffStatus::Unchanged) | None) {
+                show[i] = true;
+            }
+        }
+
+        // Pass 2: mark ancestors of changed nodes so the LLM has path context.
+        let max_depth = core.all_nodes.iter().map(|n| n.depth).max().unwrap_or(0);
+        let mut parent_at_depth = vec![0usize; max_depth.saturating_add(1)];
+        for (i, node) in core.all_nodes.iter().enumerate() {
+            if let Some(slot) = parent_at_depth.get_mut(node.depth) {
+                *slot = i;
+            }
+            if show.get(i).copied().unwrap_or(false) && node.depth > 0 {
+                for d in (0..node.depth).rev() {
+                    let Some(&ancestor) = parent_at_depth.get(d) else {
+                        break;
+                    };
+                    if show.get(ancestor).copied().unwrap_or(false) {
+                        break;
+                    }
+                    if let Some(slot) = show.get_mut(ancestor) {
+                        *slot = true;
+                    }
+                }
+            }
+        }
+
+        // Emit visible nodes with diff markers.
+        for (i, node) in core.all_nodes.iter().enumerate() {
+            if !show.get(i).copied().unwrap_or(false) {
+                continue;
+            }
+            let diff_marker = match node.diff_status {
+                Some(DiffStatus::Added) => "+ ",
+                Some(DiffStatus::Removed) => "- ",
+                Some(DiffStatus::Modified) => "~ ",
+                Some(DiffStatus::Unchanged) | None => "  ",
+            };
             let indent = "  ".repeat(node.depth);
-            lines.push(format!("{indent}- [{:?}] {}", node.node_type, node.text));
+            lines.push(format!("{diff_marker}{indent}[{:?}] {}", node.node_type, node.text));
+        }
+    } else {
+        lines.push("MDD structure (containers, services, and sub-services):".to_owned());
+        for node in &core.all_nodes {
+            if node.depth <= 3 {
+                let indent = "  ".repeat(node.depth);
+                lines.push(format!("{indent}- [{:?}] {}", node.node_type, node.text));
+            }
         }
     }
-    lines.join("\n")
+
+    // Apply a character budget to prevent token-limit errors regardless of database size.
+    const MAX_CONTEXT_CHARS: usize = 40_000;
+    let result = lines.join("\n");
+    if result.len() > MAX_CONTEXT_CHARS {
+        let mut truncated = result[..MAX_CONTEXT_CHARS].to_owned();
+        truncated.push_str(
+            "\n\n[Context truncated — database too large to fit in one request. \
+             Ask specific questions about services or nodes by name.]",
+        );
+        truncated
+    } else {
+        result
+    }
 }

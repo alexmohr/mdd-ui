@@ -28,6 +28,7 @@ edition = "2024"
 license = "Apache-2.0"
 
 [features]
+default = ["mcp"]
 mcp = ["dep:rmcp", "dep:tokio"]
 
 [build-dependencies]
