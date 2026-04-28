@@ -264,7 +264,19 @@ fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSect
         && let Some(dl) = proto.diag_layer()
         && let Some(name) = dl.short_name()
     {
-        rows.push(kv_row("Protocol", name.to_owned()));
+        let name = name.to_owned();
+        rows.push(DetailRow::normal(
+            vec![
+                DetailCell::text("Protocol"),
+                DetailCell::new(name.clone(), CellType::ParameterName).with_jump(
+                    CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                        index: usize::MAX,
+                        short_name: name,
+                    }),
+                ),
+            ],
+            0,
+        ));
     }
 
     if let Some(ps) = cpr.prot_stack()
