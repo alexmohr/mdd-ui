@@ -52,7 +52,7 @@ pub fn build_parent_refs_detail_section<'a>(
             DetailRow::normal(
                 vec![
                     DetailCell::new(name.clone(), CellType::ParameterName).with_jump(
-                        CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                        CellJumpTarget::new(CellJumpTargetType::Container {
                             index: usize::MAX,
                             short_name: name,
                         }),
@@ -181,7 +181,7 @@ fn build_parent_refs_overview(parent_refs_list: &[ParentRef<'_>]) -> DetailSecti
             DetailRow::normal(
                 vec![
                     DetailCell::new(name.clone(), CellType::ParameterName).with_jump(
-                        CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                        CellJumpTarget::new(CellJumpTargetType::Container {
                             index: usize::MAX,
                             short_name: name,
                         }),
@@ -223,7 +223,15 @@ fn build_single_parent_ref_detail(
     ]);
     let general_rows = vec![
         DetailRow::normal(
-            vec![DetailCell::text("Short Name"), DetailCell::text(short_name)],
+            vec![
+                DetailCell::text("Short Name"),
+                DetailCell::new(short_name, CellType::ParameterName).with_jump(
+                    CellJumpTarget::new(CellJumpTargetType::Container {
+                        index: usize::MAX,
+                        short_name: short_name.to_owned(),
+                    }),
+                ),
+            ],
             0,
         ),
         DetailRow::normal(
