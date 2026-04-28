@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-use cda_database::datatypes::DiagLayer;
+use cda_database::datatypes::{DataOperation, DataOperationVariant, DiagLayer};
 
 use super::dops::parse_dop_name;
 use crate::tree::{
@@ -153,27 +153,40 @@ fn make_index_jump(
     })
 }
 
+/// Map a `DataOperation` variant to a short display badge prefix, e.g. `"[Struct] "`.
+fn dop_type_badge(dop: &DataOperation<'_>) -> &'static str {
+    match dop.variant() {
+        Ok(DataOperationVariant::Normal(_)) => "[DOP] ",
+        Ok(DataOperationVariant::Dtc(_)) => "[DTC] ",
+        Ok(DataOperationVariant::Structure(_)) => "[Struct] ",
+        Ok(DataOperationVariant::StaticField(_)) => "[SField] ",
+        Ok(DataOperationVariant::DynamicLengthField(_)) => "[DynLen] ",
+        Ok(DataOperationVariant::EndOfPdu(_)) => "[EoPdu] ",
+        Ok(DataOperationVariant::Mux(_)) => "[Mux] ",
+        Ok(DataOperationVariant::EnvData(_)) => "[EnvData] ",
+        Ok(DataOperationVariant::EnvDataDesc(_)) => "[EnvDesc] ",
+        _ => "",
+    }
+}
+
 /// Helper to create a simple key-value row without jump target.
 fn kv_row(key: &str, value: String) -> DetailRow {
     DetailRow::normal(vec![DetailCell::text(key), DetailCell::text(value)], 0)
 }
 
 /// Helper to create a key-value row with a DOP reference (jump cell).
-/// Uses parsed name parts to show a more readable display name.
-fn dop_row(key: &str, dop_name: &str) -> DetailRow {
+/// Uses parsed name parts to show a more readable display name, prefixed with a type badge.
+fn dop_row(key: &str, dop: &DataOperation<'_>) -> DetailRow {
+    let dop_name = dop.short_name().unwrap_or("?");
     let parsed = parse_dop_name(dop_name);
     let display = parsed.display_name();
-    let value = if display.is_empty() {
+    let nav_name = if display.is_empty() {
         dop_name.to_owned()
     } else {
         display.clone()
     };
-    // Use the display name for navigation target since tree nodes also use display names
-    let nav_name = if display.is_empty() {
-        dop_name.to_owned()
-    } else {
-        display
-    };
+    let badge = dop_type_badge(dop);
+    let value = format!("{badge}{nav_name}");
     DetailRow::normal(
         vec![
             DetailCell::text(key),
@@ -248,8 +261,7 @@ fn build_general_section(layer: &DiagLayer<'_>, idx: usize) -> Option<DetailSect
             }
             // Add the associated DOP with jump target
             if let Some(dop) = rcp.dop() {
-                let dop_name = dop.short_name().unwrap_or("?");
-                rows.push(dop_row("DOP", dop_name));
+                rows.push(dop_row("DOP", &DataOperation(dop)));
             }
         }
     }
