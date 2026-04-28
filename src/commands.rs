@@ -67,6 +67,7 @@ pub enum JumpTargetType {
     Parameter { param_id: u32 },
     Dop { index: usize, name: String },
     TreeNodeByIndex { index: usize, short_name: String },
+    Container { index: usize, short_name: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -1057,6 +1058,22 @@ fn resolve_jump_target(nodes: &[TreeNode], target: &JumpTargetType) -> Option<us
         }
         JumpTargetType::Parameter { param_id } => {
             nodes.iter().position(|n| n.param_id() == Some(*param_id))
+        }
+        JumpTargetType::Container { index, short_name } => {
+            let exact = |n: &TreeNode| n.short_name().is_some_and(|sn| sn == short_name);
+            let icase = |n: &TreeNode| {
+                let lower = short_name.to_lowercase();
+                n.short_name()
+                    .is_some_and(|sn| sn.to_lowercase() == lower)
+            };
+            if nodes.get(*index).is_some_and(exact) {
+                Some(*index)
+            } else {
+                nodes
+                    .iter()
+                    .position(exact)
+                    .or_else(|| nodes.iter().position(icase))
+            }
         }
     }
 }

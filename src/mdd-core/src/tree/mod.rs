@@ -61,16 +61,17 @@ pub fn resolve_all_indices(nodes: &mut [TreeNode]) {
         }
     }
 
-    // 3. Resolve all TreeNodeByIndex indices in jump targets.
+    // 3. Resolve all jump-target indices.
     for node in nodes.iter_mut() {
         let sections = Arc::make_mut(&mut node.detail_sections);
-        resolve_sections(&name_to_idx, sections);
+        resolve_sections(&name_to_idx, &container_map, sections);
     }
 }
 
-/// Recursively resolve `TreeNodeByIndex` indices in a slice of sections.
+/// Recursively resolve jump-target indices in a slice of sections.
 fn resolve_sections(
     name_to_idx: &std::collections::HashMap<String, usize>,
+    container_map: &std::collections::HashMap<String, usize>,
     sections: &mut [DetailSectionData],
 ) {
     for section in sections.iter_mut() {
@@ -89,9 +90,14 @@ fn resolve_sections(
                             *index = real;
                         }
                     }
+                    CellJumpTargetType::Container { index, short_name } => {
+                        if let Some(&real) = container_map.get(short_name.as_str()) {
+                            *index = real;
+                        }
+                    }
                     CellJumpTargetType::Parameter { .. } => {}
                 }),
-            DetailContent::Composite(subs) => resolve_sections(name_to_idx, subs),
+            DetailContent::Composite(subs) => resolve_sections(name_to_idx, container_map, subs),
             DetailContent::PlainText(_) => {}
         }
     }

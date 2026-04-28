@@ -444,6 +444,12 @@ pub enum CellJumpTargetType {
     /// `index` no longer matches (e.g. after sorting), the handler falls
     /// back to a hierarchy search by `short_name`.
     TreeNodeByIndex { index: usize, short_name: String },
+    /// Navigate to a top-level Container node (Variant / Protocol / ECU Shared
+    /// Data / Functional Group) by its canonical short name.  Unlike
+    /// [`TreeNodeByIndex`], this variant resolves *only* against nodes whose
+    /// payload carries a `short_name` (i.e. actual containers), never against
+    /// plain-text child nodes that happen to share the same display text.
+    Container { index: usize, short_name: String },
 }
 
 /// Per-cell jump target metadata: tells the navigation system where clicking
