@@ -105,7 +105,7 @@ pub struct DiagLayerSnapshot {
 pub struct DiagServiceSnapshot {
     pub diag_comm: DiagCommSnapshot,
     pub request_id: Option<u8>,
-    pub request_sub_function: Option<(u16, u32)>,
+    pub request_sub_function: Option<(u32, u32)>,
     pub addressing: String,
     pub transmission_mode: String,
     pub is_cyclic: bool,

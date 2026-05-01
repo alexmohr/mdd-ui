@@ -2,10 +2,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 <script setup lang="ts">
-import { computed, ref, nextTick } from "vue";
+import { computed, ref, nextTick, watch } from "vue";
 import { useAppStore } from "../stores/app";
-import type { DetailSection, DetailContent, DetailRow, JumpTarget } from "../api/commands";
-import { getNodePath } from "../api/commands";
+import type { DetailSection, DetailContent, DetailRow, JumpTarget, EcuLock } from "../api/commands";
+import { getNodePath, sovdToUds, serviceSchema, sendToCda, getNodeVariant, listEcuLocks, createEcuLock, deleteEcuLock, getEcuLockDetail } from "../api/commands";
+import ByteGridView from "./ByteGridView.vue";
 
 const store = useAppStore();
 
@@ -22,6 +23,333 @@ const tabSections = computed<DetailSection[]>(() =>
 const activeSection = computed<DetailSection | null>(() =>
   tabSections.value[store.selectedTab] ?? null,
 );
+
+// Show UDS hex/byte-grid for request and response sections
+const UDS_SECTION_TYPES = new Set(["Requests", "PosResponses", "NegResponses"]);
+
+/** Extract the ODX short name from a display name like "0x22F190 - ReadVIN" → "ReadVIN". */
+function extractServiceShortName(displayName: string): string {
+  const sep = displayName.indexOf(" - ");
+  return sep >= 0 ? displayName.slice(sep + 3) : displayName;
+}
+
+const udsServiceName = computed<string | null>(() => {
+  if (!activeSection.value) return null;
+  if (!UDS_SECTION_TYPES.has(activeSection.value.section_type)) return null;
+  const text = store.selectedNode?.text;
+  return text ? extractServiceShortName(text) : null;
+});
+
+const isRequestSection = computed(() => activeSection.value?.section_type === "Requests");
+
+// ── Variant resolution for UDS operations ───────────────────────
+// Walk the tree parent chain to find which variant the selected node belongs
+// to, so the UDS translator uses the correct variant (not always "base").
+const nodeVariant = ref<string | null>(null);
+
+watch(
+  () => store.selectedIndex,
+  async (idx) => {
+    nodeVariant.value = null;
+    if (idx == null) return;
+    try {
+      nodeVariant.value = await getNodeVariant(idx);
+    } catch {
+      // non-fatal — falls back to whatever variant is currently active
+    }
+  },
+  { immediate: true },
+);
+
+// ── Const types that are read-only ──────────────────────────────
+const CONST_TYPES = new Set([
+  "CodedConst",
+  "NrcConst",
+  "PhysConst",
+  "Reserved",
+  "MatchingRequestParam",
+]);
+
+// ── Parse byte_pattern_rows for UDS hex assembly ────────────────
+interface UdsParam {
+  name: string;
+  byteOffset: string;
+  hex: string;
+  paramType: string;
+  isConst: boolean;
+  bitLength: number;
+}
+
+function parseBitLength(bitRange: string): number {
+  const range = /\[(\d+):(\d+)\]/.exec(bitRange);
+  if (range) return Number(range[1]) - Number(range[2]) + 1;
+  const single = /\[(\d+)\]/.exec(bitRange);
+  if (single) return 1;
+  return 8;
+}
+
+function parseBytePatternRows(rows: DetailRow[]): UdsParam[] {
+  return rows
+    .filter((r) => r.row_type !== "Header")
+    .map((r) => {
+      const cells = r.cells;
+      const paramType = cells[5]?.text ?? "";
+      const hex = cells[2]?.text ?? "";
+      const bitRange = cells[1]?.text ?? "";
+      return {
+        name: cells[4]?.text ?? "",
+        byteOffset: cells[0]?.text ?? "",
+        hex,
+        paramType,
+        isConst: CONST_TYPES.has(paramType) || hex.startsWith("0x"),
+        bitLength: parseBitLength(bitRange),
+      };
+    });
+}
+
+const udsParams = computed<UdsParam[]>(() => {
+  const rows = activeSection.value?.byte_pattern_rows;
+  return rows ? parseBytePatternRows(rows) : [];
+});
+
+// Editable decimal values for variable params (keyed by param name)
+const editableValues = ref<Record<string, string>>({});
+
+// CDA-based UDS hex (declared early so the immediate watch below can reference it)
+const cdaUdsHex = ref<string | null>(null);
+
+function initEditableValues() {
+  const next: Record<string, string> = {};
+  for (const p of udsParams.value) {
+    if (!p.isConst) {
+      next[p.name] = editableValues.value[p.name] ?? "";
+    }
+  }
+  editableValues.value = next;
+}
+
+watch(() => activeSection.value?.byte_pattern_rows, () => {
+  initEditableValues();
+  cdaUdsHex.value = null;
+}, { immediate: true });
+
+// ── Map param name → const/editable for table row identification ─
+const nonConstParamNames = computed<Set<string>>(() => {
+  const s = new Set<string>();
+  for (const p of udsParams.value) {
+    if (!p.isConst) s.add(p.name);
+  }
+  return s;
+});
+
+/** Get the Short Name of a main-table row (column 0). */
+function rowParamName(row: DetailRow): string {
+  return row.cells[0]?.text ?? "";
+}
+
+function isRowEditable(row: DetailRow): boolean {
+  return nonConstParamNames.value.has(rowParamName(row));
+}
+
+// ── Value helpers for editable params ────────────────────────────
+function bitLengthForParam(name: string): number {
+  return udsParams.value.find((u) => u.name === name)?.bitLength ?? 8;
+}
+
+function maxValueForBits(bits: number): number {
+  if (bits >= 32) return 0xFFFFFFFF;
+  return (1 << bits) - 1;
+}
+
+function valuePlaceholder(name: string): string {
+  const bl = bitLengthForParam(name);
+  const max = maxValueForBits(bl);
+  return bl <= 8 ? `0–${max} (${bl} bit${bl > 1 ? "s" : ""})` : `0–${max}`;
+}
+
+function sanitizeValue(name: string) {
+  const raw = editableValues.value[name] ?? "";
+  editableValues.value[name] = raw.replace(/[^0-9]/g, "");
+}
+
+function normalizeValue(name: string) {
+  const raw = editableValues.value[name] ?? "";
+  if (raw === "") return;
+  const num = parseInt(raw, 10);
+  if (isNaN(num)) { editableValues.value[name] = ""; return; }
+  const max = maxValueForBits(bitLengthForParam(name));
+  editableValues.value[name] = String(Math.min(num, max));
+}
+
+// ── UDS hex from const byte-pattern (fallback preview) ──────────
+const constOnlyHex = computed(() => {
+  if (udsParams.value.length === 0) return "";
+  const byteMap = new Map<number, string>();
+  for (const p of udsParams.value) {
+    if (!p.isConst || !p.hex.startsWith("0x")) continue;
+    let hexOnly = p.hex.replace(/^0x/i, "");
+    if (hexOnly.length === 0) continue;
+    if (hexOnly.length % 2 !== 0) hexOnly = "0" + hexOnly;
+    const byteStart = parseInt(p.byteOffset.trim().split("-")[0] ?? "0", 10);
+    for (let i = 0; i < hexOnly.length / 2; i += 1) {
+      byteMap.set(byteStart + i, hexOnly.slice(i * 2, i * 2 + 2).toUpperCase());
+    }
+  }
+  if (byteMap.size === 0) return "";
+  const maxByte = Math.max(...byteMap.keys());
+  return Array.from({ length: maxByte + 1 }, (_, i) => byteMap.get(i) ?? "??").join(" ");
+});
+
+// ── CDA-based UDS payload generation ────────────────────────────
+let cdaTimer: ReturnType<typeof setTimeout> | null = null;
+const cdaError = ref<string | null>(null);
+
+async function generateCdaUds() {
+  const name = udsServiceName.value;
+  cdaError.value = null;
+  if (!name) { cdaUdsHex.value = null; return; }
+  const params: Record<string, unknown> = {};
+  let hasAny = false;
+  for (const p of udsParams.value) {
+    if (p.isConst) continue;
+    const raw = editableValues.value[p.name] ?? "";
+    if (raw === "") continue;
+    params[p.name] = raw;
+    hasAny = true;
+  }
+  if (!hasAny) { cdaUdsHex.value = null; return; }
+  try {
+    const result = await sovdToUds(name, params, nodeVariant.value);
+    cdaUdsHex.value = result.hex_bytes;
+  } catch (e) {
+    cdaError.value = String(e);
+    cdaUdsHex.value = null;
+  }
+}
+
+watch(editableValues, () => {
+  if (cdaTimer) clearTimeout(cdaTimer);
+  cdaTimer = setTimeout(generateCdaUds, 400);
+}, { deep: true });
+
+watch(udsServiceName, () => { cdaUdsHex.value = null; });
+
+const udsHexString = computed(() => cdaUdsHex.value || constOnlyHex.value);
+
+// ── SOVD panel state ────────────────────────────────────────────
+const sovdUrl = ref<string | null>(null);
+const sovdSending = ref(false);
+const sovdResult = ref<string | null>(null);
+const sovdSendError = ref<string | null>(null);
+
+// Fetch SOVD URL when service changes
+watch(udsServiceName, async (name) => {
+  sovdUrl.value = null;
+  sovdResult.value = null;
+  sovdSendError.value = null;
+  if (!name) return;
+  try {
+    const schema = await serviceSchema(name, nodeVariant.value);
+    sovdUrl.value = schema.sovd_path;
+  } catch { /* service may not be in CDA */ }
+}, { immediate: true });
+
+// Build SOVD request JSON from editable parameter values
+const sovdRequestJson = computed<Record<string, unknown>>(() => {
+  const obj: Record<string, unknown> = {};
+  for (const p of udsParams.value) {
+    if (p.isConst) continue;
+    const raw = editableValues.value[p.name] ?? "";
+    if (raw === "") continue;
+    const num = parseInt(raw, 10);
+    if (!isNaN(num)) obj[p.name] = num;
+  }
+  return obj;
+});
+
+const sovdRequestJsonStr = computed(() =>
+  JSON.stringify(sovdRequestJson.value, null, 2),
+);
+
+async function doSendToCda() {
+  const name = udsServiceName.value;
+  const url = sovdUrl.value;
+  if (!name || !url) return;
+  sovdSending.value = true;
+  sovdSendError.value = null;
+  sovdResult.value = null;
+  try {
+    const result = await sendToCda(store.cdaBaseUrl, url, sovdRequestJson.value);
+    sovdResult.value = typeof result === "string" ? result : JSON.stringify(result, null, 2);
+  } catch (e) {
+    sovdSendError.value = String(e);
+  } finally {
+    sovdSending.value = false;
+  }
+}
+
+// ── ECU Locks panel state ───────────────────────────────────────
+const isEcuLocksSection = computed(() => activeSection.value?.section_type === "EcuLocks");
+const ecuLocks = ref<(EcuLock & { expiration?: string })[]>([]);
+const ecuLocksLoading = ref(false);
+const ecuLocksError = ref<string | null>(null);
+const ecuLockExpiration = ref("60");
+const ecuLockCreating = ref(false);
+
+async function fetchEcuLocks() {
+  ecuLocksLoading.value = true;
+  ecuLocksError.value = null;
+  try {
+    const locks = await listEcuLocks(store.cdaBaseUrl, store.ecuName);
+    const detailed: (EcuLock & { expiration?: string })[] = [];
+    for (const lock of locks) {
+      try {
+        const detail = await getEcuLockDetail(store.cdaBaseUrl, store.ecuName, lock.id);
+        detailed.push({ ...lock, expiration: detail.lock_expiration });
+      } catch {
+        detailed.push(lock);
+      }
+    }
+    ecuLocks.value = detailed;
+  } catch (e) {
+    ecuLocksError.value = String(e);
+    ecuLocks.value = [];
+  } finally {
+    ecuLocksLoading.value = false;
+  }
+}
+
+async function doCreateEcuLock() {
+  const secs = parseInt(ecuLockExpiration.value, 10);
+  if (isNaN(secs) || secs <= 0) return;
+  ecuLockCreating.value = true;
+  ecuLocksError.value = null;
+  try {
+    await createEcuLock(store.cdaBaseUrl, store.ecuName, secs);
+    await fetchEcuLocks();
+  } catch (e) {
+    ecuLocksError.value = String(e);
+  } finally {
+    ecuLockCreating.value = false;
+  }
+}
+
+async function doDeleteEcuLock(lockId: string) {
+  ecuLocksError.value = null;
+  try {
+    await deleteEcuLock(store.cdaBaseUrl, store.ecuName, lockId);
+    await fetchEcuLocks();
+  } catch (e) {
+    ecuLocksError.value = String(e);
+  }
+}
+
+watch(isEcuLocksSection, (active) => {
+  if (active) fetchEcuLocks();
+});
+
+// Value column index in the main param table
+const VALUE_COL_INDEX = 5;
 
 function text(c: DetailContent): string[] | null { return "PlainText" in c ? c.PlainText : null; }
 function getTable(c: DetailContent) { return "Table" in c ? c.Table : null; }
@@ -279,8 +607,86 @@ async function tableCtxAction(action: string) {
 
       <!-- Content -->
       <div v-if="activeSection" class="flex-1 overflow-auto">
+        <!-- ECU Locks panel -->
+        <div v-if="isEcuLocksSection" class="p-4 space-y-4">
+          <!-- Create lock form -->
+          <div class="flex items-end gap-3">
+            <div>
+              <label class="block text-[10px] text-neutral-500 uppercase tracking-wide font-medium mb-1">Lock Expiration (seconds)</label>
+              <input
+                v-model="ecuLockExpiration"
+                type="number"
+                min="1"
+                class="w-40 px-2 py-1.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-200 font-mono text-xs placeholder-neutral-600 focus:outline-none focus:border-blue-500"
+                placeholder="60"
+                @keydown.enter="doCreateEcuLock"
+              />
+            </div>
+            <button
+              class="px-3 py-1.5 rounded text-xs font-medium transition-colors shrink-0"
+              :class="ecuLockCreating
+                ? 'bg-neutral-700 text-neutral-400 cursor-wait'
+                : 'bg-blue-600 text-white hover:bg-blue-500'"
+              :disabled="ecuLockCreating"
+              @click="doCreateEcuLock"
+            >{{ ecuLockCreating ? 'Creating…' : 'Create Lock' }}</button>
+            <button
+              class="px-3 py-1.5 rounded text-xs font-medium bg-neutral-800 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700 transition-colors shrink-0"
+              :disabled="ecuLocksLoading"
+              @click="fetchEcuLocks"
+            >Refresh</button>
+          </div>
+
+          <!-- Error -->
+          <div v-if="ecuLocksError" class="px-2 py-1.5 rounded bg-red-900/30 border border-red-700/30 text-red-300 text-xs break-all">
+            {{ ecuLocksError }}
+          </div>
+
+          <!-- Loading -->
+          <div v-if="ecuLocksLoading" class="text-neutral-500 text-xs">Loading locks…</div>
+
+          <!-- Locks table -->
+          <div v-else-if="ecuLocks.length > 0">
+            <table class="w-full text-sm" style="table-layout: fixed;">
+              <thead class="sticky top-0 bg-neutral-950 z-10">
+                <tr class="border-b border-gray-800/80">
+                  <th class="text-left px-3 py-2 text-xs text-neutral-500 font-medium uppercase tracking-wider">Lock ID</th>
+                  <th class="text-left px-3 py-2 text-xs text-neutral-500 font-medium uppercase tracking-wider w-24">Owned</th>
+                  <th class="text-left px-3 py-2 text-xs text-neutral-500 font-medium uppercase tracking-wider">Expiration</th>
+                  <th class="text-right px-3 py-2 text-xs text-neutral-500 font-medium uppercase tracking-wider w-24"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="lock in ecuLocks"
+                  :key="lock.id"
+                  class="border-b border-neutral-800/30 hover:bg-neutral-800/20 transition-colors"
+                >
+                  <td class="px-3 py-1.5 text-neutral-300 font-mono text-xs truncate">{{ lock.id }}</td>
+                  <td class="px-3 py-1.5">
+                    <span
+                      class="inline-flex items-center rounded px-1.5 py-px text-[10px] font-semibold leading-none"
+                      :class="lock.owned ? 'bg-emerald-500/20 text-emerald-300' : 'bg-neutral-700/40 text-neutral-400'"
+                    >{{ lock.owned ? 'Yes' : 'No' }}</span>
+                  </td>
+                  <td class="px-3 py-1.5 text-neutral-400 text-xs font-mono">{{ lock.expiration ?? '—' }}</td>
+                  <td class="px-3 py-1.5 text-right">
+                    <button
+                      class="px-2 py-0.5 rounded text-[10px] font-medium bg-red-900/30 text-red-400 hover:bg-red-800/40 hover:text-red-300 transition-colors"
+                      @click="doDeleteEcuLock(lock.id)"
+                    >Delete</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty state -->
+          <div v-else class="text-neutral-600 text-xs">No ECU locks found.</div>
+        </div>
+
         <!-- Plain text -->
-        <div v-if="text(activeSection.content)" class="p-4 space-y-1">
+        <div v-else-if="text(activeSection.content)" class="p-4 space-y-1">
           <p
             v-for="(line, i) in text(activeSection.content)"
             :key="i"
@@ -289,7 +695,7 @@ async function tableCtxAction(action: string) {
         </div>
 
         <!-- Table -->
-        <div v-else-if="getTable(activeSection.content)" @contextmenu="onTableContextMenu($event, getTable(activeSection.content)!.header, sortedRows(getTable(activeSection.content)!.rows))">
+        <div v-if="!isEcuLocksSection && getTable(activeSection.content)" @contextmenu="onTableContextMenu($event, getTable(activeSection.content)!.header, sortedRows(getTable(activeSection.content)!.rows))">
           <table class="text-sm" style="table-layout: fixed;">
             <thead class="sticky top-0 bg-neutral-950 z-10">
               <tr class="border-b border-gray-800/80">
@@ -330,8 +736,21 @@ async function tableCtxAction(action: string) {
                   :style="{ ...(ci === 0 && row.indent > 0 ? { paddingLeft: `${row.indent * 10 + 12}px` } : {}), ...colStyle(ci, sectionKey()) }"
                   @click="nav(cell.jump_target)"
                 >
-                  <template v-for="p in [cellParts(cell.text)]" :key="0">
-                    <span v-if="p.badge" class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none mr-1 shrink-0" :class="`${p.badge.bg} ${p.badge.fg}`">{{ p.badge.label }}</span>{{ p.text }}
+                  <!-- Editable value input for Value column on non-const UDS rows -->
+                  <template v-if="isRequestSection && ci === VALUE_COL_INDEX && isRowEditable(row)">
+                    <input
+                      v-model="editableValues[rowParamName(row)]"
+                      class="w-full px-1 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-200 font-mono text-xs placeholder-neutral-600 focus:outline-none focus:border-blue-500"
+                      :placeholder="valuePlaceholder(rowParamName(row))"
+                      @input="sanitizeValue(rowParamName(row))"
+                      @blur="normalizeValue(rowParamName(row))"
+                      @click.stop
+                    />
+                  </template>
+                  <template v-else>
+                    <template v-for="p in [cellParts(cell.text)]" :key="0">
+                      <span v-if="p.badge" class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none mr-1 shrink-0" :class="`${p.badge.bg} ${p.badge.fg}`">{{ p.badge.label }}</span>{{ p.text }}
+                    </template>
                   </template>
                 </td>
               </tr>
@@ -339,8 +758,77 @@ async function tableCtxAction(action: string) {
           </table>
         </div>
 
+        <!-- UDS / SOVD request tabs – shown below the table for request sections -->
+        <div v-if="isRequestSection && (udsHexString || sovdUrl)" class="px-3 pt-3 space-y-0.5">
+          <div class="flex items-center gap-1 text-[10px] uppercase tracking-wide font-medium">
+            <button
+              class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors"
+              :class="store.requestPanelTab === 'uds'
+                ? 'bg-blue-600/20 text-blue-400'
+                : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'"
+              @click="store.setRequestPanelTab('uds')"
+            >UDS Request</button>
+            <button
+              v-if="sovdUrl"
+              class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors"
+              :class="store.requestPanelTab === 'sovd'
+                ? 'bg-blue-600/20 text-blue-400'
+                : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'"
+              @click="store.setRequestPanelTab('sovd')"
+            >SOVD Request</button>
+          </div>
+
+          <!-- UDS tab content -->
+          <template v-if="store.requestPanelTab === 'uds'">
+            <div v-if="udsHexString" class="px-2 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-green-300 text-xs font-mono break-all select-all">
+              {{ udsHexString }}
+            </div>
+          </template>
+
+          <!-- SOVD tab content -->
+          <template v-if="store.requestPanelTab === 'sovd' && udsServiceName">
+            <div class="flex items-center gap-2 text-[10px] text-neutral-500 font-medium">
+              <span v-if="sovdUrl" class="font-mono text-neutral-400 normal-case tracking-normal text-xs truncate">{{ store.cdaBaseUrl }}{{ sovdUrl }}</span>
+            </div>
+            <div class="flex gap-3">
+              <pre class="flex-1 px-2 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-xs font-mono text-neutral-300 overflow-auto max-h-40 select-all whitespace-pre">{{ sovdRequestJsonStr }}</pre>
+              <button
+                class="self-start px-3 py-1.5 rounded text-xs font-medium transition-colors shrink-0"
+                :class="sovdSending
+                  ? 'bg-neutral-700 text-neutral-400 cursor-wait'
+                  : 'bg-blue-600 text-white hover:bg-blue-500'"
+                :disabled="sovdSending || !sovdUrl"
+                @click="doSendToCda"
+              >{{ sovdSending ? 'Sending…' : 'Send' }}</button>
+            </div>
+            <div v-if="sovdResult">
+              <div class="text-[10px] text-neutral-600 uppercase tracking-wide font-medium mb-0.5">CDA Response</div>
+              <pre class="px-2 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-green-300 text-xs font-mono break-all select-all overflow-auto max-h-40 whitespace-pre">{{ sovdResult }}</pre>
+            </div>
+            <div v-if="sovdSendError">
+              <div class="px-2 py-1.5 rounded bg-red-900/30 border border-red-700/30 text-red-300 text-xs break-all">{{ sovdSendError }}</div>
+            </div>
+          </template>
+        </div>
+        <div v-if="isRequestSection && cdaError" class="px-3 pt-2">
+          <div class="px-2 py-1.5 rounded bg-red-900/30 border border-red-700/30 text-red-300 text-xs break-all">
+            {{ cdaError }}
+          </div>
+        </div>
+
+        <!-- Byte/bit grid – shown below the table when byte_pattern_rows are present -->
+        <div
+          v-if="activeSection.byte_pattern_rows && activeSection.byte_pattern_rows.length > 0"
+          class="px-3 pt-4 pb-3"
+        >
+          <ByteGridView
+            :rows="activeSection.byte_pattern_rows"
+            :on-navigate="nav"
+          />
+        </div>
+
         <!-- Composite -->
-        <div v-else-if="composite(activeSection.content)" class="p-3 space-y-3">
+        <div v-if="!isEcuLocksSection && !text(activeSection.content) && !getTable(activeSection.content) && composite(activeSection.content)" class="p-3 space-y-3">
           <div
             v-for="(sub, si) in composite(activeSection.content)"
             :key="si"
@@ -406,6 +894,8 @@ async function tableCtxAction(action: string) {
       <div v-else class="flex-1 flex items-center justify-center text-neutral-600 text-xs">
         No details available
       </div>
+
+      <!-- SOVD request panel (now integrated as tab above) -->
     </template>
     <!-- Tab context menu -->
     <Teleport to="body">

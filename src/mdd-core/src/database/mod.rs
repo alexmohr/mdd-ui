@@ -23,7 +23,7 @@ pub fn load_mdd(path: &str) -> Result<DiagnosticDatabase> {
 
     let config = FlatbBufConfig::default();
 
-    let db = DiagnosticDatabase::new(path.to_owned(), blob, config)
+    let db = DiagnosticDatabase::new_from_bytes(path.to_owned(), blob, config)
         .map_err(|e| anyhow::anyhow!("{e}"))
         .with_context(|| format!("Failed to parse database for ECU: {ecu_name}"))?;
 

@@ -16,6 +16,7 @@ const categories = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
   { id: "behavior", label: "Behavior" },
+  { id: "cda", label: "CDA / SOVD" },
   { id: "updates", label: "Updates" },
 ];
 
@@ -535,6 +536,28 @@ async function handleClearAllCaches() {
                   />
                 </button>
               </div>
+            </section>
+          </template>
+
+          <!-- CDA / SOVD -->
+          <template v-if="activeCategory === 'cda'">
+            <!-- CDA Base URL -->
+            <section class="space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
+                  CDA Base URL
+                </h4>
+                <p class="text-xs text-neutral-500 leading-relaxed">
+                  Base URL of a running Classic Diagnostic Adapter instance for sending SOVD requests.
+                </p>
+              </div>
+              <input
+                type="text"
+                :value="appStore.cdaBaseUrl"
+                class="w-full px-3 py-1.5 rounded-md bg-neutral-800 border border-neutral-700 text-xs text-neutral-200 font-mono placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+                placeholder="http://localhost:20002"
+                @change="appStore.setCdaBaseUrl(($event.target as HTMLInputElement).value.trim())"
+              />
             </section>
           </template>
 

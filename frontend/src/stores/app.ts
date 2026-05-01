@@ -54,6 +54,8 @@ export const useAppStore = defineStore("app", () => {
   const lastTabTitle = ref<string | null>(null);
   const autoCheckUpdates = ref(false);
   const lastTabKey = ref<{ title: string; section_type: string } | null>(null);
+  const cdaBaseUrl = ref("http://localhost:20002");
+  const requestPanelTab = ref<'uds' | 'sovd'>('uds');
 
   const selectedNode = computed(() =>
     nodes.value.find((n: VisibleNode) => n.index === selectedIndex.value) ?? null,
@@ -110,6 +112,8 @@ export const useAppStore = defineStore("app", () => {
       wrap_table_text: wrapTableText.value,
       last_tab_title: lastTabTitle.value,
       auto_check_updates: autoCheckUpdates.value,
+      cda_base_url: cdaBaseUrl.value,
+      request_panel_tab: requestPanelTab.value,
     }).catch(() => {});
   }
 
@@ -147,6 +151,8 @@ export const useAppStore = defineStore("app", () => {
       }
       await api.addRecentFile(path);
       await loadRecentFiles();
+      // Load UDS translator in the background – non-fatal if it fails
+      api.udsLoad(path).catch(() => {});
     } catch (e) {
       status.value = `Error: ${e}`;
     } finally {
@@ -445,6 +451,15 @@ export const useAppStore = defineStore("app", () => {
     autoCheckUpdates.value = v;
     persistPrefs();
   }
+  function setCdaBaseUrl(url: string) {
+    cdaBaseUrl.value = url;
+    persistPrefs();
+  }
+
+  function setRequestPanelTab(tab: 'uds' | 'sovd') {
+    requestPanelTab.value = tab;
+    persistPrefs();
+  }
 
   async function toggleSort(nodeIndex?: number) {
     try {
@@ -506,6 +521,8 @@ export const useAppStore = defineStore("app", () => {
       lastTabTitle.value = prefs.last_tab_title ?? null;
       lastTabKey.value = lastTabTitle.value ? { title: lastTabTitle.value, section_type: '' } : null;
       autoCheckUpdates.value = prefs.auto_check_updates ?? false;
+      cdaBaseUrl.value = prefs.cda_base_url ?? "http://localhost:20002";
+      requestPanelTab.value = (prefs.request_panel_tab as 'uds' | 'sovd') ?? 'uds';
     } catch (e) {
       console.error("Failed to load prefs:", e);
     }
@@ -554,11 +571,12 @@ export const useAppStore = defineStore("app", () => {
     fileLoaded, filePath, hideUnchanged, fontSize, theme, sortLabel, recentFiles,
     rowDensity, rowHeightPx, defaultHideUnchanged, autoExpandFirstLevel,
     maxRecentFiles, wrapTableText, lastTabTitle, displayedRecentFiles, autoCheckUpdates,
+    cdaBaseUrl, requestPanelTab,
     loadFile, loadDiff, selectNode, goBack, goForward, toggleExpand, search, searchFilters,
     clearSearch, removeSearchFilter, toggleFilterOp, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize, setFontSize, setTheme,
     setRowDensity, setDefaultHideUnchanged, setAutoExpandFirstLevel, setMaxRecentFiles, setWrapTableText, setSelectedTab,
-    setAutoCheckUpdates,
+    setAutoCheckUpdates, setCdaBaseUrl, setRequestPanelTab,
     navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
     nextChange, prevChange,
   };

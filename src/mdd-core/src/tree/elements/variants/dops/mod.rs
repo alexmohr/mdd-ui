@@ -719,6 +719,7 @@ fn build_dops_overview_table(
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }]
 }
 
@@ -761,6 +762,7 @@ fn build_short_name_only_overview(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData
             constraints: vec![ColumnConstraint::Percentage(100)],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }]
 }
 
@@ -828,6 +830,7 @@ fn build_category_overview_table(dops: &[DopInfo<'_>]) -> Vec<DetailSectionData>
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }]
 }
 
@@ -853,6 +856,7 @@ fn push_types_section(types_rows: Vec<DetailRow>, sections: &mut Vec<DetailSecti
                     ],
                     use_row_selection: true,
                 },
+                byte_pattern_rows: None,
             },
         );
     }

@@ -13,10 +13,11 @@ use builder::TreeBuilder;
 use cda_database::datatypes::DiagnosticDatabase;
 use elements::{add_ecu_shared_data, add_functional_groups, add_protocols, add_variants};
 // Re-export public types
+pub(crate) use types::BIT_POSITION_UNSET;
 pub use types::{
     CellJumpTarget, CellJumpTargetType, CellType, ChildElementType, ColumnConstraint, DetailCell,
     DetailContent, DetailRow, DetailRowType, DetailSectionData, DetailSectionType, DiffStatus,
-    NodeTextPrefix, NodeType, RowMetadata, SectionType, ServiceListType, TreeNode,
+    NodePayload, NodeTextPrefix, NodeType, RowMetadata, SectionType, ServiceListType, TreeNode,
     lines_to_single_section, param_type_label,
 };
 
@@ -107,21 +108,28 @@ fn resolve_sections(
 /// the TUI to display, together with the ECU name.
 #[must_use]
 pub fn build_tree(db: &DiagnosticDatabase, file_path: &str) -> (Vec<TreeNode>, String) {
-    let mut b = TreeBuilder::new();
-
     // Extract database data
     let data = extract_data(db);
     let ecu_name = data.ecu_name.clone();
+    let mut b = TreeBuilder::new(ecu_name.clone());
 
     // Add General section with ECU info
     if let Some(ref ecu) = data.ecu {
         let ecu_details = get_ecu_summary(db, &data.ecu_name, file_path);
         let ecu_section = lines_to_single_section("Summary", ecu_details);
+        let ecu_locks_section = DetailSectionData::new(
+            "ECU Locks".to_string(),
+            DetailContent::PlainText(vec![
+                "Manage ECU locks via the connected CDA SOVD server.".to_string(),
+            ]),
+            false,
+        )
+        .with_type(DetailSectionType::EcuLocks);
         b.push_section_header(
             "General".to_string(),
             false,
             false,
-            vec![ecu_section],
+            vec![ecu_section, ecu_locks_section],
             SectionType::General,
         );
 

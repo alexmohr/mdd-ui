@@ -90,6 +90,7 @@ fn build_cases_section(mux_dop: &cda_database::datatypes::MuxDop<'_>) -> DetailS
             render_as_header: false,
             section_type: DetailSectionType::Custom,
             content: DetailContent::PlainText(vec!["No cases".to_owned()]),
+            byte_pattern_rows: None,
         };
     };
 
@@ -163,5 +164,6 @@ fn build_cases_section(mux_dop: &cda_database::datatypes::MuxDop<'_>) -> DetailS
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }
 }

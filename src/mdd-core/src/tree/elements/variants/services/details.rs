@@ -4,6 +4,7 @@
  */
 
 use cda_database::datatypes::{DiagComm, DiagService};
+use cda_interfaces::DiagCommType;
 
 use crate::tree::{
     elements::variants::{
@@ -20,6 +21,7 @@ use crate::tree::{
 /// Build detailed sections for a diagnostic service with optional parent info.
 pub fn build_diag_comm_details_with_parent(
     ds: &DiagService<'_>,
+    ecu_name: &str,
     parent_layer_name: Option<&str>,
     container_index: Option<usize>,
 ) -> Vec<DetailSectionData> {
@@ -38,10 +40,12 @@ pub fn build_diag_comm_details_with_parent(
         render_as_header: true,
         content: DetailContent::PlainText(vec![]),
         section_type: DetailSectionType::Header,
+        byte_pattern_rows: None,
     });
 
     sections.push(build_overview_section(
         ds,
+        ecu_name,
         parent_layer_name,
         container_index,
     ));
@@ -159,6 +163,7 @@ pub(super) fn build_diag_comms_table_section(
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }
 }
 
@@ -178,10 +183,29 @@ fn make_index_jump(
     })
 }
 
+/// Determine the SOVD category for a UDS Service Identifier by checking which
+/// `DiagCommType` prefix list contains the SID, then build the SOVD URL.
+fn sovd_url_for_sid(sid: u8, ecu_name: &str, service_name: &str) -> Option<String> {
+    let diag_comm_type = DiagCommType::try_from(sid).ok()?;
+
+    let category = match diag_comm_type {
+        DiagCommType::Configurations => "configurations",
+        DiagCommType::Data => "data",
+        DiagCommType::Faults => "faults",
+        DiagCommType::Modes => "modes",
+        DiagCommType::Operations => "operations",
+    };
+
+    Some(format!(
+        "/vehicle/v15/components/{ecu_name}/{category}/{service_name}"
+    ))
+}
+
 /// Build the common property/value overview rows shared by all service views
 /// (`DiagComms`, Requests, Responses).
 pub(crate) fn build_service_overview_rows(
     ds: &DiagService<'_>,
+    ecu_name: &str,
     parent_layer_name: Option<&str>,
     container_index: Option<usize>,
 ) -> Vec<DetailRow> {
@@ -206,6 +230,17 @@ pub(crate) fn build_service_overview_rows(
             ],
             0,
         ));
+
+        let service_name = ds
+            .diag_comm()
+            .and_then(|dc| dc.short_name())
+            .unwrap_or("unknown");
+        if let Some(sovd_url) = sovd_url_for_sid(sid, ecu_name, service_name) {
+            rows.push(DetailRow::normal(
+                vec![DetailCell::text("SOVD URL"), DetailCell::text(sovd_url)],
+                0,
+            ));
+        }
     }
     if let Some((sub_fn, bit_len)) = ds.request_sub_function_id() {
         let sub_fn_str = if bit_len <= 8 {
@@ -250,10 +285,11 @@ pub(crate) fn build_service_overview_rows(
 /// Build a complete overview `DetailSectionData` from overview rows.
 pub(crate) fn build_service_overview_section(
     ds: &DiagService<'_>,
+    ecu_name: &str,
     parent_layer_name: Option<&str>,
     container_index: Option<usize>,
 ) -> DetailSectionData {
-    let rows = build_service_overview_rows(ds, parent_layer_name, container_index);
+    let rows = build_service_overview_rows(ds, ecu_name, parent_layer_name, container_index);
 
     DetailSectionData::new(
         "Overview".to_owned(),
@@ -276,10 +312,11 @@ pub(crate) fn build_service_overview_section(
 
 fn build_overview_section(
     ds: &DiagService<'_>,
+    ecu_name: &str,
     parent_layer_name: Option<&str>,
     container_index: Option<usize>,
 ) -> DetailSectionData {
-    let mut rows = build_service_overview_rows(ds, parent_layer_name, container_index);
+    let mut rows = build_service_overview_rows(ds, ecu_name, parent_layer_name, container_index);
 
     if let Some(dc) = ds.diag_comm() {
         let states: Vec<String> = dc
@@ -364,6 +401,7 @@ fn build_comparam_refs_section() -> DetailSectionData {
             ],
             use_row_selection: false,
         },
+        byte_pattern_rows: None,
     }
 }
 
@@ -374,6 +412,7 @@ fn build_audience_section(ds: &DiagService<'_>) -> DetailSectionData {
             render_as_header: false,
             section_type: DetailSectionType::Custom,
             content: DetailContent::PlainText(vec!["(No audience info)".to_owned()]),
+            byte_pattern_rows: None,
         },
         |audience| {
             let flag_lines = vec![
@@ -388,6 +427,7 @@ fn build_audience_section(ds: &DiagService<'_>) -> DetailSectionData {
                 render_as_header: false,
                 section_type: DetailSectionType::Custom,
                 content: DetailContent::PlainText(flag_lines),
+                byte_pattern_rows: None,
             }];
 
             let audiences_list: Vec<_> = audience
@@ -403,6 +443,7 @@ fn build_audience_section(ds: &DiagService<'_>) -> DetailSectionData {
                     render_as_header: false,
                     section_type: DetailSectionType::Custom,
                     content: DetailContent::PlainText(audiences_list),
+                    byte_pattern_rows: None,
                 });
             }
 
@@ -411,6 +452,7 @@ fn build_audience_section(ds: &DiagService<'_>) -> DetailSectionData {
                 render_as_header: false,
                 section_type: DetailSectionType::Custom,
                 content: DetailContent::Composite(subsections),
+                byte_pattern_rows: None,
             }
         },
     )
@@ -431,6 +473,7 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
             render_as_header: false,
             section_type: DetailSectionType::Custom,
             content: DetailContent::PlainText(vec!["(No SDGs available)".to_owned()]),
+            byte_pattern_rows: None,
         };
     }
 
@@ -462,6 +505,7 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
                 render_as_header: false,
                 section_type: DetailSectionType::Custom,
                 content: DetailContent::PlainText(vec![format!("SDG: {caption}  (SI: {si})")]),
+                byte_pattern_rows: None,
             };
 
             let table = DetailSectionData {
@@ -482,6 +526,7 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
                     ],
                     use_row_selection: true,
                 },
+                byte_pattern_rows: None,
             };
 
             vec![label, table]
@@ -493,6 +538,7 @@ fn build_sdgs_section(ds: &DiagService<'_>) -> DetailSectionData {
         render_as_header: false,
         section_type: DetailSectionType::Custom,
         content: DetailContent::Composite(subsections),
+        byte_pattern_rows: None,
     }
 }
 
@@ -511,6 +557,7 @@ fn build_related_refs_section() -> DetailSectionData {
             constraints: vec![ColumnConstraint::Percentage(100)],
             use_row_selection: false,
         },
+        byte_pattern_rows: None,
     }
 }
 
@@ -584,6 +631,7 @@ pub(super) fn build_precondition_state_refs_from_diag_comm(
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }
 }
 
@@ -654,5 +702,6 @@ fn build_state_transition_refs_section(ds: &DiagService<'_>) -> DetailSectionDat
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }
 }

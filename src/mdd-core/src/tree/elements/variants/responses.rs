@@ -57,6 +57,7 @@ macro_rules! responses_of {
             | DetailSectionType::NotInheritedDops
             | DetailSectionType::NotInheritedTables
             | DetailSectionType::NotInheritedVariables
+            | DetailSectionType::EcuLocks
             | DetailSectionType::Custom => None,
         }
     };
@@ -117,7 +118,8 @@ fn add_response_service(
         .and_then(|dc| dc.short_name())
         .unwrap_or("?")
         .to_owned();
-    let sections = build_response_view_sections(ds, source_layer, kind, container_index);
+    let sections =
+        build_response_view_sections(ds, b.ecu_name(), source_layer, kind, container_index);
     let has_params = responses_of!(ds, kind).is_some_and(|r| {
         r.iter()
             .any(|resp| resp.params().is_some_and(|p| !p.is_empty()))
@@ -287,6 +289,7 @@ pub fn add_neg_responses_section<'a>(
 /// Build complete service view with response tabs
 fn build_response_view_sections(
     ds: &DiagService<'_>,
+    ecu_name: &str,
     parent_layer_name: Option<&str>,
     kind: &ResponseKind,
     container_index: Option<usize>,
@@ -307,10 +310,12 @@ fn build_response_view_sections(
         render_as_header: true,
         section_type: DetailSectionType::Header,
         content: DetailContent::PlainText(vec![]),
+        byte_pattern_rows: None,
     });
 
     sections.push(build_service_overview_section(
         ds,
+        ecu_name,
         parent_layer_name,
         container_index,
     ));

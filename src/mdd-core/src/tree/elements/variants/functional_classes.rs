@@ -313,6 +313,7 @@ fn build_functional_class_detail(
         render_as_header: true,
         content: DetailContent::PlainText(vec![]),
         section_type: DetailSectionType::Header,
+        byte_pattern_rows: None,
     });
 
     // Build services table

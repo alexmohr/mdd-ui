@@ -85,7 +85,8 @@ pub fn add_requests_section<'a>(
                 .to_owned();
             node_indices.insert(short_name.clone(), b.next_index());
             let container_idx = source_layer.and_then(|name| b.find_container_index(name));
-            let sections = build_request_view_sections(ds, source_layer, container_idx);
+            let sections =
+                build_request_view_sections(ds, b.ecu_name(), source_layer, container_idx);
 
             let has_params = ds
                 .request()
@@ -152,6 +153,7 @@ pub fn build_request_section(ds: &DiagService<'_>) -> DetailSectionData {
 /// Build complete service view with Request tab (used by Requests section)
 fn build_request_view_sections(
     ds: &DiagService<'_>,
+    ecu_name: &str,
     parent_layer_name: Option<&str>,
     container_index: Option<usize>,
 ) -> Vec<DetailSectionData> {
@@ -170,9 +172,11 @@ fn build_request_view_sections(
         render_as_header: true,
         section_type: DetailSectionType::Header,
         content: DetailContent::PlainText(vec![]),
+        byte_pattern_rows: None,
     });
     sections.push(build_service_overview_section(
         ds,
+        ecu_name,
         parent_layer_name,
         container_index,
     ));

@@ -386,7 +386,7 @@ fn compare_services(
         });
     }
     if old.request_sub_function != new.request_sub_function {
-        let format_sub_fn = |opt: Option<(u16, u32)>| -> String {
+        let format_sub_fn = |opt: Option<(u32, u32)>| -> String {
             opt.map_or_else(
                 || "None".to_owned(),
                 |(sub_fn, bit_len)| format!("0x{sub_fn:X} ({bit_len} bits)"),

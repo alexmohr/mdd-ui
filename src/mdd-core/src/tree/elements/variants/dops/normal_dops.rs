@@ -107,6 +107,7 @@ fn build_constraints_section(
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }
 }
 
@@ -133,6 +134,7 @@ fn build_compu_direction_section(
             render_as_header: false,
             section_type: DetailSectionType::Custom,
             content: DetailContent::PlainText(vec![cat]),
+            byte_pattern_rows: None,
         });
     }
 
@@ -151,6 +153,7 @@ fn build_compu_direction_section(
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     });
 
     DetailSectionData {
@@ -158,6 +161,7 @@ fn build_compu_direction_section(
         render_as_header: false,
         section_type: DetailSectionType::Custom,
         content: DetailContent::Composite(subsections),
+        byte_pattern_rows: None,
     }
 }
 

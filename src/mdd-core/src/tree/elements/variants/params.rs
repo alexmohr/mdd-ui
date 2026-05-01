@@ -168,6 +168,7 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
         render_as_header: true,
         section_type: DetailSectionType::Header,
         content: DetailContent::PlainText(vec![]),
+        byte_pattern_rows: None,
     });
 
     let mut overview_rows = Vec::new();
@@ -481,6 +482,13 @@ pub fn build_param_section<'a, I>(
 where
     I: IntoIterator<Item = Parameter<'a>>,
 {
+    let params: Vec<Parameter<'_>> = params.into_iter().collect();
+    let byte_pattern_rows = if params.is_empty() {
+        None
+    } else {
+        Some(crate::uds::byte_pattern::build_byte_pattern_rows(&params))
+    };
+
     let header = DetailRow::header(vec![
         DetailCell::text("Short Name"),
         DetailCell::new("Byte", CellType::NumericValue),
@@ -569,6 +577,7 @@ where
             ],
             use_row_selection: false,
         },
+        byte_pattern_rows,
     }
 }
 
@@ -639,5 +648,6 @@ pub fn build_service_list_table_section(
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }
 }

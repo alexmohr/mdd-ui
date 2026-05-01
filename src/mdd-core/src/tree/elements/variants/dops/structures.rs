@@ -77,6 +77,7 @@ fn build_params_section(
             render_as_header: false,
             section_type: DetailSectionType::Requests,
             content: DetailContent::PlainText(vec!["No params".to_owned()]),
+            byte_pattern_rows: None,
         };
     };
     let params_header = DetailRow::header(vec![
@@ -162,5 +163,6 @@ fn build_params_section(
             ],
             use_row_selection: false,
         },
+        byte_pattern_rows: None,
     }
 }
