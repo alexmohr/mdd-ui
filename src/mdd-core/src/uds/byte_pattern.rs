@@ -86,7 +86,8 @@ fn extract_coded_value(param: &Parameter<'_>) -> Option<u64> {
 }
 
 /// Extract bit length from a parameter's type-specific data.
-fn extract_bit_length(param: &Parameter<'_>) -> Option<u32> {
+#[must_use]
+pub fn extract_bit_length(param: &Parameter<'_>) -> Option<u32> {
     // CodedConst
     if let Some(cc) = param.specific_data_as_coded_const()
         && let Some(dct) = cc.diag_coded_type()
@@ -143,6 +144,31 @@ fn extract_bit_length(param: &Parameter<'_>) -> Option<u32> {
 pub fn build_byte_pattern_rows(params: &[Parameter<'_>]) -> Vec<DetailRow> {
     let mut fields: Vec<ByteField> = params.iter().map(ByteField::from_param).collect();
     fields.sort_by_key(|f| (f.byte_pos, effective_bit_pos(f.bit_pos)));
+
+    // Infer bit_length for fields where the DB doesn't provide one by
+    // computing the gap (in bytes) to the next field at a different byte_pos.
+    for idx in 0..fields.len() {
+        let Some(field) = fields.get(idx) else {
+            continue;
+        };
+        if field.bit_length.is_some() {
+            continue;
+        }
+        let current_byte_pos = field.byte_pos;
+        let next_byte = fields
+            .iter()
+            .skip(idx.saturating_add(1))
+            .find(|f| f.byte_pos != current_byte_pos)
+            .map(|f| f.byte_pos);
+        if let Some(nb) = next_byte {
+            let span = nb.saturating_sub(current_byte_pos);
+            if span > 0
+                && let Some(f) = fields.get_mut(idx)
+            {
+                f.bit_length = Some(span.saturating_mul(8));
+            }
+        }
+    }
 
     let mut rows = Vec::new();
     let mut i = 0;
