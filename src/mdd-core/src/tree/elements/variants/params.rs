@@ -172,8 +172,6 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
     });
 
     let mut overview_rows = Vec::new();
-
-    // ID
     overview_rows.push(DetailRow::normal(
         vec![
             DetailCell::text("ID"),
@@ -206,7 +204,6 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
         ));
     }
 
-    // Always show byte/bit position
     overview_rows.push(DetailRow::normal(
         vec![
             DetailCell::text("Byte Position"),
@@ -241,7 +238,6 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
         ));
     }
 
-    // Coded value (hex formatted, for CodedConst)
     let coded_value = extract_coded_value(param);
     if !coded_value.is_empty() {
         overview_rows.push(DetailRow::normal(
@@ -253,7 +249,6 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
         ));
     }
 
-    // DOP reference (for Value type)
     let dop_name = extract_dop_name(param);
     if !dop_name.is_empty() {
         overview_rows.push(dop_kv_row(&dop_name));
@@ -281,38 +276,42 @@ pub fn build_param_detail_sections(param: &Parameter<'_>) -> Vec<DetailSectionDa
         .with_type(DetailSectionType::Overview),
     );
 
-    // Type-specific section
-    let specific_rows = build_specific_data_rows(param);
-    if !specific_rows.is_empty() {
-        let title = param.param_type().map_or_else(
-            |_| "Specific Data".to_owned(),
-            |pt| param_type_label(&pt).to_owned(),
-        );
-
-        let header = DetailRow::header(vec![
-            DetailCell::text("Property"),
-            DetailCell::text("Value"),
-        ]);
-
-        sections.push(
-            DetailSectionData::new(
-                title,
-                DetailContent::Table {
-                    header,
-                    rows: specific_rows,
-                    constraints: vec![
-                        ColumnConstraint::Percentage(40),
-                        ColumnConstraint::Percentage(60),
-                    ],
-                    use_row_selection: true,
-                },
-                false,
-            )
-            .with_type(DetailSectionType::Custom),
-        );
+    if let Some(specific_section) = build_specific_section(param) {
+        sections.push(specific_section);
     }
 
     sections
+}
+
+fn build_specific_section(param: &Parameter<'_>) -> Option<DetailSectionData> {
+    let specific_rows = build_specific_data_rows(param);
+    if specific_rows.is_empty() {
+        return None;
+    }
+    let title = param.param_type().map_or_else(
+        |_| "Specific Data".to_owned(),
+        |pt| param_type_label(&pt).to_owned(),
+    );
+    let header = DetailRow::header(vec![
+        DetailCell::text("Property"),
+        DetailCell::text("Value"),
+    ]);
+    Some(
+        DetailSectionData::new(
+            title,
+            DetailContent::Table {
+                header,
+                rows: specific_rows,
+                constraints: vec![
+                    ColumnConstraint::Percentage(40),
+                    ColumnConstraint::Percentage(60),
+                ],
+                use_row_selection: true,
+            },
+            false,
+        )
+        .with_type(DetailSectionType::Custom),
+    )
 }
 
 /// Build rows for the type-specific data of a parameter.
@@ -471,6 +470,39 @@ fn build_remaining_specific_rows(param: &Parameter<'_>) -> Vec<DetailRow> {
     rows
 }
 
+struct ParamInfo {
+    name: String,
+    byte_pos: u32,
+    bit_pos: u32,
+    bit_len: Option<u32>,
+    value: String,
+    dop_name: String,
+    dop_badge: String,
+    semantic: String,
+    param_id: u32,
+}
+
+fn param_byte_len_text(info: &ParamInfo, next: Option<&ParamInfo>) -> String {
+    if let Some(bl) = info.bit_len {
+        let effective_start = if info.bit_pos == BIT_POSITION_UNSET {
+            0
+        } else {
+            info.bit_pos
+        };
+        effective_start
+            .saturating_add(bl)
+            .saturating_add(7)
+            .checked_div(8)
+            .unwrap_or(1)
+            .to_string()
+    } else {
+        next.map_or_else(
+            || "-".to_owned(),
+            |n| n.byte_pos.saturating_sub(info.byte_pos).to_string(),
+        )
+    }
+}
+
 /// Build a parameter table section (the column-based param list used by
 /// request / response detail views).  `section_type` distinguishes Requests
 /// from `PosResponses` / `NegResponses`.
@@ -500,61 +532,78 @@ where
         DetailCell::text("Semantic"),
     ]);
 
-    let rows: Vec<DetailRow> = params
+    let infos: Vec<ParamInfo> = params
         .into_iter()
-        .map(|param| {
-            let name = param.short_name().unwrap_or("?").to_owned();
-            let byte_pos = param.byte_position();
-            let bit_pos = param.bit_position();
-            let value = extract_coded_value(&param);
-            let dop_name = extract_dop_name(&param);
-            let dop_badge = extract_dop_badge(&param);
-            let semantic = param.semantic().unwrap_or_default().to_owned();
-            let has_dop = !dop_name.is_empty();
-            let param_id = param.id();
+        .map(|param| ParamInfo {
+            name: param.short_name().unwrap_or("?").to_owned(),
+            byte_pos: param.byte_position(),
+            bit_pos: param.bit_position(),
+            bit_len: crate::uds::byte_pattern::extract_bit_length(&param),
+            value: extract_coded_value(&param),
+            dop_name: extract_dop_name(&param),
+            dop_badge: extract_dop_badge(&param).to_owned(),
+            semantic: param.semantic().unwrap_or_default().to_owned(),
+            param_id: param.id(),
+        })
+        .collect();
+
+    let rows: Vec<DetailRow> = infos
+        .iter()
+        .enumerate()
+        .map(|(idx, info)| {
+            let has_dop = !info.dop_name.is_empty();
 
             let dop_jump = if has_dop {
                 Some(CellJumpTarget::new(CellJumpTargetType::Dop {
                     index: usize::MAX,
-                    name: dop_name.clone(),
+                    name: info.dop_name.clone(),
                 }))
             } else {
                 None
             };
 
-            {
-                let dop_cell_type = if has_dop {
-                    CellType::DopReference
-                } else {
-                    CellType::Text
-                };
-                let dop_display = if has_dop {
-                    format!("{dop_badge}{dop_name}")
-                } else {
-                    dop_name
-                };
-                let mut dop_cell = DetailCell::new(dop_display, dop_cell_type);
-                if let Some(jump) = dop_jump {
-                    dop_cell = dop_cell.with_jump(jump);
-                }
-                let mut row = DetailRow::normal(
-                    vec![
-                        DetailCell::new(name, CellType::ParameterName).with_jump(
-                            CellJumpTarget::new(CellJumpTargetType::Parameter { param_id }),
-                        ),
-                        DetailCell::new(byte_pos.to_string(), CellType::NumericValue),
-                        DetailCell::new(bit_pos.to_string(), CellType::NumericValue),
-                        DetailCell::text("-"),
-                        DetailCell::text("-"),
-                        DetailCell::new(value, CellType::NumericValue),
-                        dop_cell,
-                        DetailCell::text(semantic),
-                    ],
-                    0,
-                );
-                row.metadata = Some(crate::tree::RowMetadata::ParameterRow { param_id });
-                row
+            let dop_cell_type = if has_dop {
+                CellType::DopReference
+            } else {
+                CellType::Text
+            };
+            let dop_display = if has_dop {
+                format!("{}{}", info.dop_badge, info.dop_name)
+            } else {
+                info.dop_name.clone()
+            };
+            let mut dop_cell = DetailCell::new(dop_display, dop_cell_type);
+            if let Some(jump) = dop_jump {
+                dop_cell = dop_cell.with_jump(jump);
             }
+
+            let bit_len_text = info
+                .bit_len
+                .map_or_else(|| "-".to_owned(), |bl| bl.to_string());
+
+            let byte_len_text = param_byte_len_text(info, infos.get(idx.saturating_add(1)));
+
+            let mut row = DetailRow::normal(
+                vec![
+                    DetailCell::new(info.name.clone(), CellType::ParameterName).with_jump(
+                        CellJumpTarget::new(CellJumpTargetType::Parameter {
+                            param_id: info.param_id,
+                        }),
+                    ),
+                    DetailCell::new(info.byte_pos.to_string(), CellType::NumericValue),
+                    DetailCell::new(info.bit_pos.to_string(), CellType::NumericValue),
+                    DetailCell::new(bit_len_text, CellType::NumericValue),
+                    DetailCell::new(byte_len_text, CellType::NumericValue),
+                    DetailCell::new(info.value.clone(), CellType::NumericValue),
+                    dop_cell,
+                    DetailCell::text(info.semantic.clone()),
+                ],
+                0,
+            );
+            row.metadata = Some(crate::tree::RowMetadata::ParameterRow {
+                param_id: info.param_id,
+            });
+            row
         })
         .collect();
 

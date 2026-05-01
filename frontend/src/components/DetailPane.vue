@@ -196,7 +196,7 @@ const editedHexMap = computed<Record<string, string>>(() => {
   return m;
 });
 
-// ── UDS hex from const byte-pattern (fallback preview) ──────────
+// ── UDS hex from const byte-pattern + user-entered values ───────
 const constOnlyHex = computed(() => {
   if (udsParams.value.length === 0) return "";
   const byteMap = new Map<number, string>();
@@ -208,6 +208,16 @@ const constOnlyHex = computed(() => {
     const byteStart = parseInt(p.byteOffset.trim().split("-")[0] ?? "0", 10);
     for (let i = 0; i < hexOnly.length / 2; i += 1) {
       byteMap.set(byteStart + i, hexOnly.slice(i * 2, i * 2 + 2).toUpperCase());
+    }
+  }
+  // Overlay user-entered values at their byte positions
+  for (const p of udsParams.value) {
+    if (p.isConst) continue;
+    const hex = editedHexMap.value[p.name];
+    if (!hex) continue;
+    const byteStart = parseInt(p.byteOffset.trim().split("-")[0] ?? "0", 10);
+    for (let i = 0; i < hex.length / 2; i += 1) {
+      byteMap.set(byteStart + i, hex.slice(i * 2, i * 2 + 2).toUpperCase());
     }
   }
   if (byteMap.size === 0) return "";

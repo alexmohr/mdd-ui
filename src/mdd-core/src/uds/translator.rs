@@ -218,31 +218,34 @@ impl UdsTranslator {
         json: &serde_json::Value,
     ) -> Result<UdsEncodeResult> {
         let diag_comm = self.find_service(service_name)?;
+        let security_plugin: cda_interfaces::DynamicPlugin = Box::new(());
+
+        // Pre-map numeric values to TextTable labels (e.g. 1 → "true") so
+        // the CDA receives correct text entries on the first attempt.
+        let mapped = self.map_text_table_values(service_name, json).await;
 
         let uds_data = UdsPayloadData::ParameterMap(
-            json.as_object()
+            mapped
+                .as_object()
                 .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
                 .unwrap_or_default(),
         );
-
-        // Use the skip-security sentinel (Box<()>) so the payload builder does
-        // not evaluate access-level constraints that have no meaning in offline
-        // translation context.
-        let security_plugin: cda_interfaces::DynamicPlugin = Box::new(());
 
         let payload = self
             .manager
             .create_uds_payload(&diag_comm, &security_plugin, Some(uds_data), None)
             .await;
 
-        // Services with EnvData/DTC DOPs cannot map user parameters into
-        // a request payload.  Fall back to building const-only bytes (SID,
-        // sub-function, coded constants) so the hex preview still works.
-        // If the const-only path also fails (e.g. required non-const params),
-        // return an empty result and let the frontend assemble what it can.
         let payload = match payload {
             Ok(p) => p,
             Err(e) if is_unsupported_dop_error(&e) => {
+                if json.as_object().is_some_and(|obj| !obj.is_empty()) {
+                    return Ok(UdsEncodeResult {
+                        service_name: service_name.to_owned(),
+                        hex_bytes: String::new(),
+                        raw_bytes: Vec::new(),
+                    });
+                }
                 match self
                     .manager
                     .create_uds_payload(&diag_comm, &security_plugin, None, None)
@@ -557,6 +560,52 @@ impl UdsTranslator {
         }
 
         bail!("Service '{name}' not found in the database")
+    }
+
+    /// Map numeric parameter values to `TextTable` enum labels using the
+    /// service schema.  For each param with an `enum` constraint in the
+    /// schema, the numeric value is used as an index into the enum array.
+    async fn map_text_table_values(
+        &self,
+        service_name: &str,
+        json: &serde_json::Value,
+    ) -> serde_json::Value {
+        let Some(obj) = json.as_object() else {
+            return json.clone();
+        };
+
+        let schema_result = self.service_schema(service_name).await;
+        let Some(schema) = schema_result.request_schema else {
+            return json.clone();
+        };
+
+        let properties = schema.get("properties").and_then(|p| p.as_object());
+
+        let mut mapped = obj.clone();
+        for (key, val) in obj {
+            let enum_values = properties
+                .and_then(|props| props.get(key))
+                .and_then(|prop| prop.get("enum"))
+                .and_then(|e| e.as_array());
+
+            let Some(entries) = enum_values else {
+                continue;
+            };
+
+            let idx = match val {
+                serde_json::Value::String(s) => s.parse::<usize>().ok(),
+                serde_json::Value::Number(n) => n.as_u64().and_then(|v| usize::try_from(v).ok()),
+                _ => None,
+            };
+
+            if let Some(i) = idx
+                && let Some(entry) = entries.get(i)
+            {
+                mapped.insert(key.clone(), entry.clone());
+            }
+        }
+
+        serde_json::Value::Object(mapped)
     }
 }
 
