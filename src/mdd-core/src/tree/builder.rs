@@ -29,11 +29,19 @@ struct NodeConfig {
 /// `impl TreeBuilder` blocks so each concern lives in its own file.
 pub struct TreeBuilder {
     nodes: Vec<TreeNode>,
+    ecu_name: String,
 }
 
 impl TreeBuilder {
-    pub(crate) fn new() -> Self {
-        Self { nodes: Vec::new() }
+    pub(crate) fn new(ecu_name: String) -> Self {
+        Self {
+            nodes: Vec::new(),
+            ecu_name,
+        }
+    }
+
+    pub(crate) fn ecu_name(&self) -> &str {
+        &self.ecu_name
     }
 
     fn push_node(&mut self, cfg: NodeConfig) {

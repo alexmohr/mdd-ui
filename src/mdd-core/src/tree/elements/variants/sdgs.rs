@@ -135,6 +135,7 @@ fn build_sdg_detail_sections(sdg_data: &SdgData) -> Vec<DetailSectionData> {
         render_as_header: true,
         section_type: DetailSectionType::Header,
         content: DetailContent::PlainText(vec![]),
+        byte_pattern_rows: None,
     });
 
     // Overview section with SDG metadata

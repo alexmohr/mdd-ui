@@ -72,6 +72,19 @@ svg:not(.icon-fixed) {
   --color-purple-300:  oklch(0.491 0.222 282.429);
   --color-violet-300:  oklch(0.487 0.228 273.949);
   --color-indigo-300:  oklch(0.488 0.221 267.156);
+
+  /* Remap *-200 accent colours (used in ByteGridView palette) to their -800
+     equivalents so text remains readable on light backgrounds. */
+  --color-blue-200:    oklch(0.424 0.199 265.638);
+  --color-teal-200:    oklch(0.445 0.107 182.503);
+  --color-cyan-200:    oklch(0.432 0.119 193.798);
+  --color-emerald-200: oklch(0.449 0.135 163.218);
+  --color-lime-200:    oklch(0.489 0.148 128.267);
+  --color-amber-200:   oklch(0.493 0.157 68.222);
+  --color-orange-200:  oklch(0.468 0.163 41.372);
+  --color-rose-200:    oklch(0.441 0.177 17.31);
+  --color-fuchsia-200: oklch(0.445 0.225 310.088);
+  --color-violet-200:  oklch(0.432 0.218 274.805);
 }
 
 .light ::-webkit-scrollbar-thumb {

@@ -292,7 +292,7 @@ impl TreeNode {
 }
 
 /// Type of detail section for logic and navigation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Default)]
 pub enum DetailSectionType {
     /// Title-only header section rendered above tabs.
     Header,
@@ -322,7 +322,10 @@ pub enum DetailSectionType {
     NotInheritedTables,
     /// Not-inherited `DiagVariables` list.
     NotInheritedVariables,
+    /// SOVD ECU lock management section.
+    EcuLocks,
     /// Dynamic/fallback section type.
+    #[default]
     Custom,
 }
 
@@ -542,6 +545,12 @@ pub enum DetailContent {
     Composite(Vec<DetailSectionData>),
 }
 
+impl Default for DetailContent {
+    fn default() -> Self {
+        Self::PlainText(Vec::new())
+    }
+}
+
 impl DetailContent {
     /// Locate the first `Table` variant, looking through `Composite` wrappers.
     /// Returns references to all four table fields so callers can project any subset.
@@ -585,7 +594,7 @@ impl DetailContent {
 }
 
 /// A detail section with a title and content.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Default)]
 pub struct DetailSectionData {
     /// Display title of this section (shown as tab label).
     pub title: String,
@@ -595,6 +604,10 @@ pub struct DetailSectionData {
     pub render_as_header: bool,
     /// Type of section for logic purposes
     pub section_type: DetailSectionType,
+    /// Optional pre-computed byte/bit pattern rows for inline grid rendering.
+    /// When `Some`, the frontend renders a `ByteGridView` below the main table.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub byte_pattern_rows: Option<Vec<DetailRow>>,
 }
 
 impl DetailSectionData {
@@ -606,6 +619,7 @@ impl DetailSectionData {
             content,
             render_as_header,
             section_type: DetailSectionType::Custom,
+            byte_pattern_rows: None,
         }
     }
 
@@ -613,6 +627,13 @@ impl DetailSectionData {
     #[must_use]
     pub fn with_type(mut self, section_type: DetailSectionType) -> Self {
         self.section_type = section_type;
+        self
+    }
+
+    /// Attach pre-computed byte/bit pattern rows for inline grid rendering.
+    #[must_use]
+    pub fn with_byte_pattern_rows(mut self, rows: Vec<DetailRow>) -> Self {
+        self.byte_pattern_rows = Some(rows);
         self
     }
 }

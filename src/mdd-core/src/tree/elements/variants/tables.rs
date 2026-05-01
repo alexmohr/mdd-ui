@@ -130,6 +130,7 @@ fn build_tables_overview(tables: &[TableData]) -> DetailSectionData {
             constraints: vec![ColumnConstraint::Percentage(100)],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }
 }
 
@@ -256,6 +257,7 @@ fn build_table_detail(table: &TableData) -> Vec<DetailSectionData> {
                 ],
                 use_row_selection: false,
             },
+            byte_pattern_rows: None,
         });
     }
 

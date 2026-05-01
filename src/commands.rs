@@ -6,9 +6,15 @@
 
 use std::{fs, path::PathBuf, sync::Mutex};
 
-use mdd_core::tree::{
-    CellJumpTargetType, DetailContent, DetailRow, DetailSectionData, DiffStatus, NodeType,
-    ServiceListType, TreeNode,
+use mdd_core::{
+    tree::{
+        CellJumpTargetType, DetailContent, DetailRow, DetailSectionData, DiffStatus, NodePayload,
+        NodeType, ServiceListType, TreeNode,
+    },
+    uds::translator::{
+        MatchedService, ServiceSchemaResult, SovdToUdsResult, UdsLookupResult, UdsToSovdResult,
+        VariantInfo,
+    },
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
@@ -172,6 +178,11 @@ impl Default for CoreState {
 
 pub struct AppState(pub Mutex<CoreState>);
 
+/// Holds a lazily-created UDS translator, keyed by the MDD file path.
+pub struct UdsState(
+    pub tauri::async_runtime::Mutex<Option<mdd_core::uds::translator::UdsTranslator>>,
+);
+
 pub struct InitialFile(pub Mutex<Option<String>>);
 
 impl Default for AppState {
@@ -225,19 +236,19 @@ fn count_filtered_direct_children(
     header_idx: usize,
     header_depth: usize,
 ) -> usize {
-    let child_depth = header_depth + 1;
-    let mut count = 0;
-    for i in (header_idx + 1)..all_nodes.len() {
+    let child_depth = header_depth.saturating_add(1);
+    let mut count: usize = 0;
+    for i in (header_idx.saturating_add(1))..all_nodes.len() {
         let Some(n) = all_nodes.get(i) else { break };
         if n.depth <= header_depth {
             break;
         }
         if n.depth == child_depth {
-            let passes_search = include.map_or(true, |inc| inc.get(i).copied().unwrap_or(false));
+            let passes_search = include.is_none_or(|inc| inc.get(i).copied().unwrap_or(false));
             let passes_diff =
                 !hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged));
             if passes_search && passes_diff {
-                count += 1;
+                count = count.saturating_add(1);
             }
         }
     }
@@ -275,15 +286,15 @@ fn filter_service_list_rows(
 
     // Build short_name → passes_filter from the header's real direct children.
     let header_depth = all_nodes.get(header_idx).map_or(0, |n| n.depth);
-    let child_depth = header_depth + 1;
+    let child_depth = header_depth.saturating_add(1);
     let mut name_passes: std::collections::HashMap<&str, bool> = std::collections::HashMap::new();
-    for i in (header_idx + 1)..all_nodes.len() {
+    for i in (header_idx.saturating_add(1))..all_nodes.len() {
         let Some(n) = all_nodes.get(i) else { break };
         if n.depth <= header_depth {
             break;
         }
         if n.depth == child_depth {
-            let passes = include.map_or(true, |inc| inc.get(i).copied().unwrap_or(false))
+            let passes = include.is_none_or(|inc| inc.get(i).copied().unwrap_or(false))
                 && (!hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged)));
             let key = n.service_short_name().unwrap_or(n.text.as_str());
             name_passes.insert(key, passes);
@@ -322,26 +333,27 @@ fn filter_service_list_rows(
         },
         render_as_header: section.render_as_header,
         section_type: section.section_type,
+        byte_pattern_rows: section.byte_pattern_rows.clone(),
     }
 }
 
 /// Strip a trailing `(…)` count suffix from a service-list header's display
 /// text, leaving the base name.  Used when building node paths.
 fn strip_count_suffix(text: &str) -> &str {
-    if let Some(pos) = text.rfind('(') {
-        if text.ends_with(')') {
-            return text[..pos].trim_end();
-        }
+    if let Some(pos) = text.rfind('(')
+        && text.ends_with(')')
+    {
+        return text.get(..pos).map_or(text, |s| s.trim_end());
     }
     text
 }
 
 /// Replace the trailing `(…)` of a service-list header's display text with `(new_count)`.
 fn replace_header_count(text: &str, new_count: usize) -> String {
-    if let Some(open) = text.rfind('(') {
-        if text.ends_with(')') {
-            return format!("{}({new_count})", &text[..open]);
-        }
+    if let Some(open) = text.rfind('(')
+        && text.ends_with(')')
+    {
+        return format!("{}({new_count})", text.get(..open).unwrap_or(text));
     }
     format!("{text} ({new_count})")
 }
@@ -616,6 +628,31 @@ pub fn get_node_detail(
             )
         })
         .collect())
+}
+
+/// Walk the parent chain from the given node index to find the enclosing
+/// variant Container, returning its canonical short name.
+#[tauri::command]
+pub fn get_node_variant(
+    index: usize,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    Ok(resolve_node_variant(&core.all_nodes, index))
+}
+
+/// Resolve the variant name for a node by walking its parent chain.
+fn resolve_node_variant(all_nodes: &[TreeNode], index: usize) -> Option<String> {
+    let mut idx = index;
+    loop {
+        let node = all_nodes.get(idx)?;
+        if node.node_type == NodeType::Container
+            && let NodePayload::Container { ref short_name, .. } = node.payload
+        {
+            return Some(short_name.clone());
+        }
+        idx = node.parent_idx?;
+    }
 }
 
 #[tauri::command]
@@ -1063,8 +1100,7 @@ fn resolve_jump_target(nodes: &[TreeNode], target: &JumpTargetType) -> Option<us
             let exact = |n: &TreeNode| n.short_name().is_some_and(|sn| sn == short_name);
             let icase = |n: &TreeNode| {
                 let lower = short_name.to_lowercase();
-                n.short_name()
-                    .is_some_and(|sn| sn.to_lowercase() == lower)
+                n.short_name().is_some_and(|sn| sn.to_lowercase() == lower)
             };
             if nodes.get(*index).is_some_and(exact) {
                 Some(*index)
@@ -1306,6 +1342,10 @@ pub struct UiPrefs {
     pub last_tab_title: Option<String>,
     #[serde(default)]
     pub auto_check_updates: bool,
+    #[serde(default = "default_cda_base_url")]
+    pub cda_base_url: String,
+    #[serde(default = "default_request_panel_tab")]
+    pub request_panel_tab: String,
 }
 
 fn default_theme() -> String {
@@ -1319,6 +1359,12 @@ fn default_row_density() -> String {
 }
 fn default_max_recent_files() -> u8 {
     10
+}
+fn default_cda_base_url() -> String {
+    "http://localhost:20002".to_owned()
+}
+fn default_request_panel_tab() -> String {
+    "uds".to_owned()
 }
 
 impl Default for UiPrefs {
@@ -1334,6 +1380,8 @@ impl Default for UiPrefs {
             wrap_table_text: false,
             last_tab_title: None,
             auto_check_updates: false,
+            cda_base_url: "http://localhost:20002".to_owned(),
+            request_panel_tab: "uds".to_owned(),
         }
     }
 }
@@ -1536,6 +1584,365 @@ fn register_mdd_association_impl() -> Result<String, String> {
             String::from_utf8_lossy(&output.stderr)
         ))
     }
+}
+
+// ---------------------------------------------------------------------------
+// UDS ↔ SOVD translation commands
+// ---------------------------------------------------------------------------
+
+/// Load or reload the UDS translator for the given MDD path.
+#[tauri::command]
+pub async fn uds_load(path: String, state: State<'_, UdsState>) -> Result<(), String> {
+    let translator = mdd_core::uds::translator::UdsTranslator::new(&path)
+        .await
+        .map_err(|e| format!("Failed to init UDS translator: {e:#}"))?;
+    let mut guard = state.0.lock().await;
+    *guard = Some(translator);
+    Ok(())
+}
+
+/// List all services available in the currently loaded MDD.
+#[tauri::command]
+pub async fn uds_list_services(state: State<'_, UdsState>) -> Result<Vec<MatchedService>, String> {
+    let guard = state.0.lock().await;
+    let translator = guard
+        .as_ref()
+        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+    Ok(translator.list_services())
+}
+
+/// Look up which service(s) match a hex UDS byte string (e.g. `"22 F1 90"`).
+#[tauri::command]
+pub async fn uds_lookup(
+    hex: String,
+    state: State<'_, UdsState>,
+) -> Result<UdsLookupResult, String> {
+    let bytes = mdd_core::uds::translator::parse_hex_string(&hex)
+        .map_err(|e| format!("Invalid hex: {e:#}"))?;
+    let guard = state.0.lock().await;
+    let translator = guard
+        .as_ref()
+        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+    translator
+        .lookup_service(&bytes)
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// Translate raw UDS bytes (hex string) into SOVD-style JSON for a named service.
+#[tauri::command]
+pub async fn uds_to_sovd(
+    service_name: String,
+    hex: String,
+    is_request: bool,
+    variant_name: Option<String>,
+    state: State<'_, UdsState>,
+) -> Result<UdsToSovdResult, String> {
+    let bytes = mdd_core::uds::translator::parse_hex_string(&hex)
+        .map_err(|e| format!("Invalid hex: {e:#}"))?;
+    let mut guard = state.0.lock().await;
+    let translator = guard
+        .as_mut()
+        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+    if let Some(ref vn) = variant_name {
+        translator
+            .ensure_variant(vn)
+            .await
+            .map_err(|e| format!("{e:#}"))?;
+    }
+    translator
+        .uds_to_sovd(&service_name, &bytes, is_request)
+        .await
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// Translate a SOVD-style JSON object into raw UDS bytes for a named service.
+#[tauri::command]
+pub async fn sovd_to_uds(
+    service_name: String,
+    json: serde_json::Value,
+    variant_name: Option<String>,
+    state: State<'_, UdsState>,
+) -> Result<SovdToUdsResult, String> {
+    let mut guard = state.0.lock().await;
+    let translator = guard
+        .as_mut()
+        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+    if let Some(ref vn) = variant_name {
+        translator
+            .ensure_variant(vn)
+            .await
+            .map_err(|e| format!("{e:#}"))?;
+    }
+    translator
+        .sovd_to_uds(&service_name, &json)
+        .await
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// Search services by SOVD name or URL path fragment.
+#[tauri::command]
+pub async fn sovd_lookup(
+    query: String,
+    state: State<'_, UdsState>,
+) -> Result<Vec<MatchedService>, String> {
+    let guard = state.0.lock().await;
+    let translator = guard
+        .as_ref()
+        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+    Ok(translator.sovd_lookup(&query))
+}
+
+/// Return the JSON Schema for a service's request and response parameters.
+#[tauri::command]
+pub async fn service_schema(
+    service_name: String,
+    variant_name: Option<String>,
+    state: State<'_, UdsState>,
+) -> Result<ServiceSchemaResult, String> {
+    let mut guard = state.0.lock().await;
+    let translator = guard
+        .as_mut()
+        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+    if let Some(ref vn) = variant_name {
+        translator
+            .ensure_variant(vn)
+            .await
+            .map_err(|e| format!("{e:#}"))?;
+    }
+    translator
+        .service_schema(&service_name)
+        .await
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// List all variants in the currently loaded MDD.
+#[tauri::command]
+pub async fn uds_list_variants(state: State<'_, UdsState>) -> Result<Vec<VariantInfo>, String> {
+    let guard = state.0.lock().await;
+    let translator = guard
+        .as_ref()
+        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+    translator.list_variants().map_err(|e| format!("{e:#}"))
+}
+
+/// Switch the active variant by name using crafted detection responses.
+#[tauri::command]
+pub async fn uds_select_variant(
+    variant_name: String,
+    state: State<'_, UdsState>,
+) -> Result<VariantInfo, String> {
+    let mut guard = state.0.lock().await;
+    let translator = guard
+        .as_mut()
+        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+    translator
+        .select_variant(&variant_name)
+        .await
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// Forward a SOVD request to a running CDA instance over HTTP.
+#[tauri::command]
+pub async fn send_to_cda(
+    base_url: String,
+    sovd_path: String,
+    json: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let url = format!("{}{}", base_url.trim_end_matches('/'), sovd_path);
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .json(&json)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+    if !status.is_success() {
+        return Err(format!("CDA returned {status}: {body}"));
+    }
+
+    serde_json::from_str(&body).map_err(|_| body)
+}
+
+// ---------------------------------------------------------------------------
+// SOVD ECU Lock management
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct EcuLock {
+    pub id: String,
+    pub owned: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub struct EcuLockDetail {
+    pub id: String,
+    pub lock_expiration: String,
+}
+
+/// List all ECU locks from the connected CDA SOVD server.
+#[tauri::command]
+pub async fn list_ecu_locks(base_url: String, ecu_name: String) -> Result<Vec<EcuLock>, String> {
+    let url = format!(
+        "{}/components/{}/locks",
+        base_url.trim_end_matches('/'),
+        ecu_name,
+    );
+    let response = reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+    if !status.is_success() {
+        return Err(format!("CDA returned {status}: {body}"));
+    }
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("Invalid JSON: {e}"))?;
+    let items = parsed
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    items
+        .into_iter()
+        .map(|v| {
+            let id = v
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+                .unwrap_or_default();
+            let owned = v.get("owned").and_then(serde_json::Value::as_bool);
+            Ok(EcuLock { id, owned })
+        })
+        .collect()
+}
+
+/// Create a new ECU lock on the connected CDA SOVD server.
+#[tauri::command]
+pub async fn create_ecu_lock(
+    base_url: String,
+    ecu_name: String,
+    lock_expiration: u64,
+) -> Result<EcuLock, String> {
+    let url = format!(
+        "{}/components/{}/locks",
+        base_url.trim_end_matches('/'),
+        ecu_name,
+    );
+    let body = serde_json::json!({ "lock_expiration": lock_expiration });
+    let response = reqwest::Client::new()
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+    if !status.is_success() {
+        return Err(format!("CDA returned {status}: {text}"));
+    }
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("Invalid JSON: {e}"))?;
+    let id = parsed
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_default();
+    let owned = parsed.get("owned").and_then(serde_json::Value::as_bool);
+    Ok(EcuLock { id, owned })
+}
+
+/// Delete an ECU lock on the connected CDA SOVD server.
+#[tauri::command]
+pub async fn delete_ecu_lock(
+    base_url: String,
+    ecu_name: String,
+    lock_id: String,
+) -> Result<(), String> {
+    let url = format!(
+        "{}/components/{}/locks/{}",
+        base_url.trim_end_matches('/'),
+        ecu_name,
+        lock_id,
+    );
+    let response = reqwest::Client::new()
+        .delete(&url)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response body: {e}"))?;
+        return Err(format!("CDA returned {status}: {body}"));
+    }
+    Ok(())
+}
+
+/// Get details of a specific ECU lock from the connected CDA SOVD server.
+#[tauri::command]
+pub async fn get_ecu_lock_detail(
+    base_url: String,
+    ecu_name: String,
+    lock_id: String,
+) -> Result<EcuLockDetail, String> {
+    let url = format!(
+        "{}/components/{}/locks/{}",
+        base_url.trim_end_matches('/'),
+        ecu_name,
+        lock_id,
+    );
+    let response = reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+    if !status.is_success() {
+        return Err(format!("CDA returned {status}: {body}"));
+    }
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("Invalid JSON: {e}"))?;
+    let lock_expiration = parsed
+        .get("lock_expiration")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_default();
+    Ok(EcuLockDetail {
+        id: lock_id,
+        lock_expiration,
+    })
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]

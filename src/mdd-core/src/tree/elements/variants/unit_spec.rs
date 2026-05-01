@@ -177,6 +177,7 @@ fn build_unit_spec_overview(
             ],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }];
 
     if !unit_groups.is_empty() {
@@ -211,6 +212,7 @@ fn build_unit_spec_overview(
                 ],
                 use_row_selection: true,
             },
+            byte_pattern_rows: None,
         });
     }
 

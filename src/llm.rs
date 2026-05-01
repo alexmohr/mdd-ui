@@ -573,6 +573,7 @@ fn build_auth_header(settings: &LlmSettings) -> Result<(String, String), String>
 }
 
 fn build_mdd_context(core: &crate::commands::CoreState) -> String {
+    const MAX_CONTEXT_CHARS: usize = 40_000;
     let mut lines: Vec<String> = Vec::new();
     lines.push("You are an expert automotive diagnostics engineer assistant.".to_owned());
     lines.push(
@@ -617,8 +618,10 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
 
         // Pass 1: mark all changed (non-Unchanged) nodes.
         for (i, node) in core.all_nodes.iter().enumerate() {
-            if !matches!(node.diff_status, Some(DiffStatus::Unchanged) | None) {
-                show[i] = true;
+            if !matches!(node.diff_status, Some(DiffStatus::Unchanged) | None)
+                && let Some(slot) = show.get_mut(i)
+            {
+                *slot = true;
             }
         }
 
@@ -672,10 +675,14 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
     }
 
     // Apply a character budget to prevent token-limit errors regardless of database size.
-    const MAX_CONTEXT_CHARS: usize = 40_000;
     let result = lines.join("\n");
     if result.len() > MAX_CONTEXT_CHARS {
-        let mut truncated = result[..MAX_CONTEXT_CHARS].to_owned();
+        let cut = result
+            .char_indices()
+            .map(|(i, _)| i)
+            .nth(MAX_CONTEXT_CHARS)
+            .unwrap_or(result.len());
+        let mut truncated = result.get(..cut).unwrap_or(&result).to_owned();
         truncated.push_str(
             "\n\n[Context truncated — database too large to fit in one request. Ask specific \
              questions about services or nodes by name.]",

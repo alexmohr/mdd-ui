@@ -43,6 +43,7 @@ pub(super) fn build_dtc_dops_category_sections(dops: &[DopInfo<'_>]) -> Vec<Deta
             constraints: vec![ColumnConstraint::Percentage(100)],
             use_row_selection: true,
         },
+        byte_pattern_rows: None,
     }]
 }
 
@@ -239,6 +240,7 @@ pub(super) fn add_dtc_dop_children(b: &mut TreeBuilder, dop_info: &DopInfo<'_>, 
                 ],
                 use_row_selection: true,
             },
+            byte_pattern_rows: None,
         }];
 
         b.push_details_structured(depth, display_name, false, false, detail, NodeType::Default);
@@ -324,6 +326,7 @@ pub(super) fn build_dtc_dop_tabs(
                 ],
                 use_row_selection: true,
             },
+            byte_pattern_rows: None,
         });
     }
 }

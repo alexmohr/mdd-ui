@@ -75,12 +75,14 @@ fn run_tauri_app(initial_file: Option<String>) {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commands::AppState::default())
+        .manage(commands::UdsState(tauri::async_runtime::Mutex::new(None)))
         .manage(commands::InitialFile(std::sync::Mutex::new(initial_file)))
         .invoke_handler(tauri::generate_handler![
             commands::load_mdd,
             commands::load_diff,
             commands::get_visible_nodes,
             commands::get_node_detail,
+            commands::get_node_variant,
             commands::toggle_expand,
             commands::search,
             commands::clear_search,
@@ -109,6 +111,20 @@ fn run_tauri_app(initial_file: Option<String>) {
             llm::poll_ghe_device_flow,
             llm::fetch_llm_models,
             llm::llm_chat,
+            commands::uds_load,
+            commands::uds_list_services,
+            commands::uds_lookup,
+            commands::uds_to_sovd,
+            commands::sovd_to_uds,
+            commands::sovd_lookup,
+            commands::service_schema,
+            commands::uds_list_variants,
+            commands::uds_select_variant,
+            commands::send_to_cda,
+            commands::list_ecu_locks,
+            commands::create_ecu_lock,
+            commands::delete_ecu_lock,
+            commands::get_ecu_lock_detail,
         ])
         .setup(|app| {
             use tauri::Manager;

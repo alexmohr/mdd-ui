@@ -89,6 +89,7 @@ pub fn add_state_charts(b: &mut TreeBuilder, layer: &DiagLayer<'_>, depth: usize
                 render_as_header: true,
                 section_type: DetailSectionType::Header,
                 content: DetailContent::PlainText(vec![format!("Semantic: {semantic}")]),
+                byte_pattern_rows: None,
             },
             build_transitions_section(transition_rows),
             build_states_section(state_rows),
@@ -146,6 +147,7 @@ fn build_transitions_section(mut transitions: Vec<DetailRow>) -> DetailSectionDa
                 use_row_selection: false,
             }
         },
+        byte_pattern_rows: None,
     }
 }
 
@@ -166,6 +168,7 @@ fn build_states_section(mut states: Vec<DetailRow>) -> DetailSectionData {
                 use_row_selection: false,
             }
         },
+        byte_pattern_rows: None,
     }
 }
 

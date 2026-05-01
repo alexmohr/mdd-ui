@@ -3,7 +3,5 @@
  * SPDX-FileCopyrightText: 2026 Alexander Mohr
  */
 
-pub mod database;
-pub mod diff;
-pub mod tree;
-pub mod uds;
+pub mod byte_pattern;
+pub mod translator;
