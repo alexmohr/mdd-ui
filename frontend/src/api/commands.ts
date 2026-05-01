@@ -194,8 +194,6 @@ export interface UiPrefs {
   wrap_table_text: boolean;
   last_tab_title: string | null;
   auto_check_updates: boolean;
-  cda_base_url: string;
-  request_panel_tab: string;
 }
 
 export async function getUiPrefs(): Promise<UiPrefs> {
@@ -215,13 +213,12 @@ export async function getInitialFile(): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
-// UDS ↔ SOVD translation
+// UDS translation
 // ---------------------------------------------------------------------------
 
 export interface MatchedService {
   name: string;
   service_type: string;
-  sovd_path: string;
 }
 
 export interface UdsLookupResult {
@@ -229,12 +226,7 @@ export interface UdsLookupResult {
   sid_name: string;
 }
 
-export interface UdsToSovdResult {
-  service_name: string;
-  json: unknown;
-}
-
-export interface SovdToUdsResult {
+export interface UdsEncodeResult {
   service_name: string;
   hex_bytes: string;
   raw_bytes: number[];
@@ -252,49 +244,14 @@ export async function udsLookup(hex: string): Promise<UdsLookupResult> {
   return invoke<UdsLookupResult>("uds_lookup", { hex });
 }
 
-export async function udsToSovd(
-  serviceName: string,
-  hex: string,
-  isRequest: boolean,
-  variantName?: string | null,
-): Promise<UdsToSovdResult> {
-  return invoke<UdsToSovdResult>("uds_to_sovd", {
-    serviceName,
-    hex,
-    isRequest,
-    variantName: variantName ?? null,
-  });
-}
-
-export async function sovdToUds(
+export async function udsEncode(
   serviceName: string,
   json: unknown,
   variantName?: string | null,
-): Promise<SovdToUdsResult> {
-  return invoke<SovdToUdsResult>("sovd_to_uds", {
+): Promise<UdsEncodeResult> {
+  return invoke<UdsEncodeResult>("uds_encode", {
     serviceName,
     json,
-    variantName: variantName ?? null,
-  });
-}
-
-export interface ServiceSchemaResult {
-  service_name: string;
-  sovd_path: string;
-  request_schema: unknown | null;
-  response_schema: unknown | null;
-}
-
-export async function sovdLookup(query: string): Promise<MatchedService[]> {
-  return invoke<MatchedService[]>("sovd_lookup", { query });
-}
-
-export async function serviceSchema(
-  serviceName: string,
-  variantName?: string | null,
-): Promise<ServiceSchemaResult> {
-  return invoke<ServiceSchemaResult>("service_schema", {
-    serviceName,
     variantName: variantName ?? null,
   });
 }
@@ -319,65 +276,4 @@ export async function getNodeVariant(
   index: number,
 ): Promise<string | null> {
   return invoke<string | null>("get_node_variant", { index });
-}
-
-export async function sendToCda(
-  baseUrl: string,
-  sovdPath: string,
-  json: Record<string, unknown>,
-): Promise<unknown> {
-  return invoke("send_to_cda", { baseUrl, sovdPath, json });
-}
-
-// ---------------------------------------------------------------------------
-// SOVD ECU Lock management
-// ---------------------------------------------------------------------------
-
-export interface EcuLock {
-  id: string;
-  owned: boolean | null;
-}
-
-export interface EcuLockDetail {
-  id: string;
-  lock_expiration: string;
-}
-
-export async function listEcuLocks(
-  baseUrl: string,
-  ecuName: string,
-): Promise<EcuLock[]> {
-  return invoke<EcuLock[]>("list_ecu_locks", { baseUrl, ecuName });
-}
-
-export async function createEcuLock(
-  baseUrl: string,
-  ecuName: string,
-  lockExpiration: number,
-): Promise<EcuLock> {
-  return invoke<EcuLock>("create_ecu_lock", {
-    baseUrl,
-    ecuName,
-    lockExpiration,
-  });
-}
-
-export async function deleteEcuLock(
-  baseUrl: string,
-  ecuName: string,
-  lockId: string,
-): Promise<void> {
-  return invoke("delete_ecu_lock", { baseUrl, ecuName, lockId });
-}
-
-export async function getEcuLockDetail(
-  baseUrl: string,
-  ecuName: string,
-  lockId: string,
-): Promise<EcuLockDetail> {
-  return invoke<EcuLockDetail>("get_ecu_lock_detail", {
-    baseUrl,
-    ecuName,
-    lockId,
-  });
 }

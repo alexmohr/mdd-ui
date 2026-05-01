@@ -322,8 +322,6 @@ pub enum DetailSectionType {
     NotInheritedTables,
     /// Not-inherited `DiagVariables` list.
     NotInheritedVariables,
-    /// SOVD ECU lock management section.
-    EcuLocks,
     /// Dynamic/fallback section type.
     #[default]
     Custom,

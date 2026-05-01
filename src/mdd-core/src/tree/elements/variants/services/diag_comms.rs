@@ -95,7 +95,7 @@ pub fn add_diag_comms<'a>(
                 .unwrap_or("?")
                 .to_owned();
             node_indices.insert(short_name.clone(), b.next_index());
-            let sections = build_diag_comm_details_with_parent(ds, b.ecu_name(), None, None);
+            let sections = build_diag_comm_details_with_parent(ds, None, None);
 
             b.push_service_node(
                 depth.saturating_add(1),
@@ -121,7 +121,6 @@ pub fn add_diag_comms<'a>(
             let parent_idx = b.find_container_index(source_layer_name);
             let sections = build_diag_comm_details_with_parent(
                 ds,
-                b.ecu_name(),
                 Some(source_layer_name.as_str()),
                 parent_idx,
             );

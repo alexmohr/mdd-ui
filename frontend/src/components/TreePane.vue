@@ -228,7 +228,7 @@ async function onKeydown(e: KeyboardEvent) {
       <button class="p-1 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors" title="Expand all (e)" @click="store.expandAll()">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
       </button>
-      <button class="p-1 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors" title="Collapse all (c)" @click="store.collapseAll()">
+      <button class="p-1 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors" title="Collapse all" @click="store.collapseAll()">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/></svg>
       </button>
     </div>

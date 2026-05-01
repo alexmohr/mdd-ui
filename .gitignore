@@ -9,6 +9,9 @@ todo*
 .claude
 .vscode
 
+# Generated (Tauri)
+gen
+
 # Frontend (Tauri + Vue)
 node_modules
 dist

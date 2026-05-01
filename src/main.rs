@@ -114,17 +114,10 @@ fn run_tauri_app(initial_file: Option<String>) {
             commands::uds_load,
             commands::uds_list_services,
             commands::uds_lookup,
-            commands::uds_to_sovd,
-            commands::sovd_to_uds,
-            commands::sovd_lookup,
+            commands::uds_encode,
             commands::service_schema,
             commands::uds_list_variants,
             commands::uds_select_variant,
-            commands::send_to_cda,
-            commands::list_ecu_locks,
-            commands::create_ecu_lock,
-            commands::delete_ecu_lock,
-            commands::get_ecu_lock_detail,
         ])
         .setup(|app| {
             use tauri::Manager;

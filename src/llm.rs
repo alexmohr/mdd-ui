@@ -7,7 +7,7 @@
 
 use std::{collections::HashMap, fs, path::PathBuf};
 
-use mdd_core::tree::DiffStatus;
+use mdd_core::tree::{DetailRowType, DiffStatus};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -671,6 +671,41 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
                 let indent = "  ".repeat(node.depth);
                 lines.push(format!("{indent}- [{:?}] {}", node.node_type, node.text));
             }
+        }
+    }
+
+    let mut byte_pattern_header_added = false;
+    for node in &core.all_nodes {
+        let patterns: Vec<String> = node
+            .detail_sections
+            .iter()
+            .filter_map(|s| s.byte_pattern_rows.as_ref())
+            .flat_map(|rows| {
+                rows.iter()
+                    .filter(|r| !matches!(r.row_type, DetailRowType::Header))
+                    .map(|row| {
+                        row.cells
+                            .iter()
+                            .map(|c| c.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    })
+            })
+            .collect();
+
+        if patterns.is_empty() {
+            continue;
+        }
+
+        if !byte_pattern_header_added {
+            lines.push(String::new());
+            lines.push("Byte patterns (Offset | Bits | Hex | Binary | Name | Type):".to_owned());
+            byte_pattern_header_added = true;
+        }
+
+        lines.push(format!("\n  [[{}]]:", node.text));
+        for p in &patterns {
+            lines.push(format!("    {p}"));
         }
     }
 

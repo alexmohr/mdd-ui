@@ -8,10 +8,10 @@ edition = "2024"
 license = "Apache-2.0"
 
 [dependencies]
-cda-core = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", branch = "main" }
-cda-database = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", branch = "main" }
-cda-interfaces = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", branch = "main" }
-cda-plugin-security = { git = "https://github.com/eclipse-opensovd/classic-diagnostic-adapter.git", branch = "main" }
+cda-core = { path = "/Users/MOHALEX/dev/classic-diagnostic-adapter/cda-core" }
+cda-database = { path = "/Users/MOHALEX/dev/classic-diagnostic-adapter/cda-database" }
+cda-interfaces = { path = "/Users/MOHALEX/dev/classic-diagnostic-adapter/cda-interfaces" }
+cda-plugin-security = { path = "/Users/MOHALEX/dev/classic-diagnostic-adapter/cda-plugin-security" }
 
 # Error handling
 anyhow = "1"
