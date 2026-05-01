@@ -67,6 +67,10 @@ pub fn resolve_all_indices(nodes: &mut [TreeNode]) {
         let sections = Arc::make_mut(&mut node.detail_sections);
         resolve_sections(&name_to_idx, &container_map, sections);
     }
+
+    // 4. Resolve ChildElement rows: link "Diag-Comms", "Functional Classes",
+    //    etc. in variant overview tables to their corresponding tree nodes.
+    resolve_child_element_rows(nodes);
 }
 
 /// Recursively resolve jump-target indices in a slice of sections.
@@ -104,6 +108,64 @@ fn resolve_sections(
     }
 }
 
+/// For each node, find `ChildElement` metadata rows in its detail sections and
+/// set jump targets pointing to the matching `ServiceListHeader` child node.
+fn resolve_child_element_rows(nodes: &mut [TreeNode]) {
+    use std::collections::HashMap;
+
+    use types::RowMetadata;
+
+    // Build: parent_index → [(service_list_type, child_index, child_text)]
+    let mut parent_children: HashMap<usize, Vec<(ServiceListType, usize, String)>> = HashMap::new();
+    for (i, node) in nodes.iter().enumerate() {
+        let Some(slt) = node.service_list_type() else {
+            continue;
+        };
+        let Some(parent) = node.parent_idx else {
+            continue;
+        };
+        parent_children
+            .entry(parent)
+            .or_default()
+            .push((slt, i, node.text.clone()));
+    }
+
+    for node_idx in 0..nodes.len() {
+        let Some(children) = parent_children.get(&node_idx) else {
+            continue;
+        };
+        let children = children.clone();
+
+        let Some(node) = nodes.get_mut(node_idx) else {
+            continue;
+        };
+        let sections = Arc::make_mut(&mut node.detail_sections);
+        for section in sections.iter_mut() {
+            let DetailContent::Table { rows, .. } = &mut section.content else {
+                continue;
+            };
+            for row in rows.iter_mut() {
+                let Some(RowMetadata::ChildElement { element_type }) = &row.metadata else {
+                    continue;
+                };
+                let target_slt = element_type.to_service_list_type();
+                let Some((_, child_idx, child_text)) =
+                    children.iter().find(|(slt, _, _)| *slt == target_slt)
+                else {
+                    continue;
+                };
+                if let Some(cell) = row.cells.first_mut() {
+                    cell.jump_target =
+                        Some(CellJumpTarget::new(CellJumpTargetType::TreeNodeByIndex {
+                            index: *child_idx,
+                            short_name: child_text.clone(),
+                        }));
+                }
+            }
+        }
+    }
+}
+
 /// Walk the entire database and produce a flat list of tree nodes ready for
 /// the TUI to display, together with the ECU name.
 #[must_use]
@@ -111,25 +173,17 @@ pub fn build_tree(db: &DiagnosticDatabase, file_path: &str) -> (Vec<TreeNode>, S
     // Extract database data
     let data = extract_data(db);
     let ecu_name = data.ecu_name.clone();
-    let mut b = TreeBuilder::new(ecu_name.clone());
+    let mut b = TreeBuilder::new();
 
     // Add General section with ECU info
     if let Some(ref ecu) = data.ecu {
         let ecu_details = get_ecu_summary(db, &data.ecu_name, file_path);
         let ecu_section = lines_to_single_section("Summary", ecu_details);
-        let ecu_locks_section = DetailSectionData::new(
-            "ECU Locks".to_string(),
-            DetailContent::PlainText(vec![
-                "Manage ECU locks via the connected CDA SOVD server.".to_string(),
-            ]),
-            false,
-        )
-        .with_type(DetailSectionType::EcuLocks);
         b.push_section_header(
             "General".to_string(),
             false,
             false,
-            vec![ecu_section, ecu_locks_section],
+            vec![ecu_section],
             SectionType::General,
         );
 

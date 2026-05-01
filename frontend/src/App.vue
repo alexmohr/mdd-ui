@@ -32,9 +32,14 @@ watch(() => store.fontSize, (size) => {
 }, { immediate: true });
 
 onMounted(async () => {
-  await Promise.all([store.loadRecentFiles(), store.loadPrefs(), llmStore.loadSettings()]);
+  const initialFilePromise = api.getInitialFile();
+  const initPromise = Promise.all([store.loadRecentFiles(), store.loadPrefs(), llmStore.loadSettings()]);
+
+  const initialFile = await initialFilePromise;
+  if (initialFile) store.loading = true;
+
+  await initPromise;
   window.addEventListener("keydown", handleKeydown);
-  const initialFile = await api.getInitialFile();
   if (initialFile) await store.loadFile(initialFile);
   if (store.autoCheckUpdates) {
     check().then((update) => {
@@ -100,7 +105,6 @@ function handleKeydown(e: KeyboardEvent) {
     case "p": if (store.isDiff) store.prevChange(); break;
     case "s": store.toggleSort(); break;
     case "e": store.expandAll(); break;
-    case "c": store.collapseAll(); break;
     case "u": if (store.isDiff) store.toggleHideUnchanged(); break;
     case "x": store.clearSearch(); break;
     case "+": case "=": store.increaseFontSize(); break;
@@ -190,10 +194,14 @@ function onSplitMouseDown() {
               >
                 <button
                   class="flex-1 px-4 py-2 text-neutral-300 text-sm text-left flex items-center gap-3 min-w-0"
+                  :title="file.path"
                   @click="openRecentFile(file.path)"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500 group-hover:text-neutral-400 flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>
-                  <span class="truncate">{{ getFileName(file.path) }}</span>
+                  <span class="min-w-0">
+                    <span class="truncate block">{{ getFileName(file.path) }}</span>
+                    <span class="truncate block text-[11px] text-neutral-500" :title="file.path">{{ file.path }}</span>
+                  </span>
                 </button>
                 <button
                   class="p-2 mr-1 rounded text-neutral-700 hover:text-red-400 transition-colors flex-shrink-0"
@@ -211,8 +219,6 @@ function onSplitMouseDown() {
             <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">Backspace</kbd> back
             &nbsp;&middot;&nbsp;
             <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">e</kbd> expand all
-            &nbsp;&middot;&nbsp;
-            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">c</kbd> collapse all
           </div>
         </div>
       </div>

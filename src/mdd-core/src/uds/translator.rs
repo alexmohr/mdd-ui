@@ -6,9 +6,9 @@
 use anyhow::{Context, Result, bail};
 use cda_core::DiagServiceResponseStruct;
 use cda_interfaces::{
-    DiagComm, DiagCommType, DiagServiceError, DynamicPlugin, EcuAddressProvider,
-    EcuManager as EcuManagerTrait, EcuManagerType, EcuSchemaProvider, FunctionalDescriptionConfig,
-    HashMap, HashMapExtensions, Protocol, ServicePayload,
+    DiagComm, DiagCommType, DiagServiceError, DynamicPlugin, EcuManager as EcuManagerTrait,
+    EcuManagerType, EcuSchemaProvider, FunctionalDescriptionConfig, HashMap, HashMapExtensions,
+    Protocol,
     datatypes::{
         ComParams, DatabaseNamingConvention, DiagnosticServiceAffixPosition, DtcField, DtcRecord,
     },
@@ -66,11 +66,9 @@ impl DiagServiceResponse for FakeVariantResponse {
     }
 }
 
-/// Wrapper around the CDA `EcuManager` for UDS ↔ SOVD translation.
+/// Wrapper around the CDA `EcuManager` for UDS translation and encoding.
 pub struct UdsTranslator {
     manager: CdaEcuManager,
-    ecu_name: String,
-    /// Retained so we can reload the database for variant pattern extraction.
     path: String,
 }
 
@@ -79,7 +77,6 @@ pub struct UdsTranslator {
 pub struct MatchedService {
     pub name: String,
     pub service_type: String,
-    pub sovd_path: String,
 }
 
 /// A variant available in the loaded MDD database.
@@ -97,16 +94,9 @@ pub struct UdsLookupResult {
     pub sid_name: String,
 }
 
-/// Result of translating UDS bytes to SOVD JSON.
+/// Result of encoding JSON parameters into UDS bytes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UdsToSovdResult {
-    pub service_name: String,
-    pub json: serde_json::Value,
-}
-
-/// Result of translating SOVD JSON to UDS bytes.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SovdToUdsResult {
+pub struct UdsEncodeResult {
     pub service_name: String,
     pub hex_bytes: String,
     pub raw_bytes: Vec<u8>,
@@ -116,7 +106,6 @@ pub struct SovdToUdsResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceSchemaResult {
     pub service_name: String,
-    pub sovd_path: String,
     pub request_schema: Option<serde_json::Value>,
     pub response_schema: Option<serde_json::Value>,
 }
@@ -129,20 +118,21 @@ impl UdsTranslator {
     /// Returns an error if the database cannot be loaded or the `EcuManager`
     /// cannot be initialised.
     pub async fn new(path: &str) -> Result<Self> {
-        let db = crate::database::load_mdd(path)
+        let db = crate::database::load_mdd_ignore_protocol(path)
             .context("Failed to load MDD database for UDS translator")?;
 
         let func_config = FunctionalDescriptionConfig {
             description_database: String::new(),
             enabled_functional_groups: None,
             protocol_position: DiagnosticServiceAffixPosition::Suffix,
-            protocol_case_sensitive: false,
         };
+
+        let com_params = ComParams::default();
 
         let mut manager = CdaEcuManager::new(
             db,
-            Protocol::DoIp,
-            &ComParams::default(),
+            Protocol::default_doip(),
+            &com_params,
             DatabaseNamingConvention::default(),
             EcuManagerType::Ecu,
             &func_config,
@@ -179,11 +169,8 @@ impl UdsTranslator {
             variant.name.as_deref().unwrap_or("<none>"),
         );
 
-        let ecu_name = manager.ecu_name();
-
         Ok(Self {
             manager,
-            ecu_name,
             path: path.to_owned(),
         })
     }
@@ -210,7 +197,7 @@ impl UdsTranslator {
         let matched: Vec<MatchedService> = result
             .unwrap_or_default()
             .into_iter()
-            .map(|dc| matched_service_from_diagcomm(&self.ecu_name, &dc))
+            .map(|dc| matched_service_from_diagcomm(&dc))
             .collect();
 
         Ok(UdsLookupResult {
@@ -219,69 +206,17 @@ impl UdsTranslator {
         })
     }
 
-    /// Translate raw UDS response bytes into SOVD-style JSON using the CDA
-    /// parsing engine.
-    ///
-    /// `service_name` identifies which diagnostic service to use for
-    /// decoding.  `is_request` controls whether the bytes are interpreted
-    /// as a request (`true`) or a response (`false`).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the service is not found or the bytes cannot be
-    /// parsed.
-    pub async fn uds_to_sovd(
-        &self,
-        service_name: &str,
-        bytes: &[u8],
-        is_request: bool,
-    ) -> Result<UdsToSovdResult> {
-        let diag_comm = self.find_service(service_name)?;
-
-        let payload = ServicePayload {
-            data: bytes.to_vec(),
-            source_address: 0,
-            target_address: 0,
-            new_session: None,
-            new_security: None,
-        };
-
-        let response = if is_request {
-            self.manager
-                .convert_request_from_uds(&diag_comm, &payload, true)
-                .await
-        } else {
-            self.manager
-                .convert_from_uds(&diag_comm, &payload, true, None)
-                .await
-        };
-
-        let response = response
-            .map_err(|e| anyhow::anyhow!("{e}"))
-            .context("Failed to parse UDS bytes")?;
-
-        let json_response = response
-            .into_json()
-            .map_err(|e| anyhow::anyhow!("{e}"))
-            .context("Failed to convert parsed data to JSON")?;
-
-        Ok(UdsToSovdResult {
-            service_name: service_name.to_owned(),
-            json: json_response.data,
-        })
-    }
-
-    /// Translate a SOVD-style JSON payload into raw UDS request bytes.
+    /// Encode a JSON parameter map into raw UDS request bytes.
     ///
     /// # Errors
     ///
     /// Returns an error if the service is not found or the JSON cannot be
     /// encoded into UDS bytes.
-    pub async fn sovd_to_uds(
+    pub async fn uds_encode(
         &self,
         service_name: &str,
         json: &serde_json::Value,
-    ) -> Result<SovdToUdsResult> {
+    ) -> Result<UdsEncodeResult> {
         let diag_comm = self.find_service(service_name)?;
 
         let uds_data = UdsPayloadData::ParameterMap(
@@ -315,7 +250,7 @@ impl UdsTranslator {
                 {
                     Ok(p) => p,
                     Err(_) => {
-                        return Ok(SovdToUdsResult {
+                        return Ok(UdsEncodeResult {
                             service_name: service_name.to_owned(),
                             hex_bytes: String::new(),
                             raw_bytes: Vec::new(),
@@ -336,7 +271,7 @@ impl UdsTranslator {
             .collect::<Vec<_>>()
             .join(" ");
 
-        Ok(SovdToUdsResult {
+        Ok(UdsEncodeResult {
             service_name: service_name.to_owned(),
             hex_bytes,
             raw_bytes: payload.data,
@@ -359,7 +294,7 @@ impl UdsTranslator {
             let result = self.manager.lookup_diagcomms_by_request_prefix(&[sid]);
             for dc in result.unwrap_or_default() {
                 if seen.insert(dc.name.clone()) {
-                    services.push(matched_service_from_diagcomm(&self.ecu_name, &dc));
+                    services.push(matched_service_from_diagcomm(&dc));
                 }
             }
         }
@@ -370,10 +305,6 @@ impl UdsTranslator {
         for info in data_info {
             if seen.insert(info.name.clone()) {
                 services.push(MatchedService {
-                    sovd_path: format!(
-                        "/vehicle/v15/components/{}/data/{}",
-                        self.ecu_name, info.name
-                    ),
                     name: info.name,
                     service_type: "data".to_owned(),
                 });
@@ -386,10 +317,6 @@ impl UdsTranslator {
             for info in configs {
                 if seen.insert(info.name.clone()) {
                     services.push(MatchedService {
-                        sovd_path: format!(
-                            "/vehicle/v15/components/{}/configurations/{}",
-                            self.ecu_name, info.name
-                        ),
                         name: info.name,
                         service_type: "configurations".to_owned(),
                     });
@@ -399,10 +326,6 @@ impl UdsTranslator {
         for info in self.manager.get_components_single_ecu_jobs_info() {
             if seen.insert(info.name.clone()) {
                 services.push(MatchedService {
-                    sovd_path: format!(
-                        "/vehicle/v15/components/{}/operations/{}",
-                        self.ecu_name, info.name
-                    ),
                     name: info.name,
                     service_type: "operations".to_owned(),
                 });
@@ -412,78 +335,48 @@ impl UdsTranslator {
         services
     }
 
-    /// Look up services by SOVD name or URL path fragment.
-    ///
-    /// Matches service names and SOVD paths case-insensitively against the
-    /// query string.  A query like `/components/ecu/data/ReadVIN` or just
-    /// `ReadVIN` will both match.
-    #[must_use]
-    pub fn sovd_lookup(&self, query: &str) -> Vec<MatchedService> {
-        let query = query.trim();
-        let query_lower = query.to_lowercase();
-
-        let all = self.list_services();
-        all.into_iter()
-            .filter(|s| {
-                s.name.to_lowercase().contains(&query_lower)
-                    || s.sovd_path.to_lowercase().contains(&query_lower)
-            })
-            .collect()
-    }
-
     /// Return the JSON Schema for a service's request and response
     /// parameters.
     ///
     /// The schemas expose which fields are coded constants (`const`) and
     /// which are user-editable, enabling a tailored UI.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the service is not found or schema generation
-    /// fails.
-    pub async fn service_schema(&self, service_name: &str) -> Result<ServiceSchemaResult> {
-        let diag_comm = self.find_service(service_name)?;
+    /// When the service cannot be resolved to a `DiagComm` (e.g. it is only
+    /// known through the component APIs), schemas will be `None`.
+    pub async fn service_schema(&self, service_name: &str) -> ServiceSchemaResult {
+        let diag_comm = self.find_service(service_name).ok();
 
-        let request_schema = self
-            .manager
-            .schema_for_request(&diag_comm)
-            .await
-            .ok()
-            .and_then(|s| {
-                s.into_schema()
-                    .and_then(|schema| serde_json::to_value(schema).ok())
-            });
+        let request_schema = match &diag_comm {
+            Some(dc) => self
+                .manager
+                .schema_for_request(dc)
+                .await
+                .ok()
+                .and_then(|s| {
+                    s.into_schema()
+                        .and_then(|schema| serde_json::to_value(schema).ok())
+                }),
+            None => None,
+        };
 
-        let response_schema = self
-            .manager
-            .schema_for_responses(&diag_comm)
-            .await
-            .ok()
-            .and_then(|s| {
-                s.into_schema()
-                    .and_then(|schema| serde_json::to_value(schema).ok())
-            });
+        let response_schema = match &diag_comm {
+            Some(dc) => self
+                .manager
+                .schema_for_responses(dc)
+                .await
+                .ok()
+                .and_then(|s| {
+                    s.into_schema()
+                        .and_then(|schema| serde_json::to_value(schema).ok())
+                }),
+            None => None,
+        };
 
-        let sovd_path = self
-            .list_services()
-            .into_iter()
-            .find(|s| s.name == service_name)
-            .map_or_else(
-                || {
-                    format!(
-                        "/vehicle/v15/components/{}/data/{service_name}",
-                        self.ecu_name
-                    )
-                },
-                |s| s.sovd_path,
-            );
-
-        Ok(ServiceSchemaResult {
+        ServiceSchemaResult {
             service_name: service_name.to_owned(),
-            sovd_path,
             request_schema,
             response_schema,
-        })
+        }
     }
 
     /// List all variants in the loaded MDD database.
@@ -690,6 +583,7 @@ const ALL_SIDS: &[u8] = &[
     service_ids::CLEAR_DIAGNOSTIC_INFORMATION,
     service_ids::READ_DTC_INFORMATION,
     service_ids::SECURITY_ACCESS,
+    service_ids::AUTHENTICATION,
     service_ids::COMMUNICATION_CONTROL,
     service_ids::CONTROL_DTC_SETTING,
     service_ids::TESTER_PRESENT,
@@ -699,7 +593,7 @@ const ALL_SIDS: &[u8] = &[
 ];
 
 /// Build a `MatchedService` from a CDA `DiagComm`.
-fn matched_service_from_diagcomm(ecu_name: &str, dc: &DiagComm) -> MatchedService {
+fn matched_service_from_diagcomm(dc: &DiagComm) -> MatchedService {
     let category = match dc.type_ {
         DiagCommType::Data => "data",
         DiagCommType::Configurations => "configurations",
@@ -708,7 +602,6 @@ fn matched_service_from_diagcomm(ecu_name: &str, dc: &DiagComm) -> MatchedServic
         DiagCommType::Faults => "faults",
     };
     MatchedService {
-        sovd_path: format!("/vehicle/v15/components/{ecu_name}/{category}/{}", dc.name),
         name: dc.name.clone(),
         service_type: category.to_owned(),
     }

@@ -10,7 +10,7 @@
 -->
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import type { DetailRow, JumpTarget } from "../api/commands";
 
 const props = withDefaults(defineProps<{
@@ -185,10 +185,126 @@ const selected = ref<Field | null>(null);
 function select(f: Field) {
   selected.value = selected.value?.name === f.name ? null : f;
 }
+
+// ── Hover cross-highlight ─────────────────────────────────────────────────
+const hovered = ref<Field | null>(null);
+let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+
+function onCellEnter(f: Field) {
+  hovered.value = f;
+  // Tooltip delay
+  if (hoverTimer) clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => { tooltipVisible.value = true; }, 100);
+}
+
+function onGridLeave() {
+  hovered.value = null;
+  tooltipVisible.value = false;
+  if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+}
+
+function cellDimmed(f: Field): boolean {
+  if (!hovered.value) return false;
+  if (selected.value?.name === f.name) return false;
+  return hovered.value.name !== f.name;
+}
+
+function cellHighlighted(f: Field): boolean {
+  if (!hovered.value) return false;
+  return hovered.value.name === f.name;
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────
+const tooltipVisible = ref(false);
+const tooltipX = ref(0);
+const tooltipY = ref(0);
+const gridRef = ref<HTMLElement | null>(null);
+
+function onCellMouseMove(event: MouseEvent) {
+  tooltipX.value = event.clientX + 12;
+  tooltipY.value = event.clientY - 40;
+}
+
+// ── Collapse for large messages ───────────────────────────────────────────
+const COLLAPSE_THRESHOLD = 8;
+const expanded = ref(false);
+
+watch(() => props.rows, () => { expanded.value = false; });
+
+const visibleGrid = computed(() => {
+  if (expanded.value || grid.value.length <= COLLAPSE_THRESHOLD) return grid.value;
+  return grid.value.slice(0, COLLAPSE_THRESHOLD);
+});
+
+const isCollapsible = computed(() => grid.value.length > COLLAPSE_THRESHOLD);
+
+// ── Keyboard navigation ───────────────────────────────────────────────────
+// Sorted field list for navigation: by byteStart asc, then bitHi desc
+const sortedFields = computed(() =>
+  [...fields.value].sort((a, b) => {
+    if (a.byteStart !== b.byteStart) return a.byteStart - b.byteStart;
+    return b.bitHi - a.bitHi;
+  }),
+);
+
+function onKeydown(e: KeyboardEvent) {
+  const sorted = sortedFields.value;
+  if (sorted.length === 0) return;
+
+  if (e.key === "Escape") {
+    selected.value = null;
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === "Enter" && selected.value?.jumpTarget && props.onNavigate) {
+    props.onNavigate(selected.value.jumpTarget);
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+    e.preventDefault();
+    if (!selected.value) { selected.value = sorted[0]; return; }
+    const idx = sorted.findIndex(f => f.name === selected.value!.name);
+    const next = sorted[(idx + 1) % sorted.length];
+    if (next) selected.value = next;
+    return;
+  }
+
+  if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+    e.preventDefault();
+    if (!selected.value) { selected.value = sorted[sorted.length - 1]; return; }
+    const idx = sorted.findIndex(f => f.name === selected.value!.name);
+    const prev = sorted[(idx - 1 + sorted.length) % sorted.length];
+    if (prev) selected.value = prev;
+    return;
+  }
+}
+
+// ── Copy to clipboard ─────────────────────────────────────────────────────
+const copiedField = ref<string | null>(null);
+
+async function copyValue(value: string, label: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    copiedField.value = label;
+    setTimeout(() => { copiedField.value = null; }, 1500);
+  } catch { /* clipboard not available */ }
+}
+
+onBeforeUnmount(() => {
+  if (hoverTimer) clearTimeout(hoverTimer);
+});
 </script>
 
 <template>
-  <div class="select-none text-xs font-mono">
+  <div
+    ref="gridRef"
+    class="select-none text-xs font-mono bg-neutral-900/30 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-neutral-700"
+    tabindex="0"
+    @keydown="onKeydown"
+  >
     <!-- Section header -->
     <div class="flex items-center gap-2 px-1 pb-2 border-b border-neutral-800/50 mb-2">
       <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-600"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
@@ -196,7 +312,7 @@ function select(f: Field) {
     </div>
 
     <!-- Bit grid -->
-    <div class="overflow-x-auto rounded-lg border border-neutral-800">
+    <div class="overflow-x-auto rounded-lg relative" @mouseleave="onGridLeave">
       <table class="w-full border-collapse" style="table-layout: fixed; min-width: 360px;">
         <thead>
           <tr class="bg-neutral-900/60 border-b border-neutral-800">
@@ -211,7 +327,7 @@ function select(f: Field) {
         </thead>
         <tbody>
           <tr
-            v-for="row in grid"
+            v-for="row in visibleGrid"
             :key="row.byteLabel"
             class="border-b border-neutral-800/50 last:border-0"
           >
@@ -222,20 +338,23 @@ function select(f: Field) {
               <template v-if="cell !== null">
                 <td
                   v-if="cell.type === 'empty'"
-                  class="border border-neutral-800/40 bg-neutral-950 h-7"
+                  class="border border-neutral-800/40 h-7 empty-cell"
                 />
                 <td
                   v-else
                   :colspan="cell.colSpan"
-                  class="border cursor-pointer h-7 px-1 align-middle transition-colors"
+                  class="border cursor-pointer h-7 px-1 align-middle transition-all duration-100"
                   :class="[
                     fieldColor(cell.field),
                     selected?.name === cell.field.name
                       ? 'ring-1 ring-inset ring-white/30'
                       : 'hover:brightness-125',
+                    cellDimmed(cell.field) ? 'opacity-30' : '',
+                    cellHighlighted(cell.field) && selected?.name !== cell.field.name ? 'brightness-130' : '',
                   ]"
-                  :title="`${cell.field.name} | ${cell.field.hex} | bits [${cell.field.bitHi}:${cell.field.bitLo}]`"
                   @click="select(cell.field)"
+                  @mouseenter="onCellEnter(cell.field)"
+                  @mousemove="onCellMouseMove"
                 >
                   <span
                     v-if="cell.firstInRow"
@@ -259,6 +378,35 @@ function select(f: Field) {
           </tr>
         </tbody>
       </table>
+
+    </div>
+
+    <!-- Custom tooltip (teleported to body to avoid overflow clipping) -->
+    <Teleport to="body">
+      <div
+        v-if="tooltipVisible && hovered"
+        class="fixed pointer-events-none bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1.5 text-[10px] font-mono shadow-lg z-[9999] space-y-0.5 max-w-[200px]"
+        :style="{ left: tooltipX + 'px', top: tooltipY + 'px' }"
+      >
+        <div class="text-neutral-100 font-semibold truncate">{{ hovered.name }}</div>
+        <div class="text-neutral-400">
+          <span class="opacity-60">Hex</span> <span class="text-neutral-200">{{ hovered.hex || '—' }}</span>
+        </div>
+        <div class="text-neutral-400">
+          <span class="opacity-60">Bits</span> <span class="text-neutral-200">[{{ hovered.bitHi }}:{{ hovered.bitLo }}]</span>
+        </div>
+        <div v-if="hovered.paramType" class="text-neutral-500 truncate">{{ hovered.paramType }}</div>
+      </div>
+    </Teleport>
+
+    <!-- Collapse toggle -->
+    <div v-if="isCollapsible" class="text-center py-1.5">
+      <button
+        class="text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+        @click="expanded = !expanded"
+      >
+        {{ expanded ? 'Collapse' : `Show all ${grid.length} rows` }}
+      </button>
     </div>
 
     <!-- Detail card for selected field -->
@@ -274,7 +422,13 @@ function select(f: Field) {
         :class="fieldColor(selected)"
       >
         <div class="flex items-center justify-between gap-2">
-          <span class="font-semibold text-[11px] text-neutral-100">{{ selected.name }}</span>
+          <!-- Navigate-to-field: clickable name if jumpTarget exists -->
+          <span
+            v-if="selected.jumpTarget && onNavigate"
+            class="font-semibold text-[11px] text-neutral-100 cursor-pointer hover:underline hover:text-white transition-colors"
+            @click="onNavigate(selected.jumpTarget!)"
+          >{{ selected.name }} ↗</span>
+          <span v-else class="font-semibold text-[11px] text-neutral-100">{{ selected.name }}</span>
           <span class="text-[10px] opacity-60">{{ selected.paramType }}</span>
         </div>
         <div class="grid grid-cols-3 gap-x-4 gap-y-0.5 text-[10px] opacity-80">
@@ -286,16 +440,45 @@ function select(f: Field) {
             <span class="opacity-60">Bits </span>
             <span class="font-mono">[{{ selected.bitHi }}:{{ selected.bitLo }}]</span>
           </div>
-          <div>
+          <div class="flex items-center gap-1">
             <span class="opacity-60">Hex </span>
             <span class="font-mono">{{ selected.hex || '—' }}</span>
+            <!-- Copy hex button -->
+            <button
+              v-if="selected.hex"
+              class="opacity-40 hover:opacity-80 transition-opacity ml-0.5"
+              @click.stop="copyValue(selected.hex, 'hex')"
+            >
+              <svg v-if="copiedField !== 'hex'" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
           </div>
-          <div v-if="selected.binary" class="col-span-3">
+          <div v-if="selected.binary" class="col-span-3 flex items-center gap-1">
             <span class="opacity-60">Binary </span>
             <span class="font-mono tracking-widest">{{ selected.binary }}</span>
+            <!-- Copy binary button -->
+            <button
+              class="opacity-40 hover:opacity-80 transition-opacity ml-0.5"
+              @click.stop="copyValue(selected.binary, 'binary')"
+            >
+              <svg v-if="copiedField !== 'binary'" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
           </div>
+        </div>
+        <!-- Keyboard hint -->
+        <div class="text-[9px] text-neutral-600 pt-0.5">
+          ↑↓ navigate · Enter jump · Esc close
         </div>
       </div>
     </transition>
   </div>
 </template>
+
+<style scoped>
+.empty-cell {
+  background-color: rgb(10 10 10); /* neutral-950 */
+  background-image: radial-gradient(circle, rgb(38 38 38 / 0.5) 1px, transparent 1px);
+  background-size: 6px 6px;
+}
+</style>

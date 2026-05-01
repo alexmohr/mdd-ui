@@ -13,7 +13,7 @@ use std::{collections::HashMap, fmt::Write as _, sync::Mutex};
 use anyhow::{Context, Result};
 use mdd_core::{
     database, diff,
-    tree::{self, DetailContent, DiffStatus, NodeType, TreeNode},
+    tree::{self, DetailContent, DetailRow, DetailRowType, DiffStatus, NodeType, TreeNode},
 };
 use rmcp::{handler::server::wrapper::Parameters, schemars, tool, tool_router};
 use serde::Deserialize;
@@ -240,6 +240,9 @@ impl MddMcpServer {
             for section in node.detail_sections.iter() {
                 let _ = write!(output, "\n--- {} ---\n", section.title);
                 format_detail_content(&section.content, &mut output, 0);
+                if let Some(ref rows) = section.byte_pattern_rows {
+                    format_byte_pattern(rows, &mut output);
+                }
             }
             output
         })
@@ -435,6 +438,20 @@ fn format_detail_content(content: &DetailContent, output: &mut String, indent: u
             }
         }
     }
+}
+
+/// Format byte pattern rows as a compact human-readable table.
+/// Each row contains: Offset | Bits | Hex | Binary | Name | Type
+fn format_byte_pattern(rows: &[DetailRow], output: &mut String) {
+    let _ = writeln!(output, "\n  [Byte Pattern]");
+    let _ = writeln!(output, "  Offset | Bits | Hex | Binary | Name | Type");
+    let _ = writeln!(output, "  -------+------+-----+--------+------+-----");
+    rows.iter()
+        .filter(|r| !matches!(r.row_type, DetailRowType::Header))
+        .for_each(|row| {
+            let cells: Vec<&str> = row.cells.iter().map(|c| c.text.as_str()).collect();
+            let _ = writeln!(output, "  {}", cells.join(" | "));
+        });
 }
 
 // Entry point
