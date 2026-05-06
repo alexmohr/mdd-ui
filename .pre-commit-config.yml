@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Alexander Mohr
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        exclude: \.(patch|diff|lock|json)$
+        args: [--markdown-linebreak-ext=md]
+      - id: mixed-line-ending
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.20.0
+    hooks:
+      - id: yamlfmt
+        args: ["-formatter", "type=basic,retain_line_breaks_single=true"]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      - id: ruff-check
+        args: [--output-format=full]
+      - id: ruff-format
+        args: [--diff]
+  - repo: local
+    hooks:
+      - id: taplo-format
+        name: taplo-format
+        description: Format TOML documents
+        entry: taplo format
+        language: system
+        types: [toml]
+      - id: taplo-lint
+        name: taplo-lint
+        description: Lint TOML documents
+        entry: taplo lint
+        language: system
+        types: [toml]
+  - repo: https://github.com/fsfe/reuse-tool
+    rev: v6.2.0
+    hooks:
+      - id: reuse
+  - repo: local
+    hooks:
+      - id: reuse-annotate
+        name: Add missing license headers (REUSE)
+        entry: uv run pre-commit-action/reuse-annotate-hook.py
+        args:
+          - --copyright=Alexander Mohr
+          - --license=Apache-2.0
+          - --template=mdd_ui
+          - --ignore-paths=
+        language: system
+        pass_filenames: true
+        exclude: ^(LICENSE|NOTICE|CONTRIBUTORS)$
+      - id: cargo-fmt-long-lines
+        name: Rust Format - Fix long lines and unformatted code
+        entry: bash -c '[ -f Cargo.toml ] && cargo fmt --check -- --config error_on_unformatted=true,error_on_line_overflow=true,format_strings=true || exit 0'
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-fmt-import-order
+        name: Rust Format - Fix import order
+        entry: bash -c '[ -f Cargo.toml ] && cargo fmt --check -- --config group_imports=StdExternalCrate || exit 0'
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-fmt-imports-granularity
+        name: Rust Format - Fix imports granularity
+        entry: bash -c '[ -f Cargo.toml ] && cargo fmt --check -- --config imports_granularity=Crate || exit 0'
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: validate-cargo-lints
+        name: Validate Cargo Lints
+        entry: uv run shared-lints/check_cargo_lints.py Cargo.toml
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: no-unicode-check
+        name: No Unicode characters allowed
+        entry: uv run pre-commit-action/no-unicode-check.py
+        language: system
+        files: '\.(py|yml|toml|jinja2)$'
+        pass_filenames: true

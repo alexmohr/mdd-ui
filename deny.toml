@@ -19,8 +19,8 @@ feature-depth = 1
 # https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
 [advisories]
 ignore = [
-  # rand 0.7.3 is a build-time-only dep via tauri's internal kuchikiki fork →
-  # phf_codegen 0.8.0 → phf_generator 0.8.0. No fix exists in the 0.7.x series
+  # rand 0.7.3 is a build-time-only dep via tauri's internal kuchikiki fork ->
+  # phf_codegen 0.8.0 -> phf_generator 0.8.0. No fix exists in the 0.7.x series
   # and the advisory conditions (custom logger calling rand::rng() during reseed)
   # cannot be triggered inside a build script.
   { id = "RUSTSEC-2026-0097", reason = "build-time only via tauri/phf_codegen 0.8; advisory conditions are unreachable in a build-script context" },
