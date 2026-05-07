@@ -160,43 +160,47 @@ function onSplitMouseDown() {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
       </div>
-      <div class="flex-1 flex items-center justify-center" data-tauri-drag-region>
-        <div class="text-center space-y-6">
-          <div class="flex flex-col items-center gap-3">
-            <h1 class="text-2xl font-semibold text-neutral-200 tracking-wide" style="font-family: Helvetica, Arial, sans-serif;">MDD UI</h1>
-            <p class="text-neutral-600 text-sm">Diagnostic database browser</p>
+      <div class="flex-1 flex items-center justify-center welcome-bg" data-tauri-drag-region>
+        <div class="text-center space-y-8 animate-fade-in">
+          <div class="flex flex-col items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/20 flex items-center justify-center mb-1 shadow-lg shadow-blue-500/5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-blue-400 icon-fixed"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>
+            </div>
+            <h1 class="text-3xl font-bold tracking-tight bg-gradient-to-r from-neutral-100 to-neutral-400 bg-clip-text text-transparent" style="font-family: Helvetica, Arial, sans-serif; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">MDD UI</h1>
+            <p class="text-neutral-500 text-sm font-medium tracking-wide">Diagnostic database browser</p>
           </div>
-          <div class="flex gap-3 justify-center mt-4">
+          <div class="flex gap-3 justify-center">
             <button
-              class="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors shadow-lg shadow-blue-600/20"
+              class="glow-btn px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-all duration-200 shadow-xl shadow-blue-600/25 hover:shadow-blue-500/30 hover:-translate-y-0.5 active:translate-y-0"
               @click="openFile"
             >
               Open File
             </button>
             <button
-              class="px-5 py-2.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors border border-neutral-700"
+              class="px-6 py-2.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 text-neutral-200 text-sm font-medium transition-all duration-200 border border-neutral-700/80 hover:border-neutral-600 hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-black/20"
               @click="openDiff"
             >
               Compare Files
             </button>
           </div>
-          <div v-if="store.displayedRecentFiles.length > 0" class="mt-8">
-            <div class="text-neutral-500 text-xs uppercase tracking-wider mb-3">Recent Files</div>
-            <div class="flex flex-col gap-2 items-center overflow-y-auto max-h-64">
+          <div v-if="store.displayedRecentFiles.length > 0" class="mt-10 pt-2">
+            <div class="text-neutral-500 text-[11px] uppercase tracking-widest mb-4 font-medium">Recent Files</div>
+            <div class="flex flex-col gap-1.5 items-center overflow-y-auto max-h-64">
               <div
-                v-for="file in store.displayedRecentFiles"
+                v-for="(file, fi) in store.displayedRecentFiles"
                 :key="file.path"
-                class="w-80 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-colors flex items-center group"
+                class="w-80 rounded-xl bg-neutral-900/60 border border-neutral-800/60 hover:border-neutral-700/80 hover:bg-neutral-800/40 transition-all duration-200 flex items-center group hover:-translate-y-px"
+                :style="{ animationDelay: fi * 30 + 'ms' }"
               >
                 <button
-                  class="flex-1 px-4 py-2 text-neutral-300 text-sm text-left flex items-center gap-3 min-w-0"
+                  class="flex-1 px-4 py-2.5 text-neutral-300 text-sm text-left flex items-center gap-3 min-w-0"
                   @click="openRecentFile(file.path)"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500 group-hover:text-neutral-400 flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>
-                  <span class="truncate">{{ getFileName(file.path) }}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-600 group-hover:text-blue-400/70 flex-shrink-0 transition-colors"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>
+                  <span class="truncate group-hover:text-neutral-200 transition-colors">{{ getFileName(file.path) }}</span>
                 </button>
                 <button
-                  class="p-2 mr-1 rounded text-neutral-700 hover:text-red-400 transition-colors flex-shrink-0"
+                  class="p-2 mr-1.5 rounded-lg text-neutral-700 hover:text-red-400 hover:bg-red-500/10 transition-all flex-shrink-0"
                   title="Remove from recent"
                   @click.stop="store.removeRecentFile(file.path)"
                 >
@@ -205,14 +209,11 @@ function onSplitMouseDown() {
               </div>
             </div>
           </div>
-          <div class="text-neutral-600 text-xs mt-8">
-            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">/</kbd> search
-            &nbsp;&middot;&nbsp;
-            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">Backspace</kbd> back
-            &nbsp;&middot;&nbsp;
-            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">e</kbd> expand all
-            &nbsp;&middot;&nbsp;
-            <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[11px]">c</kbd> collapse all
+          <div class="text-neutral-600 text-xs mt-10 flex items-center justify-center gap-3 flex-wrap">
+            <span class="inline-flex items-center gap-1.5"><kbd class="px-1.5 py-0.5 rounded-md bg-neutral-800/80 text-neutral-400 border border-neutral-700/60 text-[10px] font-mono shadow-sm">/</kbd> <span class="text-neutral-500">search</span></span>
+            <span class="inline-flex items-center gap-1.5"><kbd class="px-1.5 py-0.5 rounded-md bg-neutral-800/80 text-neutral-400 border border-neutral-700/60 text-[10px] font-mono shadow-sm">Bksp</kbd> <span class="text-neutral-500">back</span></span>
+            <span class="inline-flex items-center gap-1.5"><kbd class="px-1.5 py-0.5 rounded-md bg-neutral-800/80 text-neutral-400 border border-neutral-700/60 text-[10px] font-mono shadow-sm">e</kbd> <span class="text-neutral-500">expand</span></span>
+            <span class="inline-flex items-center gap-1.5"><kbd class="px-1.5 py-0.5 rounded-md bg-neutral-800/80 text-neutral-400 border border-neutral-700/60 text-[10px] font-mono shadow-sm">c</kbd> <span class="text-neutral-500">collapse</span></span>
           </div>
         </div>
       </div>
@@ -222,7 +223,7 @@ function onSplitMouseDown() {
     <template v-else>
       <!-- Top bar -->
       <div
-        class="flex items-center h-10 bg-neutral-900 border-b border-neutral-800/60 gap-2 shrink-0"
+        class="flex items-center h-10 bg-neutral-900/95 backdrop-blur-sm border-b border-neutral-800/50 gap-2 shrink-0"
         :class="isMac ? 'pr-3' : 'px-3'"
         :style="isMac ? { paddingLeft: '80px' } : {}"
         data-tauri-drag-region
@@ -339,7 +340,7 @@ function onSplitMouseDown() {
       <div class="flex flex-1 min-h-0">
         <TreePane :style="{ width: store.splitPct + '%' }" class="shrink-0" />
         <div
-          class="w-1 cursor-col-resize bg-neutral-800/40 hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors shrink-0"
+          class="w-px cursor-col-resize bg-neutral-800/60 hover:bg-blue-500/50 active:bg-blue-500/70 transition-all duration-150 shrink-0 hover:w-0.5"
           @mousedown.prevent="onSplitMouseDown"
         />
         <DetailPane class="flex-1 min-w-0" />

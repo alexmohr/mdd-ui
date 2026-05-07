@@ -216,19 +216,19 @@ async function onKeydown(e: KeyboardEvent) {
 <template>
   <div class="flex flex-col h-full bg-neutral-950 outline-none select-none" tabindex="0" @keydown="onKeydown">
     <!-- Header -->
-    <div class="flex items-center h-8 px-2 border-b border-neutral-800/60 shrink-0 gap-1">
-      <span class="text-[0.85em] text-neutral-500 font-medium uppercase tracking-wider flex-1">Explorer</span>
-      <button class="p-1 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors" title="Search (/)" @click="store.searchActive = true">
+    <div class="flex items-center h-8 px-2 border-b border-neutral-800/50 shrink-0 gap-1 bg-neutral-900/50">
+      <span class="text-[0.8em] text-neutral-500 font-semibold uppercase tracking-widest flex-1">Explorer</span>
+      <button class="p-1 rounded-md text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-all" title="Search (/)" @click="store.searchActive = true">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       </button>
-      <button class="p-1 rounded transition-colors relative" :disabled="!canSort" :title="`Sort (s) — ${store.sortLabel}`" :class="canSort ? 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'" @click="canSort && store.toggleSort()">
+      <button class="p-1 rounded-md transition-all relative" :disabled="!canSort" :title="`Sort (s) — ${store.sortLabel}`" :class="canSort ? 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'" @click="canSort && store.toggleSort()">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg>
         <span class="absolute bottom-0 -right-1.5 text-[9px] font-bold leading-none bg-neutral-950 px-px rounded-sm pointer-events-none" :class="canSort ? 'text-blue-400' : 'text-neutral-700'">{{ store.sortLabel }}</span>
       </button>
-      <button class="p-1 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors" title="Expand all (e)" @click="store.expandAll()">
+      <button class="p-1 rounded-md text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-all" title="Expand all (e)" @click="store.expandAll()">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
       </button>
-      <button class="p-1 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors" title="Collapse all (c)" @click="store.collapseAll()">
+      <button class="p-1 rounded-md text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-all" title="Collapse all (c)" @click="store.collapseAll()">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/></svg>
       </button>
     </div>
@@ -243,11 +243,11 @@ async function onKeydown(e: KeyboardEvent) {
         v-for="node in store.nodes"
         :key="node.index"
         :data-index="node.index"
-        class="flex items-center cursor-pointer transition-colors group gap-1"
+        class="flex items-center cursor-pointer transition-all duration-100 group gap-1 relative"
         :style="{ height: store.rowHeightPx + 'px', paddingLeft: `${node.depth * 14 + 6}px` }"
         :class="node.index === store.selectedIndex
-          ? 'bg-neutral-800'
-          : 'hover:bg-neutral-900'"
+          ? 'bg-blue-500/10 border-l-2 border-l-blue-500/70'
+          : 'hover:bg-neutral-800/60 border-l-2 border-l-transparent'"
         @click="onClick(node)"
         @dblclick="onDblClick(node)"
         @contextmenu="onContextMenu($event, node)"
@@ -287,41 +287,41 @@ async function onKeydown(e: KeyboardEvent) {
     <Teleport to="body">
       <div
         v-if="ctxMenu"
-        class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-sm"
+        class="fixed z-50 min-w-48 py-1.5 bg-neutral-900/95 backdrop-blur-xl border border-neutral-700/80 rounded-xl shadow-2xl shadow-black/50 text-sm"
         :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
       >
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('select')">
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-blue-500/10 hover:text-neutral-100 transition-colors rounded-md mx-0.5 max-w-[calc(100%-4px)]" @click="ctxAction('select')">
           View details
         </button>
         <button
           v-if="ctxMenu.node.has_children"
-          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors"
+          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-blue-500/10 hover:text-neutral-100 transition-colors rounded-md mx-0.5 max-w-[calc(100%-4px)]"
           @click="ctxAction('expand')"
         >
           {{ ctxMenu.node.expanded ? 'Collapse' : 'Expand' }}
         </button>
-        <div class="h-px bg-neutral-800 my-1" />
+        <div class="h-px bg-neutral-800/80 my-1.5 mx-2" />
         <button
           v-if="ctxMenu.node.node_type === 'ParentRefService'"
-          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors"
+          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-blue-500/10 hover:text-neutral-100 transition-colors rounded-md mx-0.5 max-w-[calc(100%-4px)]"
           @click="ctxAction('goToParent')"
         >
           Go to parent definition
         </button>
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('copyName')">
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-blue-500/10 hover:text-neutral-100 transition-colors rounded-md mx-0.5 max-w-[calc(100%-4px)]" @click="ctxAction('copyName')">
           Copy name
         </button>
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('copyPath')">
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-blue-500/10 hover:text-neutral-100 transition-colors rounded-md mx-0.5 max-w-[calc(100%-4px)]" @click="ctxAction('copyPath')">
           Copy path
         </button>
-        <div class="h-px bg-neutral-800 my-1" />
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('sort')">
+        <div class="h-px bg-neutral-800/80 my-1.5 mx-2" />
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-blue-500/10 hover:text-neutral-100 transition-colors rounded-md mx-0.5 max-w-[calc(100%-4px)]" @click="ctxAction('sort')">
           Sort tree
         </button>
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('expandAll')">
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-blue-500/10 hover:text-neutral-100 transition-colors rounded-md mx-0.5 max-w-[calc(100%-4px)]" @click="ctxAction('expandAll')">
           Expand all
         </button>
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="ctxAction('collapseAll')">
+        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-blue-500/10 hover:text-neutral-100 transition-colors rounded-md mx-0.5 max-w-[calc(100%-4px)]" @click="ctxAction('collapseAll')">
           Collapse all
         </button>
       </div>

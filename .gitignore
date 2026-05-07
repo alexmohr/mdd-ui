@@ -12,3 +12,6 @@ todo*
 # Frontend (Tauri + Vue)
 node_modules
 dist
+
+# Slide build output
+slides/

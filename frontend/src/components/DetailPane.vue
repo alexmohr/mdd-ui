@@ -244,9 +244,11 @@ async function tableCtxAction(action: string) {
   <div class="flex flex-col h-full bg-neutral-950">
     <!-- Empty state -->
     <div v-if="!store.selectedNode" class="flex-1 flex items-center justify-center">
-      <div class="text-center text-neutral-600 text-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mx-auto mb-3 text-gray-800"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
-        Select a node
+      <div class="text-center text-neutral-600 text-sm space-y-3">
+        <div class="w-12 h-12 rounded-2xl bg-neutral-800/50 border border-neutral-800/60 flex items-center justify-center mx-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-700"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
+        </div>
+        <p class="text-neutral-600">Select a node to view details</p>
       </div>
     </div>
 
@@ -254,7 +256,7 @@ async function tableCtxAction(action: string) {
       <!-- Header info -->
       <div
         v-if="headerSection && text(headerSection.content)"
-        class="px-4 py-2.5 border-b border-neutral-800/60 bg-neutral-900"
+        class="px-4 py-2.5 border-b border-neutral-800/50 bg-neutral-900/60"
       >
         <div
           v-for="(line, i) in text(headerSection.content)"
@@ -264,14 +266,14 @@ async function tableCtxAction(action: string) {
       </div>
 
       <!-- Tabs -->
-      <div v-if="tabSections.length > 1" class="flex border-b border-neutral-800/60 bg-neutral-900 overflow-x-auto shrink-0">
+      <div v-if="tabSections.length > 1" class="flex border-b border-neutral-800/50 bg-neutral-900/40 overflow-x-auto shrink-0">
         <button
           v-for="(section, i) in tabSections"
           :key="i"
-          class="px-4 py-2 text-sm whitespace-nowrap border-b-2 transition-colors"
+          class="px-4 py-2 text-sm whitespace-nowrap border-b-2 transition-all duration-150"
           :class="i === store.selectedTab
-            ? 'border-blue-500 text-neutral-100'
-            : 'border-transparent text-neutral-500 hover:text-neutral-300'"
+            ? 'border-blue-500 text-neutral-100 bg-blue-500/5'
+            : 'border-transparent text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/30'"
           @click="store.setSelectedTab(i)"
           @contextmenu.prevent="onTabContextMenu($event, section)"
         >{{ section.title }}</button>
@@ -290,20 +292,20 @@ async function tableCtxAction(action: string) {
 
         <!-- Table -->
         <div v-else-if="getTable(activeSection.content)" @contextmenu="onTableContextMenu($event, getTable(activeSection.content)!.header, sortedRows(getTable(activeSection.content)!.rows))">
-          <table class="text-sm" style="table-layout: fixed;">
-            <thead class="sticky top-0 bg-neutral-950 z-10">
-              <tr class="border-b border-gray-800/80">
+          <table class="text-sm w-full" style="table-layout: fixed;">
+            <thead class="sticky top-0 bg-neutral-950/95 backdrop-blur-sm z-10">
+              <tr class="border-b border-neutral-800/60">
                 <th
                   v-for="(cell, ci) in getTable(activeSection.content)!.header.cells"
                   :key="ci"
-                  class="text-left px-3 py-2 text-xs text-neutral-500 font-medium uppercase tracking-wider cursor-pointer hover:text-neutral-200 select-none relative group"
+                  class="text-left px-3 py-2.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider cursor-pointer hover:text-neutral-200 select-none relative group transition-colors"
                   :style="colStyle(ci, sectionKey())"
                   @click="toggleSort(ci)"
                 >
                   <span>{{ cell.text }}</span>
                   <span v-if="effectiveSort().col === ci" class="ml-1 text-blue-400">{{ effectiveSort().asc ? '▲' : '▼' }}</span>
                   <span
-                    class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/40 opacity-0 group-hover:opacity-100"
+                    class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/40 opacity-0 group-hover:opacity-100 transition-opacity"
                     @mousedown="onColResize($event, ci, sectionKey())"
                     @click.stop
                   />
@@ -314,15 +316,15 @@ async function tableCtxAction(action: string) {
               <tr
                 v-for="(row, ri) in sortedRows(getTable(activeSection.content)!.rows)"
                 :key="ri"
-                class="border-b border-neutral-800/30 hover:bg-neutral-800/20 transition-colors"
-                :class="diffCls(row.diff_status)"
+                class="border-b border-neutral-800/20 transition-colors"
+                :class="[diffCls(row.diff_status), ri % 2 === 0 ? 'bg-transparent' : 'bg-neutral-900/20', 'hover:bg-neutral-800/30']"
               >
                 <td
                   v-for="(cell, ci) in row.cells"
                   :key="ci"
                   class="px-3 py-1.5 text-neutral-300"
                   :class="{
-                    'text-blue-400 cursor-pointer hover:text-blue-300 hover:underline': cell.jump_target,
+                    'text-blue-400 cursor-pointer hover:text-blue-300 hover:underline decoration-blue-400/40 underline-offset-2': cell.jump_target,
                     'text-neutral-100 font-medium': cell.cell_type === 'ParameterName',
                     'truncate': !store.wrapTableText,
                     'break-words whitespace-normal': store.wrapTableText,
@@ -344,9 +346,9 @@ async function tableCtxAction(action: string) {
           <div
             v-for="(sub, si) in composite(activeSection.content)"
             :key="si"
-            class="rounded-lg border border-neutral-800/50 overflow-hidden"
+            class="rounded-xl border border-neutral-800/50 overflow-hidden shadow-sm shadow-black/10"
           >
-            <div class="px-3 py-1.5 bg-neutral-800/20 text-xs text-neutral-400 font-medium uppercase tracking-wider">
+            <div class="px-3 py-2 bg-neutral-800/30 text-[11px] text-neutral-400 font-semibold uppercase tracking-wider border-b border-neutral-800/30">
               {{ sub.title }}
             </div>
             <div v-if="text(sub.content)" class="px-3 py-2">

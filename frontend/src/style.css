@@ -3,6 +3,16 @@
 
 @import "tailwindcss";
 
+@keyframes subtle-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.15), 0 0 60px rgba(59, 130, 246, 0.05); }
+  50% { box-shadow: 0 0 25px rgba(59, 130, 246, 0.25), 0 0 80px rgba(59, 130, 246, 0.08); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 body {
   margin: 0;
   overflow: hidden;
@@ -12,6 +22,13 @@ body {
 svg:not(.icon-fixed) {
   width: 1em;
   height: 1em;
+}
+
+/* Focus visible ring for accessibility */
+*:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar {
@@ -26,10 +43,49 @@ svg:not(.icon-fixed) {
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.18);
 }
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* Welcome screen gradient background */
+.welcome-bg {
+  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(30, 58, 138, 0.12) 0%, transparent 70%),
+              radial-gradient(ellipse 60% 80% at 70% 60%, rgba(88, 28, 135, 0.06) 0%, transparent 60%),
+              #09090b;
+}
+.light .welcome-bg {
+  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(59, 130, 246, 0.06) 0%, transparent 70%),
+              radial-gradient(ellipse 60% 80% at 70% 60%, rgba(139, 92, 246, 0.04) 0%, transparent 60%),
+              #fafafa;
+}
+
+/* Animated glow button */
+.glow-btn {
+  animation: subtle-glow 3s ease-in-out infinite;
+}
+
+/* Stagger animation for recent files */
+.animate-fade-in {
+  animation: fade-in-up 0.3s ease-out both;
+}
+
+/* Tree indentation guides */
+.tree-node-indent {
+  position: relative;
+}
+.tree-node-indent::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.light .tree-node-indent::before {
+  background: rgba(0, 0, 0, 0.06);
 }
 
 /* Light theme: invert the neutral palette so dark-UI classes render as a light UI */

@@ -3,7 +3,8 @@ SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: 2026 Alexander Mohr
 -->
 
-# Shipping a Fully AI-Coded Project: What Actually Works
+# Systems Engineers Can Have Nice Things
+## Shipping an AI-Coded Desktop App Without Writing Code
 
 > 30 minutes of content for a 20-minute slot (quick talker buffer).
 > Slide cues in `[SLIDE]`. Screenshot placeholders in `[SCREENSHOT: description | sha]`.
@@ -12,434 +13,378 @@ SPDX-FileCopyrightText: 2026 Alexander Mohr
 
 ## Slide 1 — Title
 
-**Shipping a Fully AI-Coded Project: What Actually Works**
+**Systems Engineers Can Have Nice Things**
+*Shipping an AI-Coded Desktop App Without Writing Code*
 
 Alexander Mohr
 
-*No pitch. No hype. Just what worked, what didn't, and how to replicate it.*
+*An experience report. No pitch, no hype.*
+
+> Set the tone: peer-to-peer. "I'm going to tell you what worked and what didn't."
 
 ---
 
-## Slide 2 — What We Built (1.5 min)
+## Slide 2 — A Quick Confession (0.5 min)
 
-[SCREENSHOT: mdd-ui desktop app — full GUI with tree pane, detail pane, and search visible | 3b43c35]
+I'm an onboard diagnostics engineer. ECUs, UDS protocols, CAN buses.
+
+I don't build UIs. I build the thing the UI talks to.
+
+I had a tooling problem: automotive diagnostic databases are complex, deeply nested, and the existing tools weren't great. I needed a visual solution. So I let AI build one.
+
+> Keep it brief. 30 seconds max. The audience should think: "OK this person isn't a frontend dev — interesting."
+
+---
+
+## Slide 3 — What We Built (1.5 min)
+
+[SCREENSHOT: mdd-ui desktop app — full GUI with tree pane, detail pane, search visible | 3b43c35]
 
 - Cross-platform desktop app for automotive diagnostic databases
-- Rust backend, Tauri v2 shell, Vue 3 + TypeScript frontend
-- Diff engine, MCP server, embedded LLM chat, auto-updater
-- Ships on macOS, Linux, Windows
+- Rust backend · Tauri v2 · Vue 3 + TypeScript frontend
+- Diff engine · MCP server · LLM chat · Auto-updater
 
-**I provided the domain knowledge and the architecture.**
-**I wrote zero lines of code.**
+> Let the screenshot speak. Point at tree, detail pane, search. "This looks like it was built by a frontend team. It wasn't."
 
 ---
 
-## Slide 3 — Timeline Overview (1.5 min)
+## Slide 4 — What We Built (cont.)
+
+**I provided the domain knowledge and the architecture.**
+
+**I wrote zero lines of code.**
+
+Every line of implementation — AI-generated. Every architectural decision — mine.
+
+Today: not the impressive parts, the *instructive* parts.
+
+> Don't linger. Set up the structure of the talk: setup, strengths, failures, what you still need.
+
+---
+
+## Slide 5 — Timeline: 11 Weeks, Zero to Shipped (1.5 min)
 
 [SLIDE: visual timeline]
 
 ```
-Feb 18  ─── Initial TUI, 4,700 lines (AI cold-start)
-Feb 19–24 ─ Feature sprint: mouse, search, DOP, CI
-Mar 01  ─── 84-commit refactor day (AI code review loop)
-Mar 03  ─── Diff engine lands (multi-layer feature)
+Feb 18  ─── Initial TUI, 4,700 lines           (AI cold-start)
+Feb 19–24 ─ Feature sprint: mouse, search, CI   (AI + human review)
+Mar 01  ─── 84-commit refactor day              (AI code review loop)
+Mar 03  ─── Diff engine                         (AI multi-layer feature)
 Apr 24  ─── MCP server: AI-accessible API
-Apr 25  ─── Index-based navigation (⚠ engineering intervention)
-Apr 25  ─── Workspace split: mdd-core extraction
-Apr 25  ─── Tauri + Vue 3 GUI (10,500 lines in one commit)
-Apr 26  ─── GUI polish, LLM chat, auto-updater, branding
+Apr 25  ─── ⚠ Index-based navigation            (engineering intervention)
+Apr 25  ─── Workspace split: mdd-core           (architecture decision)
+Apr 25  ─── Tauri + Vue GUI, 10,500 lines       (AI full-stack drop)
+Apr 26  ─── GUI polish, LLM chat, auto-updater
 Apr 27  ─── Cross-platform release CI
-May 03  ─── UDS byte protocol (domain-expertise-driven)
+May 03  ─── UDS byte protocol                   (domain-expertise-driven)
 ```
 
-11 weeks. Zero lines of code written by hand.
+> Point out the ⚠ — that's where engineering mattered most. "The AI did the volume. I did the decisions."
 
 ---
 
-## Slide 4 — The Most Important File (3 min)
+## Slide 6 — The Most Important File in the Project (2.5 min)
 
-[SCREENSHOT: .github/copilot-instructions.md — full file scrolled in editor | 75707ff]
+[SCREENSHOT: .github/copilot-instructions.md — full file in editor, scroll visible | 75707ff]
 
-`.github/copilot-instructions.md` — added day 5. **This is the most important artifact in the project. Not the code — this.**
+`.github/copilot-instructions.md` — added day 5.
+
+This is the most important artifact in the entire project. Not the code — this.
+
+> Scroll through it slowly on screen if presenting live. Let people absorb the length and specificity.
+
+---
+
+## Slide 7 — What's In the Instructions File
 
 A 435-line document covering:
 
 - Project structure ↔ domain model mapping
-- What "jump/link" means — existing nav system, no popups, no re-renders
+- What "jump/link" means — use existing nav, no popups
 - Clippy warnings are never silenced — they are fixed
 - When files should be split into module directories
-- Complete Rust style guide with do/don't examples:
-  - Iterator chains over for-loops
-  - `?` over unwrap
-  - `let...else` for early returns
-  - Enums over string dispatch
-  - Exhaustive match arms — no wildcards, ever
-- Ownership conventions: borrow, don't clone
-- Newtype pattern for semantic type safety
-- When to ask before proceeding vs. when to just do it
+- Complete Rust style guide with do/don't examples
+- Ownership conventions, newtype pattern
+- When to ask vs. when to just do it
+
+> Read selected items. Don't rush through the whole list. Pick the 3 that resonate.
 
 ---
 
-## Slide 5 — Why the Instructions File Matters (1.5 min)
+## Slide 8 — Why It Matters
 
-[SLIDE: two code snippets side by side — "Without instructions" vs "With instructions"]
+Without it: a different style every session. AI defaults drift.
 
-**Without it:** different style every session. AI defaults are reasonable but inconsistent.
+With it: consistent code quality across 11 weeks, hundreds of commits, zero memory between sessions.
 
-**With it:** consistent code quality across 11 weeks and hundreds of commits.
+"This file is the memory. It's the senior engineer who's always in the room."
 
-> "This file is the memory. It's the senior engineer who's always in the room."
+Every session starts fresh — the AI has no memory of last time. This file IS the memory.
 
-Every session starts fresh. The AI has no memory of last time. This file IS the memory.
-
-**Lesson 1: Write this document first. Update it every time you catch a pattern you don't want to see again. It compounds.**
+> Hit the quote hard. This is the anchor of the whole talk.
 
 ---
 
-## Slide 6 — The Backlog: Your Other Job (2 min)
+## Slide 9 — Lesson 1
 
-[SCREENSHOT: todo.md file with specific requirements listed | aabee68]
+> Write the instructions file first. Update it every time you catch a pattern you don't want to see again. It compounds.
 
-[SCREENSHOT: git log showing "Implement all todo.md items" commit | c0da734]
+> Pause. This is the single most important takeaway. Let it breathe.
 
-The format matters. Each item is specific and unambiguous:
+---
+
+## Slide 10 — The Backlog: Your Other Job (1.5 min)
+
+[SCREENSHOT: todo.md with specific requirements | aabee68]
+
+The format matters. Each item: specific, unambiguous.
 
 ❌ "improve the detail view"
 
-✅ "the Static Fields overview table should have only a short-name column, no category column. The detail view for a Static Field should show byte size and fixed number of items."
+✅ "Static Fields overview table: only short-name column, no category. Detail view shows byte size and fixed number of items."
 
-The more specific → less back-and-forth → better output.
+> Show the screenshot, then the contrast. Let them feel the difference.
 
-The AI cleared the entire backlog in one commit: `c0da734 Implement all todo.md items`. One commit, all green.
+---
+
+## Slide 11 — The Backlog: Results
+
+[SCREENSHOT: git log showing commit c0da734 "Implement all todo.md items" | c0da734]
+
+The AI cleared the entire backlog in one commit: all green.
+
+`c0da734  Implement all todo.md items`
 
 That only works when items are precise enough to execute without interpretation.
 
-**Lesson 2: Your job is writing the list, not the code. Vague backlog items produce vague code.**
+Lesson 2: Your job is writing the list, not the code. Vague backlog → vague code.
 
 ---
 
-## Slide 7 — What the AI Is Good At: Cold Starts (2 min)
+## Slide 12 — Section Break: What the AI Is Good At (0.5 min)
 
-[SCREENSHOT: initial commit file structure — src/app/, src/tree/ with line counts | c4d2a96]
+Three patterns where AI exceeded expectations.
 
-**Feb 18. First commit.** 13 files, 4,700 lines of Rust.
-
-A complete, keyboard-navigable, split-pane terminal application — on the first try.
-
-Not a scaffold. Working software. The AI bootstrapped:
-- Coherent project structure
-- Module layout
-- Data model from problem domain description
-- Keyboard input handling
-- Split-pane TUI layout
-
-That's the fast part. Use it.
+> Quick transition. Don't elaborate — the slides do the work.
 
 ---
 
-## Slide 8 — What the AI Is Good At: Multi-Layer Features (2 min)
+## Slide 13 — Cold Starts (1.5 min)
 
-[SCREENSHOT: diff mode with color-coded tree nodes showing Added/Removed/Modified | f29a126]
+[SCREENSHOT: initial commit file tree — src/app/, src/tree/ visible with line counts | c4d2a96]
 
-**The diff engine** — landed in a single session (Mar 03):
+Feb 18 — First commit. 13 files, 4,700 lines of Rust.
 
-- FlatBuffers snapshot extraction (`f29a126`)
-- Comparison engine (`50cf5a0`)
-- `DiffStatus` enum threaded through every tree node (`209d176`)
-- Colour-coded rendering (`e8dd7f6`)
-- CLI subcommand restructure (`2c04e39`)
-- Export-diff plaintext output (`18f9859`)
+Complete keyboard-navigable split-pane TUI. Not a scaffold — working software. On the first try.
 
-Multiple files, multiple abstraction layers, all consistent with existing architecture.
-
-When the model is clean and instructions are clear → AI extends correctly across layers.
-
-This would have taken a solo dev a week. It took a session.
+> "The AI bootstrapped what would take me a week of boilerplate in an afternoon." Emphasize: as an ECU engineer, I didn't know how TUI frameworks work. The AI did.
 
 ---
 
-## Slide 9 — What the AI Is Good At: The Tauri Drop (2.5 min)
+## Slide 14 — Multi-Layer Features (1.5 min)
 
-[SCREENSHOT: the full Tauri GUI on first render — tree pane, detail tables, badges | 91d647b]
+[SCREENSHOT: diff mode with color-coded tree nodes | 3d357da]
 
-**Apr 25: one commit, 34 files, 10,525 lines of code.**
+The diff engine — landed in a single session (Mar 03). FlatBuffers extraction, comparison engine, DiffStatus enum threaded through every tree node, colour-coded rendering.
 
-- Tauri v2 backend with full command bridge
-- Vue 3 + TypeScript + TailwindCSS frontend
-- Bun + Vite build system
-- Pinia store, 5 components
-- `cargo check --workspace` clean
-- `bun run build` clean
+Multiple files, multiple layers, consistent architecture.
 
-But here's the thing about that commit...
+> "When the model is clean and instructions are clear, the AI extends correctly across layers."
 
 ---
 
-## Slide 10 — The Prerequisite Nobody Talks About (1.5 min)
+## Slide 15 — The Tauri Drop: TUI → Desktop GUI (2 min)
 
-[SCREENSHOT: git log showing mdd-core extraction immediately before Tauri commit | 6904ae0]
+[SCREENSHOT: TUI on left, Tauri GUI on right — before/after | c4d2a96 → 91d647b]
 
-Before I asked for the GUI, I made one architectural decision:
+Apr 25 — one commit: 34 new files, 10,525 lines of code. Tauri v2, Vue 3 + TypeScript, TailwindCSS, Pinia, Bun + Vite.
 
-**Extract all business logic into a shared library crate first.**
+cargo check clean. bun run build clean.
 
-```
-6904ae0  refactor: extract mdd-core shared library crate
-91d647b  feat: add Tauri + Vue 3 desktop GUI (mdd-tauri crate)
-```
-
-The AI would have built the GUI and duplicated the logic, or called it from the wrong layer. I made the cut. Then I asked.
-
-The one-shot landing happened *because* the architecture was right before the AI touched it.
-
-**Lesson 3: The AI executes well when the structure is clean. Your architectural decisions are the prerequisite, not an afterthought.**
+> Let the before/after speak. "A systems engineer's terminal app became a desktop GUI in one commit."
 
 ---
 
-## Slide 11 — The AI Code Review Loop (2.5 min)
+## Slide 16 — But Here's the Thing About That Commit (1.5 min)
 
-[SCREENSHOT: git log showing design(D-1) through style(S-7) commits on Mar 01 | 0442fd0]
+[SCREENSHOT: git log showing mdd-core extraction immediately before Tauri | 6904ae0..91d647b]
 
-**March 1st: 84 commits.** Here's how:
+Before I asked for the GUI, I made one architectural decision: extract all business logic into a shared library crate first.
 
-1. Separate AI session reviews the codebase
-2. Produces a numbered findings list:
-   - DESIGN-1 through DESIGN-8
-   - BUG-1 through BUG-4
-   - STYLE-1 through STYLE-7
-   - PERF-1 through PERF-2
-3. Second AI session works through every item
-4. Each fix = its own commit, tagged by finding ID
+The AI would have duplicated the logic or called it from the wrong layer. I made the cut. Then I asked.
 
-[SCREENSHOT: excerpt of code review findings doc showing specific items | 0442fd0]
+The one-shot landing happened because the architecture was right before the AI touched it.
 
-The key: the AI reviewer evaluated against the instructions file. That's where it got its definition of what counts as a bug, a style violation, a design smell.
-
-Without that standard → generic suggestions.
-With it → findings specific to your codebase and your conventions.
-
-**Lesson 4: Periodic AI-reviews-AI sessions are high-leverage. Write findings as a numbered document, apply in a second session. The instructions file makes the review meaningful.**
+> This is the punchline of the "good at" section. Architecture-first, AI-second.
 
 ---
 
-## Slide 12 — Where It Goes Wrong: Overview (0.5 min)
+## Slide 17 — Lesson 3
 
-[SLIDE: table with 5 rows — Pattern | What the AI does | The fix]
+> The AI executes well when the structure is clean. Your architectural decisions are the prerequisite, not an afterthought.
+
+---
+
+## Slide 18 — The AI Code Review Loop (2 min)
+
+[SCREENSHOT: git log of tagged refactor commits — design(D-1)..style(S-7) | 0442fd0]
+
+March 1st: 84 commits. How:
+
+1. Separate AI session → reviews codebase
+2. Produces numbered findings: DESIGN-1..8, BUG-1..4, STYLE-1..7, PERF-1..2
+3. New session → applies every item
+4. Each fix = own commit, tagged by finding ID
+
+> Explain the workflow. The key insight: two sessions, not one. Reviewer doesn't fix. Fixer doesn't review.
+
+---
+
+## Slide 19 — Why the Review Loop Works
+
+The AI reviewer evaluated against the instructions file. That's where it got its definition of what counts as a bug, a design smell, a style violation.
+
+Without that standard → generic suggestions. With it → findings specific to your codebase.
+
+Lesson 4: Periodic AI-reviews-AI sessions are high-leverage.
+
+> Connect back to Lesson 1. The instructions file enables this.
+
+---
+
+## Slide 20 — Section Break: Where It Goes Wrong (0.5 min)
+
+Five patterns the AI repeats across every project, every language, every session.
+
+> Shift tone. This is the "honest" section. Lean in.
+
+---
+
+## Slide 21 — The Five Failure Patterns (1.5 min)
 
 | Pattern | What the AI does | The fix |
 |---------|-----------------|---------|
 | String dispatch | `if title.contains("X")` | Enum + exhaustive match |
-| Sentinel values | `usize::MAX`, `"-"` for absent | `Option<T>` |
-| Wildcard match | `_ => handle_other()` | Ban wildcards in instructions |
-| Scope creep | Refactors surrounding code on bugfix | Explicit "fix only this" |
-| Dependency adds | Pulls in a crate for 10 lines of stdlib | Require approval in instructions |
+| Sentinel values | `usize::MAX`, `"-"` | `Option<T>` |
+| Wildcard match | `_ => handle_other()` | Ban in instructions |
+| Scope creep | Refactors on bugfix | "fix only this" |
+| Dependency adds | Crate for 10 lines of stdlib | Require approval |
 
-These patterns repeat across every project, every language, every session.
-
----
-
-## Slide 13 — Failure Pattern: Strings Instead of Types (2 min)
-
-[SCREENSHOT: git diff showing TreeNodeByName removal and TreeNodeByIndex replacement | 116b339]
-
-The most common and most dangerous pattern.
-
-The AI stored navigation targets as display names:
-- `TreeNodeByName` — string-keyed lookup scanning entire tree
-- `ContainerByName` — O(n) on every click
-- `ServiceOrJobByName` — silently breaks on sort
-
-The fix (developer-initiated):
-```
-116b339  refactor: replace name-based navigation with index-based tree indices
-```
-
-One typed enum variant: `TreeNodeByIndex { index, short_name }`
-Single `resolve_all_indices()` pass at build time. O(1), compiler-enforced, sort-stable.
-
-The AI implemented the fix correctly and immediately.
-**It would never have initiated the refactor. Nothing was "broken."**
+> Don't read every row. Highlight strings and wildcards, skip the rest — audience can read.
 
 ---
 
-## Slide 14 — Failure Pattern: Sentinel Values (1 min)
+## Slides 22–26 — Individual Failure Deep-Dives (4 min total)
 
-[SCREENSHOT: code showing usize::MAX replaced with Option<usize> | 371db5b]
+**Strings Instead of Types** (116b339): TreeNodeByName → TreeNodeByIndex. Works in demo, breaks on sort. The AI implemented the fix immediately but would never have initiated it.
 
-`usize::MAX` and `u16::MAX` as stand-ins for "not set."
+**Sentinel Values** (371db5b): usize::MAX → Option<T>. The compiler forces you to handle the absent case. The AI doesn't think about the callsite you forgot.
 
-The AI reaches for these naturally. A senior engineer replaces them with `Option<T>`.
+**Wildcard Match Arms**: The AI writes `_ => handle_other()` every time. Instructions ban it. The AI respects the ban perfectly.
 
-The compiler then forces you to handle the absent case everywhere. The AI version silently mishandles it at the one callsite you forgot.
+**Scope Creep & Dependencies**: Bug fix becomes refactor. 10 lines of stdlib become a new crate. Both solved by explicit instructions.
 
-Already in the instructions file: *"handle errors with Result and ?, never unwrap() in production code."* Extend that principle to all sentinel values.
-
----
-
-## Slide 15 — Failure Pattern: Wildcard Match Arms (1 min)
-
-[SLIDE: code example showing `_ => handle_other()` vs exhaustive match]
-
-```rust
-// What the AI writes — EVERY TIME
-match status {
-    Status::Pending => handle_pending(),
-    _ => handle_other(),   // ← opts out of exhaustiveness
-}
-
-// What the instructions enforce
-match status {
-    Status::Pending => handle_pending(),
-    Status::Active => handle_active(),
-    Status::Completed => handle_completed(),
-}
-```
-
-The instructions ban it explicitly: *"Never use wildcard matches. If a wildcard makes sense, ask first."*
-
-The AI respects this constraint perfectly once it's written down.
+> Pick 1-2 to go deep on. Strings is the best story. Skip sentinel/wildcard if running long.
 
 ---
 
-## Slide 16 — Failure Pattern: Scope Creep & Dependencies (1 min)
+## Slide 27 — Lesson 5
 
-[SLIDE: two bullet points with examples]
-
-**Scope creep:** Ask the AI to fix a bug → it refactors surrounding code. Diff is 3x larger than needed.
-
-Fix: *"fix only this, do not refactor anything else."*
-
-**Dependencies:** The AI adds a crate to solve what ten lines of stdlib would handle. Won't ask.
-
-Fix: *"Never modify dependencies in Cargo.toml without approval."*
-
-Both are already in the instructions file. The AI follows written rules. It does not self-correct without them.
-
-**Lesson 5: Write failure patterns into your instructions file as explicit prohibitions with examples. The AI follows written rules consistently. It does not self-correct without them.**
+> These patterns repeat. Write them into your instructions file as explicit prohibitions with examples. The AI follows written rules consistently. It does not self-correct without them.
 
 ---
 
-## Slide 17 — What You Still Need: Domain Knowledge (1.5 min)
+## Slide 28 — What You Still Need: Domain Knowledge (1.5 min)
 
-[SLIDE: three items — Domain, Architecture, Consequences]
+[SCREENSHOT: UDS byte grid — domain-specific encoding feature | 3b43c35]
 
-**The AI did not know:**
-- What an MDD file is
-- What a DOP is
-- What a FlatBuffers schema looks like for automotive data
-- How UDS service IDs are encoded
+The AI did not know: what an MDD file is, what a DOP is, how UDS service IDs are encoded.
 
-[SCREENSHOT: UDS byte grid feature showing domain-specific encoding | 3b43c35]
+Every meaningful data model decision → downstream of domain expertise.
 
-Every meaningful data model decision was downstream of domain expertise.
+The closer your domain is to general software → more AI can lead. The further away → more you lead.
 
-The closer your domain is to general software → the more AI can lead.
-The further away → the more you lead, AI follows.
+This is where being the domain expert — not the UI expert — was the advantage.
+
+> "As a systems engineer, my domain knowledge was the differentiator. Not my inability to write CSS."
 
 ---
 
-## Slide 18 — What You Still Need: Architecture Decisions (1.5 min)
+## Slide 29 — What You Still Need: Architecture + Consequence Thinking (1.5 min)
 
-[SLIDE: diagram showing mdd-core extraction enabling GUI without duplication]
+When to extract a shared library. When to split a module. When a working implementation is the wrong abstraction.
 
-When to extract a shared library. When to split a module into a directory. When to kill a subsystem. When a working implementation is the wrong abstraction.
-
-The `mdd-core` extraction:
-```
-6904ae0  refactor: extract mdd-core shared library crate
-91d647b  feat: add Tauri + Vue 3 desktop GUI
-```
-
-That decision determined whether the GUI was a clean extension or a mess of duplicated logic.
-
-The AI is an excellent implementer of a shape you've decided on. It is a poor designer of the shape itself.
-
----
-
-## Slide 19 — What You Still Need: Consequence Thinking (1.5 min)
-
-[SLIDE: "works today" vs "works at scale" comparison]
-
-The AI solves the problem in front of it:
-- String navigation works today ← breaks when you sort
-- O(n) scan is fast enough today ← breaks at scale
-- 1,000-line file is manageable today ← unmaintainable in 3 months
-
-Engineering = thinking about what "today" becomes under maintenance, at scale, when someone else reads it.
+The AI solves the problem in front of it. String navigation works today — breaks when you sort. O(n) scan is fast enough today — breaks at scale.
 
 The AI has no model of "six months from now." You do.
 
-That's why the instructions file matters. It encodes your consequence thinking into a form the AI can act on today.
+Systems engineers think about failure modes every day. This is the same skill.
+
+> "Consequence thinking isn't a software-specific skill. It's what we do with ECU failure modes, with protocol edge cases. Same muscle, different domain."
 
 ---
 
-## Slide 20 — The Practical Checklist (2 min)
+## Slide 30 — The Practical Checklist (1 min)
 
-[SLIDE: checklist — copy this]
+[SLIDE: checklist — skim, don't read]
 
-### Before you write any code:
-- [ ] Write your instructions file — domain conventions, structural rules, style guide with do/don't examples, explicit prohibitions
-- [ ] Establish lint/format gates early — nightly rustfmt, clippy all-warnings-as-errors, pre-commit hooks
-- [ ] Be specific. Generic instructions produce generic code.
+Before: instructions file, lint gates, be specific.
+During: specific backlog, review for known patterns, update instructions.
+Periodically: AI code review loop.
+Architecture: make decisions yourself.
 
-### During development:
-- [ ] Maintain a specific backlog — not "improve X" but "X should show columns A and B, detail view includes D and E"
-- [ ] Review every session for known failure patterns: strings, sentinels, wildcards, deps, scope creep
-- [ ] Update instructions file when you catch something new — one catch, one rule, never see it again
-
-### Periodically:
-- [ ] Run AI code review → numbered findings list → apply in separate session
-- [ ] Evaluate findings yourself — some will be wrong or not worth fixing
-
-### Architecture calls:
-- [ ] Make them yourself, before asking the AI to implement
-- [ ] The AI cannot see around corners. You can.
+> "This is in the slides. Copy it later. Don't try to write it down now."
 
 ---
 
-## Slide 21 — The Numbers (1 min)
-
-[SLIDE: metrics table]
+## Slide 31 — The Numbers (0.5 min)
 
 | Metric | Value |
 |--------|-------|
 | First working prototype | Day 1 |
 | Lines at GUI launch | ~15,000+ |
-| Time to shippable desktop app | ~11 weeks |
-| AI-generated features | Essentially all |
-| Architectural rewrites required | 2–3 targeted interventions |
+| Time to shippable app | ~11 weeks |
+| AI-generated features | All of them |
+| Architectural rewrites | 2–3 targeted |
 | Instructions file updates | Continuous |
+| Lines of code written by hand | Zero |
+
+> Let the table speak. Don't read every row.
 
 ---
 
-## Slide 22 — Close (1 min)
-
-[SLIDE: timeline — Feb 18 to May 3]
+## Slide 32 — Close (1 min)
 
 February 18th: first commit, 4,700 lines, working terminal app.
+
 May 3rd: cross-platform desktop GUI, diff engine, MCP server, LLM chat, auto-updater.
 
-11 weeks. Zero lines of code written by hand.
+11 weeks. Zero lines written by hand. By someone who doesn't build UIs.
 
-The AI is fast, capable, and will follow good engineering standards — if you write them down.
+The AI is fast, capable, and follows good engineering standards — if you write them down.
 
-The parts that require you:
-- Domain knowledge
-- Architecture decisions
-- The instructions file
-- Judgment to catch what the AI consistently gets wrong
+The parts that require you: domain knowledge, architecture decisions, the instructions file, judgment.
+
+> Slow down here. This is the summary. Let it land.
 
 ---
 
-## Slide 23 — The Punchline
+## Slide 33 — The Punchline
 
-[SLIDE: the "it never was" meme]
+> "Those parts were always the job."
 
-> "The code was never the job."
+[SLIDE: "it never was" meme]
 
-…
+> 2-second pause. Let it land. Then: "Thanks."
 
-Thanks.
+---
+
+## Slide 34 — Thank You
+
+**github.com/alexmohr/mdd-ui**
+
+*Slides, talk script, and the instructions file — all in the repo.*
 
 ---
 
@@ -447,19 +392,18 @@ Thanks.
 
 | Slide | Screenshot Needed | Commit SHA |
 |-------|-------------------|------------|
-| 2 | mdd-ui desktop app — polished GUI | `3b43c35` (latest feature state) |
-| 4 | .github/copilot-instructions.md in editor | `75707ff` (instructions added) |
-| 6a | todo.md with specific requirements | `aabee68` (todo + instructions added) |
-| 6b | "Implement all todo.md items" in git log | `c0da734` |
-| 7 | Initial commit file structure | `c4d2a96` |
-| 8 | Diff mode with color-coded tree | `f29a126` or `3d357da` |
-| 9 | Tauri GUI first render | `91d647b` |
-| 10 | git log showing mdd-core → Tauri sequence | `6904ae0` + `91d647b` |
-| 11a | git log of tagged refactor commits | `0442fd0` (findings doc) |
-| 11b | code review findings doc content | `0442fd0` |
-| 13 | Diff: TreeNodeByName → TreeNodeByIndex | `116b339` |
-| 14 | Code: usize::MAX → Option | `371db5b` |
-| 17 | UDS byte grid (domain-specific) | `3b43c35` |
+| 3 | mdd-ui desktop app — polished GUI | `3b43c35` (latest feature state) |
+| 6 | .github/copilot-instructions.md in editor | `75707ff` (instructions added) |
+| 10 | todo.md with specific requirements | `aabee68` (todo + instructions added) |
+| 11 | "Implement all todo.md items" in git log | `c0da734` |
+| 13 | Initial commit file structure | `c4d2a96` |
+| 14 | Diff mode with color-coded tree | `f29a126` or `3d357da` |
+| 15 | TUI (before) and Tauri GUI (after) | `c4d2a96` → `91d647b` |
+| 16 | git log showing mdd-core → Tauri sequence | `6904ae0` + `91d647b` |
+| 18 | git log of tagged refactor commits | `0442fd0` (findings doc) |
+| 22 | Diff: TreeNodeByName → TreeNodeByIndex | `116b339` |
+| 23 | Code: usize::MAX → Option | `371db5b` |
+| 28 | UDS byte grid (domain-specific) | `3b43c35` |
 
 ---
 
@@ -468,22 +412,25 @@ Thanks.
 | Slide(s) | Section | Time |
 |-----------|---------|------|
 | 1 | Title | 0.5 min |
-| 2–3 | What we built + timeline | 3 min |
-| 4–5 | Instructions file | 4.5 min |
-| 6 | Backlog | 2 min |
-| 7–10 | What AI is good at (3 examples) | 8 min |
-| 11 | Code review loop | 2.5 min |
-| 12–16 | Where it goes wrong (5 patterns) | 5.5 min |
-| 17–19 | What you still need | 4.5 min |
-| 20–21 | Checklist + numbers | 3 min |
-| 22–23 | Close | 1.5 min |
-| **Total** | | **~35 min raw / ~25 min delivered** |
+| 2 | Quick confession | 0.5 min |
+| 3–5 | What we built + timeline | 3 min |
+| 6–9 | Instructions file + Lesson 1 | 4 min |
+| 10–11 | Backlog + Lesson 2 | 2 min |
+| 12–17 | What AI is good at (3 examples + Lesson 3) | 7 min |
+| 18–19 | Code review loop + Lesson 4 | 2.5 min |
+| 20–27 | Where it goes wrong (5 patterns + Lesson 5) | 6 min |
+| 28–29 | What you still need | 3 min |
+| 30–31 | Checklist + numbers | 1.5 min |
+| 32–34 | Close + punchline | 1.5 min |
+| **Total** | | **~32 min raw / ~22 min delivered** |
 
 ---
 
 ## Speaker Notes — Pacing
 
-- Slides 4–5 (instructions file) are the anchor — take your time here, this is the key takeaway
-- Slides 12–16 (failure patterns) can be compressed by skipping 14/15 if running long
-- Slide 20 (checklist) can be shown without reading aloud — "this is in the slides, copy it later"
+- Slides 6–8 (instructions file) are the anchor — take your time here, this is the key takeaway
+- Slides 22–26 (failure deep-dives) can be compressed by skipping sentinel/wildcard if running long
+- Slide 30 (checklist) can be shown without reading aloud — "this is in the slides, copy it later"
 - The meme at the end needs a 2-second pause before "Thanks" — let it land
+- Thread the systems engineer identity throughout: "as someone who works with ECUs, not UIs..."
+- The narrative arc: confession → proof it works → how → where it fails → what's still yours → punchline
