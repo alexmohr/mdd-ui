@@ -8,6 +8,7 @@ import { useLlmStore } from "./stores/llm";
 import { useSettingsStore } from "./stores/settings";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { check } from "@tauri-apps/plugin-updater";
 import * as api from "./api/commands";
 import TreePane from "./components/TreePane.vue";
@@ -21,9 +22,11 @@ const store = useAppStore();
 const llmStore = useLlmStore();
 const settingsStore = useSettingsStore();
 const dragging = ref(false);
+const dragOver = ref(false);
 const isMac = navigator.platform.toLowerCase().includes('mac');
 const updateAvailable = ref<{ version: string } | null>(null);
 let unlistenOpenFile: (() => void) | null = null;
+let unlistenDragDrop: (() => void) | null = null;
 
 watch(() => store.theme, (t) => {
   document.documentElement.classList.toggle('light', t === 'light');
@@ -36,6 +39,17 @@ watch(() => store.fontSize, (size) => {
 onMounted(async () => {
   unlistenOpenFile = await listen<string>('open-file', (event) => {
     store.loadFile(event.payload);
+  });
+  unlistenDragDrop = await getCurrentWebview().onDragDropEvent((event) => {
+    if (event.payload.type === 'over') {
+      dragOver.value = true;
+    } else if (event.payload.type === 'drop') {
+      dragOver.value = false;
+      const mddPath = event.payload.paths.find(p => p.toLowerCase().endsWith('.mdd'));
+      if (mddPath) store.loadFile(mddPath);
+    } else {
+      dragOver.value = false;
+    }
   });
   const initialFilePromise = api.getInitialFile();
   const initPromise = Promise.all([store.loadRecentFiles(), store.loadPrefs(), llmStore.loadSettings()]);
@@ -57,6 +71,7 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleKeydown);
   llmStore.stopPolling();
   if (unlistenOpenFile) unlistenOpenFile();
+  if (unlistenDragDrop) unlistenDragDrop();
 });
 
 async function openFile() {
@@ -389,5 +404,16 @@ function onSplitMouseDown() {
 
     <!-- Settings modal -->
     <SettingsPanel v-if="settingsStore.open" />
+
+    <!-- Drag-and-drop overlay -->
+    <div
+      v-if="dragOver"
+      class="absolute inset-0 z-50 flex items-center justify-center bg-neutral-950/80 backdrop-blur-sm border-2 border-dashed border-blue-500 rounded-lg pointer-events-none"
+    >
+      <div class="text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-blue-400 mx-auto mb-3"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>
+        <p class="text-blue-300 text-sm font-medium">Drop .mdd file to open</p>
+      </div>
+    </div>
   </div>
 </template>
