@@ -149,8 +149,28 @@ fn run_tauri_app(initial_file: Option<String>) {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|#[allow(unused_variables)] app_handle, event| {
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            if let tauri::RunEvent::Opened { urls } = event {
+                use tauri::{Emitter, Manager};
+                let path = urls
+                    .iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .find_map(|p| p.to_str().map(str::to_owned));
+                if let Some(path) = path {
+                    // Store for frontend initial-load (event may fire before webview mounts)
+                    if let Some(state) = app_handle.try_state::<commands::InitialFile>() {
+                        if let Ok(mut guard) = state.0.lock() {
+                            *guard = Some(path.clone());
+                        }
+                    }
+                    // Emit for already-mounted frontend
+                    let _ = app_handle.emit("open-file", path);
+                }
+            }
+        });
 }
 
 fn run_export_diff(old_file: &str, new_file: &str, output: Option<&str>) -> Result<()> {
