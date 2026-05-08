@@ -7,6 +7,7 @@ import { useAppStore } from "./stores/app";
 import { useLlmStore } from "./stores/llm";
 import { useSettingsStore } from "./stores/settings";
 import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 import { check } from "@tauri-apps/plugin-updater";
 import * as api from "./api/commands";
 import TreePane from "./components/TreePane.vue";
@@ -22,6 +23,7 @@ const settingsStore = useSettingsStore();
 const dragging = ref(false);
 const isMac = navigator.platform.toLowerCase().includes('mac');
 const updateAvailable = ref<{ version: string } | null>(null);
+let unlistenOpenFile: (() => void) | null = null;
 
 watch(() => store.theme, (t) => {
   document.documentElement.classList.toggle('light', t === 'light');
@@ -32,6 +34,9 @@ watch(() => store.fontSize, (size) => {
 }, { immediate: true });
 
 onMounted(async () => {
+  unlistenOpenFile = await listen<string>('open-file', (event) => {
+    store.loadFile(event.payload);
+  });
   const initialFilePromise = api.getInitialFile();
   const initPromise = Promise.all([store.loadRecentFiles(), store.loadPrefs(), llmStore.loadSettings()]);
 
@@ -51,6 +56,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeydown);
   llmStore.stopPolling();
+  if (unlistenOpenFile) unlistenOpenFile();
 });
 
 async function openFile() {
