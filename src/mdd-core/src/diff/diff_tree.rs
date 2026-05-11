@@ -980,7 +980,6 @@ fn add_summary_to_general(
 mod tests {
     use super::*;
 
-    #[allow(clippy::default_trait_access)]
     fn make_node(text: &str, depth: usize, has_children: bool) -> TreeNode {
         TreeNode {
             depth,
@@ -989,13 +988,12 @@ mod tests {
             has_children,
             detail_sections: Arc::from([]),
             node_type: NodeType::Default,
-            payload: Default::default(),
+            payload: NodePayload::default(),
             parent_idx: None,
             diff_status: None,
         }
     }
 
-    #[allow(clippy::default_trait_access)]
     fn make_node_with_sections(
         text: &str,
         depth: usize,
@@ -1008,7 +1006,7 @@ mod tests {
             has_children: false,
             detail_sections: Arc::from(sections),
             node_type: NodeType::Default,
-            payload: Default::default(),
+            payload: NodePayload::default(),
             parent_idx: None,
             diff_status: None,
         }

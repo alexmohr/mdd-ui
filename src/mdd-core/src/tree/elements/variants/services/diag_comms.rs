@@ -101,7 +101,6 @@ pub fn add_diag_comms<'a>(
                 depth.saturating_add(1),
                 display_name.clone(),
                 false,
-                false,
                 sections,
                 NodeType::Service,
                 short_name,
@@ -128,7 +127,6 @@ pub fn add_diag_comms<'a>(
             b.push_service_node(
                 depth.saturating_add(1),
                 display_name.clone(),
-                false,
                 false,
                 sections,
                 NodeType::ParentRefService,
@@ -230,7 +228,6 @@ fn add_single_ecu_jobs(
         b.push_service_node(
             depth.saturating_add(1),
             short_name.to_owned(),
-            false,
             false,
             sections,
             NodeType::Job,

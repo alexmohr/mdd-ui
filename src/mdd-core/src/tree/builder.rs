@@ -140,12 +140,10 @@ impl TreeBuilder {
 
     /// Push a diagcomm node (Service, `ParentRefService`, Request, Response, Job)
     /// with its canonical `short_name` stored for type-safe lookups.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_service_node(
         &mut self,
         depth: usize,
         text: String,
-        expanded: bool,
         has_children: bool,
         sections: Vec<DetailSectionData>,
         node_type: NodeType,
@@ -154,11 +152,11 @@ impl TreeBuilder {
         self.push_node(NodeConfig {
             depth,
             text,
-            expanded,
             has_children,
             sections,
             node_type,
             payload: NodePayload::DiagComm { service_short_name },
+            ..NodeConfig::default()
         });
     }
 
