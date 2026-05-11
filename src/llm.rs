@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Alexander Mohr
 
-// Tauri commands require owned types; struct names intentionally mirror the module.
+// Tauri commands require owned types for JSON deserialization.
 #![allow(clippy::needless_pass_by_value)]
-#![allow(clippy::module_name_repetitions)]
 
 use std::{collections::HashMap, fs, path::PathBuf};
 
@@ -18,7 +17,7 @@ use crate::commands::AppState;
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct LlmSettings {
+pub struct Settings {
     pub ghe_host: String,
     pub llm_endpoint: String,
     pub llm_model: String,
@@ -39,7 +38,7 @@ pub struct LlmSettings {
     pub copilot_api_base: Option<String>,
 }
 
-impl Default for LlmSettings {
+impl Default for Settings {
     fn default() -> Self {
         Self {
             ghe_host: String::new(),
@@ -57,7 +56,7 @@ impl Default for LlmSettings {
 
 /// Sent to the frontend — raw token is never exposed, only a boolean flag.
 #[derive(Serialize)]
-pub struct LlmSettingsView {
+pub struct SettingsView {
     pub ghe_host: String,
     pub llm_endpoint: String,
     pub llm_model: String,
@@ -68,7 +67,7 @@ pub struct LlmSettingsView {
 
 /// Received from the frontend to update settings.
 #[derive(Deserialize)]
-pub struct LlmSettingsUpdate {
+pub struct SettingsUpdate {
     pub ghe_host: String,
     pub llm_endpoint: String,
     pub llm_model: String,
@@ -91,17 +90,17 @@ fn llm_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(cache_dir.join("mdd-ui").join("llm-settings.json"))
 }
 
-fn load_settings(app: &AppHandle) -> LlmSettings {
+fn load_settings(app: &AppHandle) -> Settings {
     let Ok(path) = llm_settings_path(app) else {
-        return LlmSettings::default();
+        return Settings::default();
     };
     let Ok(content) = fs::read_to_string(&path) else {
-        return LlmSettings::default();
+        return Settings::default();
     };
     serde_json::from_str(&content).unwrap_or_default()
 }
 
-fn persist_settings(app: &AppHandle, settings: &LlmSettings) -> Result<(), String> {
+fn persist_settings(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     let path = llm_settings_path(app)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("Failed to create cache directory: {e}"))?;
@@ -116,9 +115,9 @@ fn persist_settings(app: &AppHandle, settings: &LlmSettings) -> Result<(), Strin
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn get_llm_settings(app: AppHandle) -> LlmSettingsView {
+pub fn get_llm_settings(app: AppHandle) -> SettingsView {
     let s = load_settings(&app);
-    LlmSettingsView {
+    SettingsView {
         ghe_host: s.ghe_host,
         llm_endpoint: s.llm_endpoint,
         llm_model: s.llm_model,
@@ -129,7 +128,7 @@ pub fn get_llm_settings(app: AppHandle) -> LlmSettingsView {
 }
 
 #[tauri::command]
-pub fn save_llm_settings(settings: LlmSettingsUpdate, app: AppHandle) -> Result<(), String> {
+pub fn save_llm_settings(settings: SettingsUpdate, app: AppHandle) -> Result<(), String> {
     let mut current = load_settings(&app);
     current.ghe_host = settings.ghe_host;
     current.llm_endpoint = settings.llm_endpoint;
@@ -483,12 +482,12 @@ pub async fn llm_chat(
 
     // Build context from the currently loaded MDD file (drop the lock before await).
     let context = {
-        let core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
-        if core.ecu_name.is_empty() {
-            String::new()
-        } else {
-            build_mdd_context(&core)
-        }
+        let manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager
+            .active_core()
+            .ok()
+            .filter(|core| !core.ecu_name.is_empty())
+            .map_or_else(String::new, build_mdd_context)
     };
 
     let mut all_messages: Vec<ChatMessage> = Vec::new();
@@ -561,7 +560,7 @@ pub async fn llm_chat(
 }
 
 /// Resolve auth header (name, value) for non-Copilot providers.
-fn build_auth_header(settings: &LlmSettings) -> Result<(String, String), String> {
+fn build_auth_header(settings: &Settings) -> Result<(String, String), String> {
     let token = settings.token.as_ref().ok_or_else(|| {
         "Not authenticated. Please configure authentication in settings.".to_owned()
     })?;
