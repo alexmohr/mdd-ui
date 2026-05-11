@@ -162,6 +162,10 @@ export async function toggleHideUnchanged(): Promise<VisibleNode[]> {
   return invoke<VisibleNode[]>("toggle_hide_unchanged");
 }
 
+export async function setIgnoreFirstLevel(value: boolean): Promise<VisibleNode[]> {
+  return invoke<VisibleNode[]>("set_ignore_first_level", { value });
+}
+
 export async function navigateTo(
   target: JumpTarget,
 ): Promise<NavigateResult> {
@@ -203,6 +207,7 @@ export interface UiPrefs {
   wrap_table_text: boolean;
   last_tab_title: string | null;
   auto_check_updates: boolean;
+  ignore_first_level: boolean;
 }
 
 export async function getUiPrefs(): Promise<UiPrefs> {
