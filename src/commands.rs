@@ -4,7 +4,7 @@
 // Tauri commands require owned types for JSON deserialization and state injection.
 #![allow(clippy::needless_pass_by_value)]
 
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
 
 use mdd_core::{
     tree::{
@@ -36,6 +36,7 @@ pub struct VisibleNode {
 
 #[derive(Serialize)]
 pub struct LoadResult {
+    pub tab_id: String,
     pub ecu_name: String,
     pub node_count: usize,
     pub visible: Vec<VisibleNode>,
@@ -175,18 +176,76 @@ impl Default for CoreState {
     }
 }
 
-pub struct AppState(pub Mutex<CoreState>);
+pub struct AppState(pub Mutex<TabManager>);
 
-/// Holds a lazily-created UDS translator, keyed by the MDD file path.
+pub struct TabEntry {
+    pub core: CoreState,
+    pub file_path: String,
+    pub display_name: String,
+    pub is_diff: bool,
+}
+
+#[derive(Serialize)]
+pub struct TabInfo {
+    pub id: String,
+    pub display_name: String,
+    pub file_path: String,
+    pub is_diff: bool,
+    pub is_active: bool,
+}
+
+#[derive(Default)]
+pub struct TabManager {
+    pub tabs: HashMap<String, TabEntry>,
+    pub active_tab: Option<String>,
+    next_id: u64,
+}
+
+impl TabManager {
+    fn next_tab_id(&mut self) -> String {
+        self.next_id = self.next_id.saturating_add(1);
+        format!("tab_{}", self.next_id)
+    }
+
+    pub fn active_core(&self) -> Result<&CoreState, String> {
+        let tab_id = self
+            .active_tab
+            .as_deref()
+            .ok_or_else(|| "No active tab".to_owned())?;
+        self.tabs
+            .get(tab_id)
+            .map(|entry| &entry.core)
+            .ok_or_else(|| "Active tab not found".to_owned())
+    }
+
+    pub fn active_core_mut(&mut self) -> Result<&mut CoreState, String> {
+        let tab_id = self
+            .active_tab
+            .clone()
+            .ok_or_else(|| "No active tab".to_owned())?;
+        self.tabs
+            .get_mut(&tab_id)
+            .map(|entry| &mut entry.core)
+            .ok_or_else(|| "Active tab not found".to_owned())
+    }
+
+    fn active_tab_id(&self) -> Result<String, String> {
+        self.active_tab
+            .clone()
+            .ok_or_else(|| "No active tab".to_owned())
+    }
+}
+
+/// Holds per-tab UDS translators, keyed by tab ID.
 pub struct UdsState(
-    pub tauri::async_runtime::Mutex<Option<mdd_core::uds::translator::UdsTranslator>>,
+    pub tauri::async_runtime::Mutex<HashMap<String, mdd_core::uds::translator::UdsTranslator>>,
 );
 
 pub struct InitialFile(pub Mutex<Option<String>>);
 
 impl Default for AppState {
     fn default() -> Self {
-        Self(Mutex::new(CoreState::default()))
+        Self(Mutex::new(TabManager::default()))
     }
 }
 
@@ -523,30 +582,75 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
 
 #[tauri::command]
 pub async fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, String> {
-    let (nodes, ecu_name) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
-        let db =
-            mdd_core::database::load_mdd(&path).map_err(|e| format!("Failed to load: {e:#}"))?;
-        Ok(mdd_core::tree::build_tree(&db, &path))
-    })
-    .await
-    .map_err(|e| format!("Thread error: {e}"))??;
-    let node_count = nodes.len();
+    // If the file is already open in a tab, switch to it
+    {
+        let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let existing = manager
+            .tabs
+            .iter()
+            .find(|(_, t)| t.file_path == path && !t.is_diff)
+            .map(|(id, _)| id.clone());
 
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
-    core.all_nodes = nodes;
-    core.ecu_name.clone_from(&ecu_name);
-    core.is_diff_mode = false;
-    core.hide_unchanged = false;
-    core.search_stack.clear();
-    core.diagcomm_sort = DiagcommSortMode::IdAsc;
+        if let Some(tab_id) = existing {
+            manager.active_tab = Some(tab_id.clone());
+            let core = manager.active_core()?;
+            return Ok(LoadResult {
+                tab_id,
+                ecu_name: core.ecu_name.clone(),
+                node_count: core.all_nodes.len(),
+                visible: to_visible_nodes(core),
+                is_diff: core.is_diff_mode,
+            });
+        }
+    }
+
+    // Return the path from the blocking task so we don't need to clone it
+    let (nodes, ecu_name, file_path) =
+        tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+            let db = mdd_core::database::load_mdd(&path)
+                .map_err(|e| format!("Failed to load: {e:#}"))?;
+            let (nodes, ecu_name) = mdd_core::tree::build_tree(&db, &path);
+            Ok((nodes, ecu_name, path))
+        })
+        .await
+        .map_err(|e| format!("Thread error: {e}"))??;
+
+    let node_count = nodes.len();
+    let display_name = PathBuf::from(&file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map_or_else(|| file_path.clone(), str::to_owned);
+
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let tab_id = manager.next_tab_id();
+
+    let mut core = CoreState {
+        all_nodes: nodes,
+        ecu_name: ecu_name.clone(),
+        ..CoreState::default()
+    };
     apply_default_sort(&mut core.all_nodes);
     mdd_core::tree::resolve_all_indices(&mut core.all_nodes);
     core.visible = build_visible(&core);
 
+    let visible = to_visible_nodes(&core);
+
+    manager.tabs.insert(
+        tab_id.clone(),
+        TabEntry {
+            core,
+            file_path,
+            display_name,
+            is_diff: false,
+        },
+    );
+    manager.active_tab = Some(tab_id.clone());
+
     Ok(LoadResult {
+        tab_id,
         ecu_name,
         node_count,
-        visible: to_visible_nodes(&core),
+        visible,
         is_diff: false,
     })
 }
@@ -557,42 +661,71 @@ pub async fn load_diff(
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<LoadResult, String> {
-    let (nodes, ecu_name) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
-        let db_old = mdd_core::database::load_mdd(&old_path)
-            .map_err(|e| format!("Failed to load old: {e:#}"))?;
-        let db_new = mdd_core::database::load_mdd(&new_path)
-            .map_err(|e| format!("Failed to load new: {e:#}"))?;
-        Ok(mdd_core::diff::diff_tree::build_diff_tree(
-            &db_old, &db_new, &old_path, &new_path,
-        ))
-    })
-    .await
-    .map_err(|e| format!("Thread error: {e}"))??;
+    let (nodes, ecu_name, old, new) =
+        tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+            let db_old = mdd_core::database::load_mdd(&old_path)
+                .map_err(|e| format!("Failed to load old: {e:#}"))?;
+            let db_new = mdd_core::database::load_mdd(&new_path)
+                .map_err(|e| format!("Failed to load new: {e:#}"))?;
+            let (nodes, ecu_name) =
+                mdd_core::diff::diff_tree::build_diff_tree(&db_old, &db_new, &old_path, &new_path);
+            Ok((nodes, ecu_name, old_path, new_path))
+        })
+        .await
+        .map_err(|e| format!("Thread error: {e}"))??;
+
     let node_count = nodes.len();
 
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
-    core.all_nodes = nodes;
-    core.ecu_name.clone_from(&ecu_name);
-    core.is_diff_mode = true;
-    core.hide_unchanged = false;
-    core.search_stack.clear();
-    core.diagcomm_sort = DiagcommSortMode::IdAsc;
+    let old_name = PathBuf::from(&old)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map_or_else(|| old.clone(), str::to_owned);
+    let new_name = PathBuf::from(&new)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map_or_else(|| new.clone(), str::to_owned);
+    let display_name = format!("{old_name} \u{2194} {new_name}");
+
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let tab_id = manager.next_tab_id();
+
+    let mut core = CoreState {
+        all_nodes: nodes,
+        ecu_name: ecu_name.clone(),
+        is_diff_mode: true,
+        ..CoreState::default()
+    };
     apply_default_sort(&mut core.all_nodes);
     mdd_core::tree::resolve_all_indices(&mut core.all_nodes);
     core.visible = build_visible(&core);
 
+    let visible = to_visible_nodes(&core);
+
+    manager.tabs.insert(
+        tab_id.clone(),
+        TabEntry {
+            core,
+            file_path: String::new(),
+            display_name,
+            is_diff: true,
+        },
+    );
+    manager.active_tab = Some(tab_id.clone());
+
     Ok(LoadResult {
+        tab_id,
         ecu_name,
         node_count,
-        visible: to_visible_nodes(&core),
+        visible,
         is_diff: true,
     })
 }
 
 #[tauri::command]
 pub fn get_visible_nodes(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
-    let core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
-    Ok(to_visible_nodes(&core))
+    let manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core()?;
+    Ok(to_visible_nodes(core))
 }
 
 #[tauri::command]
@@ -600,7 +733,8 @@ pub fn get_node_detail(
     index: usize,
     state: State<'_, AppState>,
 ) -> Result<Vec<DetailSectionData>, String> {
-    let core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core()?;
     let node = core
         .all_nodes
         .get(index)
@@ -613,7 +747,7 @@ pub fn get_node_detail(
         return Ok(node.detail_sections.to_vec());
     }
 
-    let include = compute_include(&core);
+    let include = compute_include(core);
     Ok(node
         .detail_sections
         .iter()
@@ -628,15 +762,13 @@ pub fn get_node_detail(
         })
         .collect())
 }
-
-/// Walk the parent chain from the given node index to find the enclosing
-/// variant Container, returning its canonical short name.
 #[tauri::command]
 pub fn get_node_variant(
     index: usize,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
-    let core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core()?;
     Ok(resolve_node_variant(&core.all_nodes, index))
 }
 
@@ -656,14 +788,15 @@ fn resolve_node_variant(all_nodes: &[TreeNode], index: usize) -> Option<String> 
 
 #[tauri::command]
 pub fn toggle_expand(index: usize, state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     if let Some(node) = core.all_nodes.get_mut(index)
         && node.has_children
     {
         node.expanded = !node.expanded;
     }
-    core.visible = build_visible(&core);
-    Ok(to_visible_nodes(&core))
+    core.visible = build_visible(core);
+    Ok(to_visible_nodes(core))
 }
 
 #[tauri::command]
@@ -672,7 +805,8 @@ pub fn search(
     op: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<SearchResult, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     if !query.is_empty() {
         let scope = core.search_scope.clone();
         let filter_op = if op.as_deref() == Some("or") {
@@ -686,13 +820,13 @@ pub fn search(
             op: filter_op,
         });
     }
-    let visible = build_visible(&core);
+    let visible = build_visible(core);
     core.visible = visible;
 
     let match_count = core.search_stack.len();
     let scope = core.search_scope.to_string();
     Ok(SearchResult {
-        visible: to_visible_nodes(&core),
+        visible: to_visible_nodes(core),
         match_count,
         scope,
     })
@@ -700,15 +834,17 @@ pub fn search(
 
 #[tauri::command]
 pub fn clear_search(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     core.search_stack.clear();
-    core.visible = build_visible(&core);
-    Ok(to_visible_nodes(&core))
+    core.visible = build_visible(core);
+    Ok(to_visible_nodes(core))
 }
 
 #[tauri::command]
 pub fn cycle_search_scope(state: State<'_, AppState>) -> Result<String, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     core.search_scope = match core.search_scope {
         SearchScope::All => SearchScope::Variants,
         SearchScope::Variants => SearchScope::FunctionalGroups,
@@ -724,7 +860,8 @@ pub fn cycle_search_scope(state: State<'_, AppState>) -> Result<String, String> 
 
 #[tauri::command]
 pub fn set_search_scope(scope: String, state: State<'_, AppState>) -> Result<String, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     core.search_scope = match scope.as_str() {
         "All" => SearchScope::All,
         "Variants" => SearchScope::Variants,
@@ -744,7 +881,8 @@ pub fn toggle_sort(
     node_index: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<ToggleSortResult, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
 
     if let Some(idx) = node_index {
         // Sort only children of the specified node
@@ -777,10 +915,10 @@ pub fn toggle_sort(
     }
 
     mdd_core::tree::resolve_all_indices(&mut core.all_nodes);
-    core.visible = build_visible(&core);
+    core.visible = build_visible(core);
     let sort_label = core.diagcomm_sort.status_label().to_owned();
     Ok(ToggleSortResult {
-        nodes: to_visible_nodes(&core),
+        nodes: to_visible_nodes(core),
         sort_label,
     })
 }
@@ -985,46 +1123,50 @@ fn extract_service_id(text: &str) -> Option<u32> {
 
 #[tauri::command]
 pub fn expand_all(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     for node in &mut core.all_nodes {
         if node.has_children {
             node.expanded = true;
         }
     }
-    core.visible = build_visible(&core);
-    Ok(to_visible_nodes(&core))
+    core.visible = build_visible(core);
+    Ok(to_visible_nodes(core))
 }
 
 #[tauri::command]
 pub fn collapse_all(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     for node in &mut core.all_nodes {
         if node.has_children {
             node.expanded = node.depth == 0;
         }
     }
-    core.visible = build_visible(&core);
-    Ok(to_visible_nodes(&core))
+    core.visible = build_visible(core);
+    Ok(to_visible_nodes(core))
 }
 
 #[tauri::command]
 pub fn expand_first_level(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     for node in &mut core.all_nodes {
         if node.has_children && node.depth == 0 {
             node.expanded = true;
         }
     }
-    core.visible = build_visible(&core);
-    Ok(to_visible_nodes(&core))
+    core.visible = build_visible(core);
+    Ok(to_visible_nodes(core))
 }
 
 #[tauri::command]
 pub fn toggle_hide_unchanged(state: State<'_, AppState>) -> Result<Vec<VisibleNode>, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
     core.hide_unchanged = !core.hide_unchanged;
-    core.visible = build_visible(&core);
-    Ok(to_visible_nodes(&core))
+    core.visible = build_visible(core);
+    Ok(to_visible_nodes(core))
 }
 
 #[tauri::command]
@@ -1032,7 +1174,8 @@ pub fn navigate_to(
     target: JumpTarget,
     state: State<'_, AppState>,
 ) -> Result<NavigateResult, String> {
-    let mut core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core_mut()?;
 
     let target_idx = resolve_jump_target(&core.all_nodes, &target.target_type)
         .ok_or_else(|| "Could not resolve navigation target".to_owned())?;
@@ -1047,7 +1190,7 @@ pub fn navigate_to(
         node.expanded = true;
     }
 
-    core.visible = build_visible(&core);
+    core.visible = build_visible(core);
 
     let detail = core
         .all_nodes
@@ -1056,7 +1199,7 @@ pub fn navigate_to(
         .unwrap_or_default();
 
     Ok(NavigateResult {
-        visible: to_visible_nodes(&core),
+        visible: to_visible_nodes(core),
         target_index: target_idx,
         detail,
     })
@@ -1154,7 +1297,8 @@ fn expand_ancestors(nodes: &mut [TreeNode], target_idx: usize) {
 
 #[tauri::command]
 pub fn get_node_path(index: usize, state: State<'_, AppState>) -> Result<String, String> {
-    let core = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let core = manager.active_core()?;
     let node = core
         .all_nodes
         .get(index)
@@ -1190,6 +1334,83 @@ pub fn get_node_path(index: usize, state: State<'_, AppState>) -> Result<String,
 
     parts.reverse();
     Ok(parts.join(" / "))
+}
+
+// ---------------------------------------------------------------------------
+// Tab management commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn switch_tab(tab_id: String, state: State<'_, AppState>) -> Result<LoadResult, String> {
+    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    if !manager.tabs.contains_key(&tab_id) {
+        return Err(format!("Tab {tab_id} not found"));
+    }
+    manager.active_tab = Some(tab_id.clone());
+    let entry = manager
+        .tabs
+        .get(&tab_id)
+        .ok_or_else(|| "Tab not found".to_owned())?;
+    Ok(LoadResult {
+        tab_id,
+        ecu_name: entry.core.ecu_name.clone(),
+        node_count: entry.core.all_nodes.len(),
+        visible: to_visible_nodes(&entry.core),
+        is_diff: entry.core.is_diff_mode,
+    })
+}
+
+#[tauri::command]
+pub async fn close_tab(
+    tab_id: String,
+    state: State<'_, AppState>,
+    uds_state: State<'_, UdsState>,
+) -> Result<Option<LoadResult>, String> {
+    {
+        let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager.tabs.remove(&tab_id);
+        if manager.active_tab.as_deref() == Some(&tab_id) {
+            manager.active_tab = manager.tabs.keys().next().cloned();
+        }
+    }
+
+    let mut uds = uds_state.0.lock().await;
+    uds.remove(&tab_id);
+    drop(uds);
+
+    let manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    match &manager.active_tab {
+        Some(active_id) => {
+            let entry = manager
+                .tabs
+                .get(active_id)
+                .ok_or_else(|| "Active tab not found".to_owned())?;
+            Ok(Some(LoadResult {
+                tab_id: active_id.clone(),
+                ecu_name: entry.core.ecu_name.clone(),
+                node_count: entry.core.all_nodes.len(),
+                visible: to_visible_nodes(&entry.core),
+                is_diff: entry.core.is_diff_mode,
+            }))
+        }
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub fn get_open_tabs(state: State<'_, AppState>) -> Result<Vec<TabInfo>, String> {
+    let manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    Ok(manager
+        .tabs
+        .iter()
+        .map(|(id, entry)| TabInfo {
+            id: id.clone(),
+            display_name: entry.display_name.clone(),
+            file_path: entry.file_path.clone(),
+            is_diff: entry.is_diff,
+            is_active: manager.active_tab.as_deref() == Some(id.as_str()),
+        })
+        .collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -1587,22 +1808,37 @@ fn register_mdd_association_impl() -> Result<String, String> {
 
 /// Load or reload the UDS translator for the given MDD path.
 #[tauri::command]
-pub async fn uds_load(path: String, state: State<'_, UdsState>) -> Result<(), String> {
+pub async fn uds_load(
+    path: String,
+    state: State<'_, UdsState>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    let tab_id = {
+        let manager = app_state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager.active_tab_id()?
+    };
     let translator = mdd_core::uds::translator::UdsTranslator::new(&path)
         .await
         .map_err(|e| format!("Failed to init UDS translator: {e:#}"))?;
     let mut guard = state.0.lock().await;
-    *guard = Some(translator);
+    guard.insert(tab_id, translator);
     Ok(())
 }
 
 /// List all services available in the currently loaded MDD.
 #[tauri::command]
-pub async fn uds_list_services(state: State<'_, UdsState>) -> Result<Vec<MatchedService>, String> {
+pub async fn uds_list_services(
+    state: State<'_, UdsState>,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<MatchedService>, String> {
+    let tab_id = {
+        let manager = app_state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager.active_tab_id()?
+    };
     let guard = state.0.lock().await;
     let translator = guard
-        .as_ref()
-        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+        .get(&tab_id)
+        .ok_or_else(|| "UDS translator not initialised \u{2013} load an MDD first".to_owned())?;
     Ok(translator.list_services())
 }
 
@@ -1611,13 +1847,18 @@ pub async fn uds_list_services(state: State<'_, UdsState>) -> Result<Vec<Matched
 pub async fn uds_lookup(
     hex: String,
     state: State<'_, UdsState>,
+    app_state: State<'_, AppState>,
 ) -> Result<UdsLookupResult, String> {
     let bytes = mdd_core::uds::translator::parse_hex_string(&hex)
         .map_err(|e| format!("Invalid hex: {e:#}"))?;
+    let tab_id = {
+        let manager = app_state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager.active_tab_id()?
+    };
     let guard = state.0.lock().await;
     let translator = guard
-        .as_ref()
-        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+        .get(&tab_id)
+        .ok_or_else(|| "UDS translator not initialised \u{2013} load an MDD first".to_owned())?;
     translator
         .lookup_service(&bytes)
         .map_err(|e| format!("{e:#}"))
@@ -1630,11 +1871,16 @@ pub async fn uds_encode(
     json: serde_json::Value,
     variant_name: Option<String>,
     state: State<'_, UdsState>,
+    app_state: State<'_, AppState>,
 ) -> Result<UdsEncodeResult, String> {
+    let tab_id = {
+        let manager = app_state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager.active_tab_id()?
+    };
     let mut guard = state.0.lock().await;
     let translator = guard
-        .as_mut()
-        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+        .get_mut(&tab_id)
+        .ok_or_else(|| "UDS translator not initialised \u{2013} load an MDD first".to_owned())?;
     if let Some(ref vn) = variant_name {
         translator
             .ensure_variant(vn)
@@ -1653,11 +1899,16 @@ pub async fn service_schema(
     service_name: String,
     variant_name: Option<String>,
     state: State<'_, UdsState>,
+    app_state: State<'_, AppState>,
 ) -> Result<ServiceSchemaResult, String> {
+    let tab_id = {
+        let manager = app_state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager.active_tab_id()?
+    };
     let mut guard = state.0.lock().await;
     let translator = guard
-        .as_mut()
-        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+        .get_mut(&tab_id)
+        .ok_or_else(|| "UDS translator not initialised \u{2013} load an MDD first".to_owned())?;
     if let Some(ref vn) = variant_name {
         translator
             .ensure_variant(vn)
@@ -1669,11 +1920,18 @@ pub async fn service_schema(
 
 /// List all variants in the currently loaded MDD.
 #[tauri::command]
-pub async fn uds_list_variants(state: State<'_, UdsState>) -> Result<Vec<VariantInfo>, String> {
+pub async fn uds_list_variants(
+    state: State<'_, UdsState>,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<VariantInfo>, String> {
+    let tab_id = {
+        let manager = app_state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager.active_tab_id()?
+    };
     let guard = state.0.lock().await;
     let translator = guard
-        .as_ref()
-        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+        .get(&tab_id)
+        .ok_or_else(|| "UDS translator not initialised \u{2013} load an MDD first".to_owned())?;
     translator.list_variants().map_err(|e| format!("{e:#}"))
 }
 
@@ -1682,11 +1940,16 @@ pub async fn uds_list_variants(state: State<'_, UdsState>) -> Result<Vec<Variant
 pub async fn uds_select_variant(
     variant_name: String,
     state: State<'_, UdsState>,
+    app_state: State<'_, AppState>,
 ) -> Result<VariantInfo, String> {
+    let tab_id = {
+        let manager = app_state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        manager.active_tab_id()?
+    };
     let mut guard = state.0.lock().await;
     let translator = guard
-        .as_mut()
-        .ok_or_else(|| "UDS translator not initialised – load an MDD first".to_owned())?;
+        .get_mut(&tab_id)
+        .ok_or_else(|| "UDS translator not initialised \u{2013} load an MDD first".to_owned())?;
     translator
         .select_variant(&variant_name)
         .await
