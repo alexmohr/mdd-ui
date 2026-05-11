@@ -95,6 +95,7 @@ fn run_tauri_app(initial_file: Option<String>) {
             commands::expand_first_level,
             commands::collapse_all,
             commands::toggle_hide_unchanged,
+            commands::set_ignore_first_level,
             commands::navigate_to,
             commands::get_node_path,
             commands::switch_tab,
