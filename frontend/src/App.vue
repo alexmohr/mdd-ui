@@ -444,7 +444,7 @@ function onSplitMouseDown() {
         <button
           v-for="tab in store.openTabs"
           :key="tab.id"
-          class="group relative flex items-center gap-1.5 h-7 px-3 text-xs rounded-t-md transition-colors min-w-0 max-w-48 shrink-0"
+          class="group relative flex items-center gap-1.5 h-7 px-3 text-xs rounded-t-md transition-colors min-w-0 max-w-48 shrink-0 select-none"
           :class="tab.id === store.activeTabId
             ? 'bg-neutral-800 text-neutral-200 border-t border-x border-neutral-700/50'
             : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'"
