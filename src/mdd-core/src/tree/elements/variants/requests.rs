@@ -95,7 +95,6 @@ pub fn add_requests_section<'a>(
             b.push_service_node(
                 depth.saturating_add(1),
                 display_name.clone(),
-                false,
                 has_params,
                 sections,
                 NodeType::Request,

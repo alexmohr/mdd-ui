@@ -126,7 +126,6 @@ fn add_response_service(
     b.push_service_node(
         depth.saturating_add(1),
         display_name,
-        false,
         has_params,
         sections,
         kind.node_type,
