@@ -75,7 +75,9 @@ fn run_tauri_app(initial_file: Option<String>) {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commands::AppState::default())
-        .manage(commands::UdsState(tauri::async_runtime::Mutex::new(None)))
+        .manage(commands::UdsState(tauri::async_runtime::Mutex::new(
+            std::collections::HashMap::new(),
+        )))
         .manage(commands::InitialFile(std::sync::Mutex::new(initial_file)))
         .invoke_handler(tauri::generate_handler![
             commands::load_mdd,
@@ -95,6 +97,9 @@ fn run_tauri_app(initial_file: Option<String>) {
             commands::toggle_hide_unchanged,
             commands::navigate_to,
             commands::get_node_path,
+            commands::switch_tab,
+            commands::close_tab,
+            commands::get_open_tabs,
             commands::get_recent_files,
             commands::add_recent_file,
             commands::clear_recent_files,
