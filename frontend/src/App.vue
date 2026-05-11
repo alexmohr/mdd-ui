@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { useAppStore } from "./stores/app";
 import { useLlmStore } from "./stores/llm";
 import { useSettingsStore } from "./stores/settings";
@@ -27,6 +27,57 @@ const isMac = navigator.platform.toLowerCase().includes('mac');
 const updateAvailable = ref<{ version: string } | null>(null);
 let unlistenOpenFile: (() => void) | null = null;
 let unlistenDragDrop: (() => void) | null = null;
+
+const tabContextMenu = ref<{ x: number; y: number; tabId: string } | null>(null);
+
+function onTabContextMenu(e: MouseEvent, tabId: string) {
+  e.preventDefault();
+  tabContextMenu.value = { x: e.clientX, y: e.clientY, tabId };
+}
+
+function closeTabContextMenu() {
+  tabContextMenu.value = null;
+}
+
+async function contextMenuClose() {
+  if (!tabContextMenu.value) return;
+  const tabId = tabContextMenu.value.tabId;
+  closeTabContextMenu();
+  await store.closeTabById(tabId);
+}
+
+async function contextMenuCloseOthers() {
+  if (!tabContextMenu.value) return;
+  const tabId = tabContextMenu.value.tabId;
+  closeTabContextMenu();
+  await store.closeOtherTabs(tabId);
+}
+
+async function contextMenuCompareWith(otherTabId: string) {
+  if (!tabContextMenu.value) return;
+  const tabId = tabContextMenu.value.tabId;
+  closeTabContextMenu();
+  const thisTab = store.openTabs.find(t => t.id === tabId);
+  const otherTab = store.openTabs.find(t => t.id === otherTabId);
+  if (thisTab?.file_path && otherTab?.file_path) {
+    await store.loadDiff(thisTab.file_path, otherTab.file_path);
+  }
+}
+
+const compareTargets = ref<{ id: string; display_name: string }[]>([]);
+
+watch(tabContextMenu, (menu) => {
+  if (menu) {
+    compareTargets.value = store.openTabs.filter(
+      t => t.id !== menu.tabId && !t.is_diff && t.file_path,
+    );
+    nextTick(() => {
+      window.addEventListener('click', closeTabContextMenu, { once: true });
+    });
+  } else {
+    compareTargets.value = [];
+  }
+});
 
 watch(() => store.theme, (t) => {
   document.documentElement.classList.toggle('light', t === 'light');
@@ -82,6 +133,13 @@ async function openFile() {
   if (path) await store.loadFile(path as string);
 }
 
+async function closeAllTabs() {
+  for (const tab of [...store.openTabs]) {
+    await api.closeTab(tab.id);
+  }
+  store.closeFile();
+}
+
 async function openRecentFile(path: string) {
   await store.loadFile(path);
 }
@@ -114,6 +172,24 @@ async function openDiff() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  const mod = isMac ? e.metaKey : e.ctrlKey;
+
+  if (mod && e.key === 'w') {
+    e.preventDefault();
+    if (store.activeTabId) store.closeTabById(store.activeTabId);
+    return;
+  }
+  if (mod && e.shiftKey && e.key === '[') {
+    e.preventDefault();
+    store.switchToAdjacentTab(-1);
+    return;
+  }
+  if (mod && e.shiftKey && e.key === ']') {
+    e.preventDefault();
+    store.switchToAdjacentTab(1);
+    return;
+  }
+
   if (store.searchActive) return;
   const tag = (e.target as HTMLElement)?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -257,8 +333,8 @@ function onSplitMouseDown() {
         <!-- Close file / back to home -->
         <button
           class="p-1.5 rounded-md text-neutral-500 hover:text-white hover:bg-neutral-800 transition-colors"
-          title="Close file"
-          @click="store.closeFile()"
+          title="Close all tabs"
+          @click="closeAllTabs"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         </button>
@@ -359,6 +435,73 @@ function onSplitMouseDown() {
           </button>
         </div>
       </div>
+
+      <!-- Tab bar -->
+      <div
+        v-if="store.openTabs.length > 1"
+        class="flex items-end h-8 bg-neutral-900 border-b border-neutral-800/60 shrink-0 overflow-x-auto px-1 gap-px"
+      >
+        <button
+          v-for="tab in store.openTabs"
+          :key="tab.id"
+          class="group relative flex items-center gap-1.5 h-7 px-3 text-xs rounded-t-md transition-colors min-w-0 max-w-48 shrink-0"
+          :class="tab.id === store.activeTabId
+            ? 'bg-neutral-800 text-neutral-200 border-t border-x border-neutral-700/50'
+            : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'"
+          :title="tab.file_path || tab.display_name"
+          @click="store.switchTab(tab.id)"
+          @contextmenu="onTabContextMenu($event, tab.id)"
+        >
+          <svg v-if="tab.is_diff" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-amber-500"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m21 3-7.828 7.828A4 4 0 0 0 12 13.7V22"/></svg>
+          <span class="truncate">{{ tab.display_name }}</span>
+          <span
+            class="ml-auto pl-1 rounded-sm transition-colors shrink-0"
+            :class="tab.id === store.activeTabId
+              ? 'text-neutral-500 hover:text-neutral-200 hover:bg-neutral-700'
+              : 'text-transparent group-hover:text-neutral-600 hover:!text-neutral-300 hover:bg-neutral-700'"
+            @click.stop="store.closeTabById(tab.id)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </span>
+        </button>
+      </div>
+
+      <!-- Tab context menu -->
+      <Teleport to="body">
+        <div
+          v-if="tabContextMenu"
+          class="fixed z-[100] min-w-44 py-1 bg-neutral-800 border border-neutral-700 rounded-lg shadow-2xl text-sm"
+          :style="{ left: tabContextMenu.x + 'px', top: tabContextMenu.y + 'px' }"
+          @contextmenu.prevent
+        >
+          <button
+            class="w-full px-3 py-1.5 text-left text-neutral-300 hover:bg-neutral-700 transition-colors"
+            @click="contextMenuClose"
+          >
+            Close
+          </button>
+          <button
+            class="w-full px-3 py-1.5 text-left transition-colors"
+            :class="store.openTabs.length > 1 ? 'text-neutral-300 hover:bg-neutral-700' : 'text-neutral-600 cursor-default'"
+            :disabled="store.openTabs.length <= 1"
+            @click="contextMenuCloseOthers"
+          >
+            Close Others
+          </button>
+          <template v-if="compareTargets.length > 0">
+            <div class="h-px bg-neutral-700 my-1" />
+            <div class="px-3 py-1 text-[11px] text-neutral-500 uppercase tracking-wider">Compare with</div>
+            <button
+              v-for="target in compareTargets"
+              :key="target.id"
+              class="w-full px-3 py-1.5 text-left text-neutral-300 hover:bg-neutral-700 transition-colors truncate"
+              @click="contextMenuCompareWith(target.id)"
+            >
+              {{ target.display_name }}
+            </button>
+          </template>
+        </div>
+      </Teleport>
 
       <!-- Search -->
       <SearchBar v-if="store.searchActive || store.searchFilters.length > 0" />
