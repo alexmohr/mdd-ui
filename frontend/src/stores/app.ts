@@ -8,6 +8,7 @@ import type {
   DetailSection,
   JumpTarget,
   RecentFile,
+  TabInfo,
 } from "../api/commands";
 import * as api from "../api/commands";
 
@@ -20,6 +21,24 @@ export interface SearchFilter {
   query: string;
   scope: string;
   op: 'and' | 'or';
+}
+
+interface TabUiState {
+  selectedIndex: number | null;
+  detailSections: DetailSection[];
+  detailTabIndex: number;
+  history: HistoryEntry[];
+  forwardHistory: HistoryEntry[];
+  searchFilters: SearchFilter[];
+  searchQuery: string;
+  searchScope: string;
+  searchActive: boolean;
+  sortLabel: string;
+  lastTabKey: { title: string; section_type: string } | null;
+  hideUnchanged: boolean;
+  udsReady: boolean;
+  udsLoading: boolean;
+  udsError: string | null;
 }
 
 export const useAppStore = defineStore("app", () => {
@@ -58,6 +77,85 @@ export const useAppStore = defineStore("app", () => {
   const udsReady = ref(false);
   const udsError = ref<string | null>(null);
   let _udsLoadPromise: Promise<void> | null = null;
+
+  const openTabs = ref<TabInfo[]>([]);
+  const activeTabId = ref<string | null>(null);
+  const tabUiStates = new Map<string, TabUiState>();
+
+  function saveCurrentTabUiState() {
+    const id = activeTabId.value;
+    if (!id) return;
+    tabUiStates.set(id, {
+      selectedIndex: selectedIndex.value,
+      detailSections: detailSections.value,
+      detailTabIndex: selectedTab.value,
+      history: [...history.value],
+      forwardHistory: [...forwardHistory.value],
+      searchFilters: [...searchFilters.value],
+      searchQuery: searchQuery.value,
+      searchScope: searchScope.value,
+      searchActive: searchActive.value,
+      sortLabel: sortLabel.value,
+      lastTabKey: lastTabKey.value,
+      hideUnchanged: hideUnchanged.value,
+      udsReady: udsReady.value,
+      udsLoading: udsLoading.value,
+      udsError: udsError.value,
+    });
+  }
+
+  function restoreTabUiState(tabId: string) {
+    const saved = tabUiStates.get(tabId);
+    if (saved) {
+      selectedIndex.value = saved.selectedIndex;
+      detailSections.value = saved.detailSections;
+      selectedTab.value = saved.detailTabIndex;
+      history.value = saved.history;
+      forwardHistory.value = saved.forwardHistory;
+      searchFilters.value = saved.searchFilters;
+      searchQuery.value = saved.searchQuery;
+      searchScope.value = saved.searchScope;
+      searchActive.value = saved.searchActive;
+      sortLabel.value = saved.sortLabel;
+      lastTabKey.value = saved.lastTabKey;
+      hideUnchanged.value = saved.hideUnchanged;
+      udsReady.value = saved.udsReady;
+      udsLoading.value = saved.udsLoading;
+      udsError.value = saved.udsError;
+    } else {
+      selectedIndex.value = null;
+      detailSections.value = [];
+      selectedTab.value = 0;
+      history.value = [];
+      forwardHistory.value = [];
+      searchFilters.value = [];
+      searchQuery.value = "";
+      searchScope.value = "All";
+      searchActive.value = false;
+      sortLabel.value = "ID\u25b2";
+      lastTabKey.value = null;
+      hideUnchanged.value = false;
+      udsReady.value = false;
+      udsLoading.value = false;
+      udsError.value = null;
+    }
+  }
+
+  function applyLoadResult(result: api.LoadResult) {
+    nodes.value = result.visible;
+    ecuName.value = result.ecu_name;
+    nodeCount.value = result.node_count;
+    isDiff.value = result.is_diff;
+    activeTabId.value = result.tab_id;
+    fileLoaded.value = true;
+  }
+
+  async function refreshOpenTabs() {
+    try {
+      openTabs.value = await api.getOpenTabs();
+    } catch {
+    }
+  }
 
   const selectedNode = computed(() =>
     nodes.value.find((n: VisibleNode) => n.index === selectedIndex.value) ?? null,
@@ -133,17 +231,14 @@ export const useAppStore = defineStore("app", () => {
   async function loadFile(path: string) {
     loading.value = true;
     try {
+      saveCurrentTabUiState();
       const result = await api.loadMdd(path);
-      nodes.value = result.visible;
-      ecuName.value = result.ecu_name;
-      nodeCount.value = result.node_count;
-      isDiff.value = result.is_diff;
+      applyLoadResult(result);
       selectedIndex.value = null;
       detailSections.value = [];
       history.value = [];
       forwardHistory.value = [];
       searchFilters.value = [];
-      fileLoaded.value = true;
       filePath.value = path;
       status.value = `${result.node_count} nodes`;
       if (autoExpandFirstLevel.value) {
@@ -151,7 +246,7 @@ export const useAppStore = defineStore("app", () => {
       }
       await api.addRecentFile(path);
       await loadRecentFiles();
-      // Load UDS translator in the background – non-fatal if it fails
+      await refreshOpenTabs();
       udsLoading.value = true;
       udsReady.value = false;
       udsError.value = null;
@@ -172,17 +267,14 @@ export const useAppStore = defineStore("app", () => {
   async function loadDiff(oldPath: string, newPath: string) {
     loading.value = true;
     try {
+      saveCurrentTabUiState();
       const result = await api.loadDiff(oldPath, newPath);
-      nodes.value = result.visible;
-      ecuName.value = result.ecu_name;
-      nodeCount.value = result.node_count;
-      isDiff.value = result.is_diff;
+      applyLoadResult(result);
       selectedIndex.value = null;
       detailSections.value = [];
       history.value = [];
       forwardHistory.value = [];
       searchFilters.value = [];
-      fileLoaded.value = true;
       filePath.value = "";
       status.value = `Diff: ${result.node_count} nodes`;
       if (defaultHideUnchanged.value) {
@@ -192,6 +284,7 @@ export const useAppStore = defineStore("app", () => {
       if (autoExpandFirstLevel.value) {
         nodes.value = await api.expandFirstLevel();
       }
+      await refreshOpenTabs();
     } catch (e) {
       status.value = `Error: ${e}`;
     } finally {
@@ -551,6 +644,70 @@ export const useAppStore = defineStore("app", () => {
     udsReady.value = false;
     udsError.value = null;
     _udsLoadPromise = null;
+    openTabs.value = [];
+    activeTabId.value = null;
+    tabUiStates.clear();
+  }
+
+  async function switchTab(tabId: string) {
+    if (tabId === activeTabId.value) return;
+    loading.value = true;
+    try {
+      saveCurrentTabUiState();
+      const result = await api.switchTab(tabId);
+      applyLoadResult(result);
+      filePath.value = openTabs.value.find(t => t.id === tabId)?.file_path ?? "";
+      restoreTabUiState(tabId);
+      status.value = `${result.node_count} nodes`;
+      await refreshOpenTabs();
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function closeTabById(tabId: string) {
+    try {
+      saveCurrentTabUiState();
+      tabUiStates.delete(tabId);
+      const result = await api.closeTab(tabId);
+      if (result) {
+        applyLoadResult(result);
+        filePath.value = openTabs.value.find(t => t.id === result.tab_id)?.file_path ?? "";
+        restoreTabUiState(result.tab_id);
+        status.value = `${result.node_count} nodes`;
+      } else {
+        closeFile();
+      }
+      await refreshOpenTabs();
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    }
+  }
+
+  async function closeOtherTabs(keepTabId: string) {
+    const toClose = openTabs.value.filter(t => t.id !== keepTabId).map(t => t.id);
+    for (const id of toClose) {
+      tabUiStates.delete(id);
+      await api.closeTab(id);
+    }
+    if (activeTabId.value !== keepTabId) {
+      const result = await api.switchTab(keepTabId);
+      applyLoadResult(result);
+      restoreTabUiState(keepTabId);
+    }
+    await refreshOpenTabs();
+  }
+
+  async function switchToAdjacentTab(direction: -1 | 1) {
+    const tabs = openTabs.value;
+    if (tabs.length < 2) return;
+    const currentIdx = tabs.findIndex(t => t.id === activeTabId.value);
+    if (currentIdx < 0) return;
+    const nextIdx = (currentIdx + direction + tabs.length) % tabs.length;
+    const nextTab = tabs[nextIdx];
+    if (nextTab) await switchTab(nextTab.id);
   }
 
   async function removeRecentFile(path: string) {
@@ -579,6 +736,7 @@ export const useAppStore = defineStore("app", () => {
     rowDensity, rowHeightPx, defaultHideUnchanged, autoExpandFirstLevel,
     maxRecentFiles, wrapTableText, lastTabTitle, displayedRecentFiles, autoCheckUpdates,
     udsLoading, udsReady, udsError, waitForUds,
+    openTabs, activeTabId,
     loadFile, loadDiff, selectNode, goBack, goForward, toggleExpand, search, searchFilters,
     clearSearch, removeSearchFilter, toggleFilterOp, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize, setFontSize, setTheme,
@@ -586,5 +744,6 @@ export const useAppStore = defineStore("app", () => {
     setAutoCheckUpdates,
     navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
     nextChange, prevChange,
+    switchTab, closeTabById, closeOtherTabs, switchToAdjacentTab,
   };
 });

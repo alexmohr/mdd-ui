@@ -15,10 +15,19 @@ export interface VisibleNode {
 }
 
 export interface LoadResult {
+  tab_id: string;
   ecu_name: string;
   node_count: number;
   visible: VisibleNode[];
   is_diff: boolean;
+}
+
+export interface TabInfo {
+  id: string;
+  display_name: string;
+  file_path: string;
+  is_diff: boolean;
+  is_active: boolean;
 }
 
 export interface SearchResult {
@@ -210,6 +219,22 @@ export async function registerMddAssociation(): Promise<string> {
 
 export async function getInitialFile(): Promise<string | null> {
   return invoke<string | null>("get_initial_file");
+}
+
+// ---------------------------------------------------------------------------
+// Tab management
+// ---------------------------------------------------------------------------
+
+export async function switchTab(tabId: string): Promise<LoadResult> {
+  return invoke<LoadResult>("switch_tab", { tabId });
+}
+
+export async function closeTab(tabId: string): Promise<LoadResult | null> {
+  return invoke<LoadResult | null>("close_tab", { tabId });
+}
+
+export async function getOpenTabs(): Promise<TabInfo[]> {
+  return invoke<TabInfo[]>("get_open_tabs");
 }
 
 // ---------------------------------------------------------------------------
