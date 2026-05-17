@@ -32,6 +32,7 @@ pub struct VisibleNode {
     pub node_type: NodeType,
     pub diff_status: Option<DiffStatus>,
     pub is_sortable: bool,
+    pub old_text: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -115,7 +116,6 @@ pub struct CoreState {
     pub ecu_name: String,
     pub is_diff_mode: bool,
     pub hide_unchanged: bool,
-    pub ignore_first_level: bool,
     pub search_stack: Vec<SearchEntry>,
     pub search_scope: SearchScope,
     pub diagcomm_sort: DiagcommSortMode,
@@ -170,7 +170,6 @@ impl Default for CoreState {
             ecu_name: String::new(),
             is_diff_mode: false,
             hide_unchanged: false,
-            ignore_first_level: false,
             search_stack: Vec::new(),
             search_scope: SearchScope::default(),
             diagcomm_sort: DiagcommSortMode::IdAsc,
@@ -293,8 +292,6 @@ fn count_filtered_direct_children(
     all_nodes: &[TreeNode],
     include: Option<&[bool]>,
     hide_unchanged: bool,
-    ignore_first_level: bool,
-    is_diff_mode: bool,
     header_idx: usize,
     header_depth: usize,
 ) -> usize {
@@ -309,14 +306,7 @@ fn count_filtered_direct_children(
             let passes_search = include.is_none_or(|inc| inc.get(i).copied().unwrap_or(false));
             let passes_diff =
                 !hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged));
-            let passes_first_level = !ignore_first_level
-                || !is_diff_mode
-                || n.depth != 0
-                || !matches!(
-                    n.diff_status,
-                    Some(DiffStatus::Modified | DiffStatus::Unchanged)
-                );
-            if passes_search && passes_diff && passes_first_level {
+            if passes_search && passes_diff {
                 count = count.saturating_add(1);
             }
         }
@@ -340,8 +330,6 @@ fn filter_service_list_rows(
     section: &DetailSectionData,
     include: Option<&[bool]>,
     hide_unchanged: bool,
-    ignore_first_level: bool,
-    is_diff_mode: bool,
     all_nodes: &[TreeNode],
     header_idx: usize,
 ) -> DetailSectionData {
@@ -366,14 +354,7 @@ fn filter_service_list_rows(
         }
         if n.depth == child_depth {
                 let passes = include.is_none_or(|inc| inc.get(i).copied().unwrap_or(false))
-                    && (!hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged)))
-                    && (!ignore_first_level
-                        || !is_diff_mode
-                        || n.depth != 0
-                        || !matches!(
-                            n.diff_status,
-                            Some(DiffStatus::Modified | DiffStatus::Unchanged)
-                        ));
+                    && (!hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged)));
                 let key = n.service_short_name().unwrap_or(n.text.as_str());
                 name_passes.insert(key, passes);
             }
@@ -460,20 +441,6 @@ fn build_visible(state: &CoreState) -> Vec<usize> {
 
         // Skip unchanged in diff mode when filter is active
         if state.hide_unchanged && matches!(node.diff_status, Some(DiffStatus::Unchanged)) {
-            continue;
-        }
-
-        // In diff mode, skip first-level nodes whose only diff reason is
-        // propagated from children (i.e. depth == 0 nodes marked Modified).
-        // Nodes that are themselves Added/Removed are kept.
-        if state.ignore_first_level
-            && state.is_diff_mode
-            && node.depth == 0
-            && matches!(
-                node.diff_status,
-                Some(DiffStatus::Modified | DiffStatus::Unchanged)
-            )
-        {
             continue;
         }
 
@@ -572,7 +539,7 @@ fn node_matches_scope(node: &TreeNode, scope: &SearchScope) -> bool {
 
 fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
     let any_filter =
-        !state.search_stack.is_empty() || state.hide_unchanged || state.ignore_first_level;
+        !state.search_stack.is_empty() || state.hide_unchanged;
     let include = if any_filter {
         compute_include(state)
     } else {
@@ -589,8 +556,6 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
                         &state.all_nodes,
                         include.as_deref(),
                         state.hide_unchanged,
-                        state.ignore_first_level,
-                        state.is_diff_mode,
                         idx,
                         node.depth,
                     );
@@ -598,6 +563,7 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
                 } else {
                     node.text.clone()
                 };
+
                 VisibleNode {
                     index: idx,
                     depth: node.depth,
@@ -607,6 +573,7 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
                     node_type: node.node_type,
                     diff_status: node.diff_status,
                     is_sortable: node.service_list_type().is_some(),
+                    old_text: node.old_text.clone(),
                 }
             })
         })
@@ -779,7 +746,7 @@ pub fn get_node_detail(
 
     // Only filter overview (service-list header) nodes when a filter is active.
     // Individual service/response detail sections are left untouched.
-    let any_filter = !core.search_stack.is_empty() || core.hide_unchanged || core.ignore_first_level;
+    let any_filter = !core.search_stack.is_empty() || core.hide_unchanged;
     if !any_filter || node.service_list_type().is_none() {
         return Ok(node.detail_sections.to_vec());
     }
@@ -793,8 +760,6 @@ pub fn get_node_detail(
                 section,
                 include.as_deref(),
                 core.hide_unchanged,
-                core.ignore_first_level,
-                core.is_diff_mode,
                 &core.all_nodes,
                 index,
             )
@@ -1209,18 +1174,6 @@ pub fn toggle_hide_unchanged(state: State<'_, AppState>) -> Result<Vec<VisibleNo
 }
 
 #[tauri::command]
-pub fn set_ignore_first_level(
-    value: bool,
-    state: State<'_, AppState>,
-) -> Result<Vec<VisibleNode>, String> {
-    let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
-    let core = manager.active_core_mut()?;
-    core.ignore_first_level = value;
-    core.visible = build_visible(core);
-    Ok(to_visible_nodes(core))
-}
-
-#[tauri::command]
 pub fn navigate_to(
     target: JumpTarget,
     state: State<'_, AppState>,
@@ -1621,8 +1574,6 @@ pub struct UiPrefs {
     pub last_tab_title: Option<String>,
     #[serde(default)]
     pub auto_check_updates: bool,
-    #[serde(default)]
-    pub ignore_first_level: bool,
 }
 
 fn default_theme() -> String {
@@ -1651,7 +1602,6 @@ impl Default for UiPrefs {
             wrap_table_text: false,
             last_tab_title: None,
             auto_check_updates: false,
-            ignore_first_level: false,
         }
     }
 }
