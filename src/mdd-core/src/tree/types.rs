@@ -226,6 +226,10 @@ pub struct TreeNode {
     pub parent_idx: Option<usize>,
     /// Diff annotation for comparison mode. `None` in browse mode.
     pub diff_status: Option<DiffStatus>,
+    /// Display text from the *old* tree when this node was matched during diff
+    /// and the old text differs from the current (new) text. `None` in browse
+    /// mode or when the text is identical on both sides.
+    pub old_text: Option<String>,
 }
 
 impl TreeNode {
