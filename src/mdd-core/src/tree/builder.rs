@@ -47,6 +47,7 @@ impl TreeBuilder {
             payload: cfg.payload,
             parent_idx: None,
             diff_status: None,
+            old_text: None,
         });
     }
 
