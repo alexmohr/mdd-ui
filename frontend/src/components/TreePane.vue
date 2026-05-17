@@ -89,8 +89,13 @@ function textPrefixBadge(node: VisibleNode): Badge | null {
 
 /** Strip an embedded text prefix (e.g. "[TIMING] ") before display. */
 function nodeDisplayText(node: VisibleNode): string {
-  const m = TEXT_BADGE_RE.exec(node.text);
-  return m ? node.text.slice(m[0].length) : node.text;
+  const strip = (t: string) => { const m = TEXT_BADGE_RE.exec(t); return m ? t.slice(m[0].length) : t; };
+  const newText = strip(node.text);
+  if (node.old_text && !node.diff_status) {
+    const oldText = strip(node.old_text);
+    return oldText === newText ? newText : `${oldText}  ·  ${newText}`;
+  }
+  return newText;
 }
 
 function nodeBadges(node: VisibleNode): Badge[] {

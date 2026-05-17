@@ -526,30 +526,6 @@ async function handleClearAllCaches() {
               </div>
             </section>
 
-            <!-- Ignore first level in diff -->
-            <section class="space-y-3">
-              <div class="flex items-start justify-between gap-4">
-                <div>
-                  <h4 class="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1">
-                    Ignore first level in diff
-                  </h4>
-                  <p class="text-xs text-neutral-500 leading-relaxed">
-                    Hide top-level section headers (e.g. General, Variants) in diff mode when they are unchanged or only modified.
-                  </p>
-                </div>
-                <button
-                  class="relative w-9 h-5 rounded-full transition-colors shrink-0 mt-0.5 overflow-hidden"
-                  :class="appStore.ignoreFirstLevel ? 'bg-blue-600' : 'bg-neutral-700'"
-                  @click="appStore.setIgnoreFirstLevel(!appStore.ignoreFirstLevel)"
-                >
-                  <span
-                    class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                    :class="appStore.ignoreFirstLevel ? 'translate-x-4' : 'translate-x-0'"
-                  />
-                </button>
-              </div>
-            </section>
-
             <!-- Wrap table cell text -->
             <section class="space-y-3">
               <div class="flex items-start justify-between gap-4">

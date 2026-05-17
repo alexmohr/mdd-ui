@@ -72,7 +72,6 @@ export const useAppStore = defineStore("app", () => {
   const wrapTableText = ref(false);
   const lastTabTitle = ref<string | null>(null);
   const autoCheckUpdates = ref(false);
-  const ignoreFirstLevel = ref(false);
   const lastTabKey = ref<{ title: string; section_type: string } | null>(null);
   const udsLoading = ref(false);
   const udsReady = ref(false);
@@ -213,7 +212,6 @@ export const useAppStore = defineStore("app", () => {
       wrap_table_text: wrapTableText.value,
       last_tab_title: lastTabTitle.value,
       auto_check_updates: autoCheckUpdates.value,
-      ignore_first_level: ignoreFirstLevel.value,
     }).catch(() => {});
   }
 
@@ -282,9 +280,6 @@ export const useAppStore = defineStore("app", () => {
       if (defaultHideUnchanged.value) {
         nodes.value = await api.toggleHideUnchanged();
         hideUnchanged.value = true;
-      }
-      if (ignoreFirstLevel.value) {
-        nodes.value = await api.setIgnoreFirstLevel(true);
       }
       if (autoExpandFirstLevel.value) {
         nodes.value = await api.expandFirstLevel();
@@ -558,17 +553,6 @@ export const useAppStore = defineStore("app", () => {
     autoCheckUpdates.value = v;
     persistPrefs();
   }
-  async function setIgnoreFirstLevel(v: boolean) {
-    ignoreFirstLevel.value = v;
-    persistPrefs();
-    if (isDiff.value) {
-      try {
-        nodes.value = await api.setIgnoreFirstLevel(v);
-      } catch (e) {
-        status.value = `Error: ${e}`;
-      }
-    }
-  }
 
   /** Await UDS translator initialisation (resolves immediately if already done). */
   function waitForUds(): Promise<void> {
@@ -635,7 +619,6 @@ export const useAppStore = defineStore("app", () => {
       lastTabTitle.value = prefs.last_tab_title ?? null;
       lastTabKey.value = lastTabTitle.value ? { title: lastTabTitle.value, section_type: '' } : null;
       autoCheckUpdates.value = prefs.auto_check_updates ?? false;
-      ignoreFirstLevel.value = prefs.ignore_first_level ?? false;
     } catch (e) {
       console.error("Failed to load prefs:", e);
     }
@@ -758,7 +741,7 @@ export const useAppStore = defineStore("app", () => {
     clearSearch, removeSearchFilter, toggleFilterOp, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
     increaseFontSize, decreaseFontSize, setFontSize, setTheme,
     setRowDensity, setDefaultHideUnchanged, setAutoExpandFirstLevel, setMaxRecentFiles, setWrapTableText, setSelectedTab,
-    setAutoCheckUpdates, ignoreFirstLevel, setIgnoreFirstLevel,
+    setAutoCheckUpdates,
     navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
     nextChange, prevChange,
     switchTab, closeTabById, closeOtherTabs, switchToAdjacentTab,
