@@ -198,6 +198,9 @@ fn merge_children(old_children: &[HierNode], new_children: &[HierNode]) -> Vec<M
 
             let mut node = new_node.tree_node.clone();
             node.diff_status = Some(status);
+            if old_node.tree_node.text != node.text {
+                node.old_text = Some(old_node.tree_node.text.clone());
+            }
 
             // Insert the "Changes" section right after any header section so
             // that `split_header_and_tabs` still recognises the header.
@@ -979,6 +982,7 @@ fn add_summary_to_general(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tree::NodePayload;
 
     fn make_node(text: &str, depth: usize, has_children: bool) -> TreeNode {
         TreeNode {
@@ -991,6 +995,7 @@ mod tests {
             payload: NodePayload::default(),
             parent_idx: None,
             diff_status: None,
+            old_text: None,
         }
     }
 
@@ -1009,6 +1014,7 @@ mod tests {
             payload: NodePayload::default(),
             parent_idx: None,
             diff_status: None,
+            old_text: None,
         }
     }
 
