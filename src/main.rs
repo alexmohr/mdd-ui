@@ -156,7 +156,7 @@ fn run_tauri_app(initial_file: Option<String>) {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|#[allow(unused_variables)] app_handle, event| {
+        .run(|app_handle, event| {
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             if let tauri::RunEvent::Opened { urls } = event {
                 use tauri::{Emitter, Manager};
@@ -174,6 +174,10 @@ fn run_tauri_app(initial_file: Option<String>) {
                     // Emit for already-mounted frontend
                     let _ = app_handle.emit("open-file", path);
                 }
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+            {
+                let _ = (&app_handle, &event);
             }
         });
 }
