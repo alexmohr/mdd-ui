@@ -6,7 +6,7 @@
 
 use std::{collections::HashMap, fs, path::PathBuf};
 
-use mdd_core::tree::{DetailRowType, DiffStatus};
+use mdd_core::tree::{DetailRowType, DiffStatus, TreeNode};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -571,6 +571,43 @@ fn build_auth_header(settings: &Settings) -> Result<(String, String), String> {
     }
 }
 
+fn append_byte_patterns(all_nodes: &[TreeNode], lines: &mut Vec<String>) {
+    let mut header_added = false;
+    for node in all_nodes {
+        let patterns: Vec<String> = node
+            .detail_sections
+            .iter()
+            .filter_map(|s| s.byte_pattern_rows.as_ref())
+            .flat_map(|rows| {
+                rows.iter()
+                    .filter(|r| !matches!(r.row_type, DetailRowType::Header))
+                    .map(|row| {
+                        row.cells
+                            .iter()
+                            .map(|c| c.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    })
+            })
+            .collect();
+
+        if patterns.is_empty() {
+            continue;
+        }
+
+        if !header_added {
+            lines.push(String::new());
+            lines.push("Byte patterns (Offset | Bits | Hex | Binary | Name | Type):".to_owned());
+            header_added = true;
+        }
+
+        lines.push(format!("\n  [[{}]]:", node.text));
+        for p in &patterns {
+            lines.push(format!("    {p}"));
+        }
+    }
+}
+
 fn build_mdd_context(core: &crate::commands::CoreState) -> String {
     const MAX_CONTEXT_CHARS: usize = 40_000;
     let mut lines: Vec<String> = Vec::new();
@@ -673,40 +710,7 @@ fn build_mdd_context(core: &crate::commands::CoreState) -> String {
         }
     }
 
-    let mut byte_pattern_header_added = false;
-    for node in &core.all_nodes {
-        let patterns: Vec<String> = node
-            .detail_sections
-            .iter()
-            .filter_map(|s| s.byte_pattern_rows.as_ref())
-            .flat_map(|rows| {
-                rows.iter()
-                    .filter(|r| !matches!(r.row_type, DetailRowType::Header))
-                    .map(|row| {
-                        row.cells
-                            .iter()
-                            .map(|c| c.text.as_str())
-                            .collect::<Vec<_>>()
-                            .join(" | ")
-                    })
-            })
-            .collect();
-
-        if patterns.is_empty() {
-            continue;
-        }
-
-        if !byte_pattern_header_added {
-            lines.push(String::new());
-            lines.push("Byte patterns (Offset | Bits | Hex | Binary | Name | Type):".to_owned());
-            byte_pattern_header_added = true;
-        }
-
-        lines.push(format!("\n  [[{}]]:", node.text));
-        for p in &patterns {
-            lines.push(format!("    {p}"));
-        }
-    }
+    append_byte_patterns(&core.all_nodes, &mut lines);
 
     // Apply a character budget to prevent token-limit errors regardless of database size.
     let result = lines.join("\n");
