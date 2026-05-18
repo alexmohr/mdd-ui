@@ -166,10 +166,10 @@ fn run_tauri_app(initial_file: Option<String>) {
                     .find_map(|p| p.to_str().map(str::to_owned));
                 if let Some(path) = path {
                     // Store for frontend initial-load (event may fire before webview mounts)
-                    if let Some(state) = app_handle.try_state::<commands::InitialFile>() {
-                        if let Ok(mut guard) = state.0.lock() {
-                            *guard = Some(path.clone());
-                        }
+                    if let Some(state) = app_handle.try_state::<commands::InitialFile>()
+                        && let Ok(mut guard) = state.0.lock()
+                    {
+                        *guard = Some(path.clone());
                     }
                     // Emit for already-mounted frontend
                     let _ = app_handle.emit("open-file", path);

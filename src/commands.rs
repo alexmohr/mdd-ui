@@ -353,11 +353,11 @@ fn filter_service_list_rows(
             break;
         }
         if n.depth == child_depth {
-                let passes = include.is_none_or(|inc| inc.get(i).copied().unwrap_or(false))
-                    && (!hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged)));
-                let key = n.service_short_name().unwrap_or(n.text.as_str());
-                name_passes.insert(key, passes);
-            }
+            let passes = include.is_none_or(|inc| inc.get(i).copied().unwrap_or(false))
+                && (!hide_unchanged || !matches!(n.diff_status, Some(DiffStatus::Unchanged)));
+            let key = n.service_short_name().unwrap_or(n.text.as_str());
+            name_passes.insert(key, passes);
+        }
     }
 
     let filtered: Vec<DetailRow> = rows
@@ -538,8 +538,7 @@ fn node_matches_scope(node: &TreeNode, scope: &SearchScope) -> bool {
 }
 
 fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
-    let any_filter =
-        !state.search_stack.is_empty() || state.hide_unchanged;
+    let any_filter = !state.search_stack.is_empty() || state.hide_unchanged;
     let include = if any_filter {
         compute_include(state)
     } else {
