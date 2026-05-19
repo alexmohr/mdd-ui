@@ -172,6 +172,15 @@ async function openDiff() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && store.loading) {
+    e.preventDefault();
+    e.stopPropagation();
+    api.cancelLoad();
+    store.loading = false;
+    store.status = "Load cancelled";
+    return;
+  }
+
   const mod = isMac ? e.metaKey : e.ctrlKey;
 
   if (mod && e.key === 'w') {
@@ -239,6 +248,7 @@ function onSplitMouseDown() {
         <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
       </svg>
       <span class="mt-3 text-sm text-neutral-400">Loading…</span>
+      <span class="mt-1 text-xs text-neutral-500">Press Esc to cancel</span>
     </div>
     <!-- Welcome screen -->
     <template v-if="!store.fileLoaded">

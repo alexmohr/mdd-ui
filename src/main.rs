@@ -75,6 +75,7 @@ fn run_tauri_app(initial_file: Option<String>) {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commands::AppState::default())
+        .manage(commands::LoadCancellation::default())
         .manage(commands::UdsState(tauri::async_runtime::Mutex::new(
             std::collections::HashMap::new(),
         )))
@@ -82,6 +83,7 @@ fn run_tauri_app(initial_file: Option<String>) {
         .invoke_handler(tauri::generate_handler![
             commands::load_mdd,
             commands::load_diff,
+            commands::cancel_load,
             commands::get_visible_nodes,
             commands::get_node_detail,
             commands::get_node_variant,

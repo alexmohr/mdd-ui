@@ -104,6 +104,10 @@ export async function loadMdd(path: string): Promise<LoadResult> {
   return invoke<LoadResult>("load_mdd", { path });
 }
 
+export async function cancelLoad(): Promise<void> {
+  return invoke("cancel_load");
+}
+
 export async function loadDiff(
   oldPath: string,
   newPath: string,

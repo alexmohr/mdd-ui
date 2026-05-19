@@ -4,7 +4,15 @@
 // Tauri commands require owned types for JSON deserialization and state injection.
 #![allow(clippy::needless_pass_by_value)]
 
-use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 use mdd_core::{
     tree::{
@@ -244,9 +252,17 @@ pub struct UdsState(
 
 pub struct InitialFile(pub Mutex<Option<String>>);
 
+pub struct LoadCancellation(pub Mutex<Option<Arc<AtomicBool>>>);
+
 impl Default for AppState {
     fn default() -> Self {
         Self(Mutex::new(TabManager::default()))
+    }
+}
+
+impl Default for LoadCancellation {
+    fn default() -> Self {
+        Self(Mutex::new(None))
     }
 }
 
@@ -584,7 +600,11 @@ fn to_visible_nodes(state: &CoreState) -> Vec<VisibleNode> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadResult, String> {
+pub async fn load_mdd(
+    path: String,
+    state: State<'_, AppState>,
+    cancel: State<'_, LoadCancellation>,
+) -> Result<LoadResult, String> {
     // If the file is already open in a tab, switch to it
     {
         let mut manager = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
@@ -607,7 +627,12 @@ pub async fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadRe
         }
     }
 
-    // Return the path from the blocking task so we don't need to clone it
+    let cancelled = Arc::new(AtomicBool::new(false));
+    {
+        let mut guard = cancel.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        *guard = Some(Arc::clone(&cancelled));
+    }
+
     let (nodes, ecu_name, file_path) =
         tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
             let db = mdd_core::database::load_mdd(&path)
@@ -617,6 +642,15 @@ pub async fn load_mdd(path: String, state: State<'_, AppState>) -> Result<LoadRe
         })
         .await
         .map_err(|e| format!("Thread error: {e}"))??;
+
+    {
+        let mut guard = cancel.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        *guard = None;
+    }
+
+    if cancelled.load(Ordering::Relaxed) {
+        return Err("Cancelled".to_owned());
+    }
 
     let node_count = nodes.len();
     let display_name = PathBuf::from(&file_path)
@@ -663,7 +697,14 @@ pub async fn load_diff(
     old_path: String,
     new_path: String,
     state: State<'_, AppState>,
+    cancel: State<'_, LoadCancellation>,
 ) -> Result<LoadResult, String> {
+    let cancelled = Arc::new(AtomicBool::new(false));
+    {
+        let mut guard = cancel.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        *guard = Some(Arc::clone(&cancelled));
+    }
+
     let (nodes, ecu_name, old, new) =
         tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
             let db_old = mdd_core::database::load_mdd(&old_path)
@@ -676,6 +717,15 @@ pub async fn load_diff(
         })
         .await
         .map_err(|e| format!("Thread error: {e}"))??;
+
+    {
+        let mut guard = cancel.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+        *guard = None;
+    }
+
+    if cancelled.load(Ordering::Relaxed) {
+        return Err("Cancelled".to_owned());
+    }
 
     let node_count = nodes.len();
 
@@ -722,6 +772,15 @@ pub async fn load_diff(
         visible,
         is_diff: true,
     })
+}
+
+#[tauri::command]
+pub fn cancel_load(state: State<'_, LoadCancellation>) -> Result<(), String> {
+    let guard = state.0.lock().map_err(|e| format!("Lock error: {e}"))?;
+    if let Some(flag) = guard.as_ref() {
+        flag.store(true, Ordering::Relaxed);
+    }
+    Ok(())
 }
 
 #[tauri::command]

@@ -258,7 +258,9 @@ export const useAppStore = defineStore("app", () => {
         udsLoading.value = false;
       });
     } catch (e) {
-      status.value = `Error: ${e}`;
+      if (String(e) !== "Cancelled") {
+        status.value = `Error: ${e}`;
+      }
     } finally {
       loading.value = false;
     }
@@ -286,7 +288,9 @@ export const useAppStore = defineStore("app", () => {
       }
       await refreshOpenTabs();
     } catch (e) {
-      status.value = `Error: ${e}`;
+      if (String(e) !== "Cancelled") {
+        status.value = `Error: ${e}`;
+      }
     } finally {
       loading.value = false;
     }
