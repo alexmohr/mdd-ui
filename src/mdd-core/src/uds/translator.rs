@@ -159,8 +159,6 @@ impl UdsTranslator {
 
         let _ = manager.detect_variant(dummy_responses).await;
 
-        let variant = manager.variant();
-
         Ok(Self {
             manager,
             path: path.to_owned(),

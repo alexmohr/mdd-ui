@@ -27,6 +27,11 @@ pub fn load_mdd(path: &str) -> Result<DiagnosticDatabase> {
 /// `UDS_Ethernet_DoIP` missing).  With `ignore_protocol: true` the CDA falls
 /// back to the single available protocol.
 ///
+/// When the database contains multiple distinct protocols, `ignore_protocol`
+/// is not allowed (ambiguous resolution).  In that case we fall back to a
+/// normal load — the caller is expected to select the protocol explicitly
+/// via the `EcuManager`.
+///
 /// # Errors
 ///
 /// Returns an error if the file cannot be read or the database cannot be parsed.
@@ -38,6 +43,7 @@ pub fn load_mdd_ignore_protocol(path: &str) -> Result<DiagnosticDatabase> {
             ..Default::default()
         },
     )
+    .or_else(|_| load_mdd(path))
 }
 
 fn load_mdd_with_config(path: &str, db_config: DatabaseConfig) -> Result<DiagnosticDatabase> {
