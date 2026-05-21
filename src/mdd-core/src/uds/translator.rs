@@ -157,17 +157,9 @@ impl UdsTranslator {
             })
             .collect();
 
-        if let Err(e) = manager.detect_variant(dummy_responses).await {
-            eprintln!("Variant detection failed (using base variant fallback): {e}");
-        }
+        let _ = manager.detect_variant(dummy_responses).await;
 
         let variant = manager.variant();
-        eprintln!(
-            "UDS translator created: is_loaded={}, state={:?}, variant={}",
-            manager.is_loaded(),
-            manager.state(),
-            variant.name.as_deref().unwrap_or("<none>"),
-        );
 
         Ok(Self {
             manager,
@@ -190,10 +182,6 @@ impl UdsTranslator {
         let sid_name = describe_sid(sid);
 
         let result = self.manager.lookup_diagcomms_by_request_prefix(bytes);
-        eprintln!(
-            "lookup_diagcomms_by_request_prefix({bytes:02X?}) = {:?}",
-            result.as_ref().map(Vec::len).map_err(|e| format!("{e}"))
-        );
         let matched: Vec<MatchedService> = result
             .unwrap_or_default()
             .into_iter()
@@ -304,7 +292,6 @@ impl UdsTranslator {
 
         // 2. Supplement with component APIs.
         let data_info = self.manager.get_components_data_info(&security_plugin);
-        eprintln!("get_components_data_info: {} entries", data_info.len());
         for info in data_info {
             if seen.insert(info.name.clone()) {
                 services.push(MatchedService {
@@ -492,13 +479,6 @@ impl UdsTranslator {
             .context("Variant detection failed with crafted responses")?;
 
         let v = self.manager.variant();
-        eprintln!(
-            "Variant switched: name={}, state={:?}, is_base={}, is_fallback={}",
-            v.name.as_deref().unwrap_or("<none>"),
-            v.state,
-            v.is_base_variant,
-            v.is_fallback,
-        );
 
         Ok(VariantInfo {
             name: v.name.unwrap_or_default(),
@@ -521,10 +501,6 @@ impl UdsTranslator {
         if active.as_deref().is_some_and(|n| n == variant_name) {
             return Ok(());
         }
-        eprintln!(
-            "Auto-switching variant: {} → {variant_name}",
-            active.as_deref().unwrap_or("<none>"),
-        );
         self.select_variant(variant_name).await?;
         Ok(())
     }
