@@ -20,8 +20,8 @@ const tabSections = computed<DetailSection[]>(() =>
   headerSection.value ? store.detailSections.slice(1) : store.detailSections,
 );
 
-const activeSection = computed<DetailSection | null>(() =>
-  tabSections.value[store.selectedTab] ?? null,
+const activeSection = computed<DetailSection | null>(
+  () => tabSections.value[store.selectedTab] ?? null,
 );
 
 // Show UDS hex/byte-grid for request and response sections
@@ -51,7 +51,7 @@ watch(
   () => store.selectedIndex,
   async (idx) => {
     nodeVariant.value = null;
-    if (idx == null) return;
+    if (idx === null) return;
     try {
       nodeVariant.value = await getNodeVariant(idx);
     } catch {
@@ -128,10 +128,14 @@ function initEditableValues() {
   editableValues.value = next;
 }
 
-watch(() => activeSection.value?.byte_pattern_rows, () => {
-  initEditableValues();
-  cdaUdsHex.value = null;
-}, { immediate: true });
+watch(
+  () => activeSection.value?.byte_pattern_rows,
+  () => {
+    initEditableValues();
+    cdaUdsHex.value = null;
+  },
+  { immediate: true },
+);
 
 // ── Map param name → const/editable for table row identification ─
 const nonConstParamNames = computed<Set<string>>(() => {
@@ -157,7 +161,7 @@ function bitLengthForParam(name: string): number {
 }
 
 function maxValueForBits(bits: number): number {
-  if (bits >= 32) return 0xFFFFFFFF;
+  if (bits >= 32) return 0xffffffff;
   return (1 << bits) - 1;
 }
 
@@ -176,7 +180,10 @@ function normalizeValue(name: string) {
   const raw = editableValues.value[name] ?? "";
   if (raw === "") return;
   const num = parseInt(raw, 10);
-  if (isNaN(num)) { editableValues.value[name] = ""; return; }
+  if (isNaN(num)) {
+    editableValues.value[name] = "";
+    return;
+  }
   const max = maxValueForBits(bitLengthForParam(name));
   editableValues.value[name] = String(Math.min(num, max));
 }
@@ -191,7 +198,10 @@ const editedHexMap = computed<Record<string, string>>(() => {
     const num = parseInt(raw, 10);
     if (isNaN(num)) continue;
     const byteCount = Math.ceil(p.bitLength / 8);
-    m[p.name] = num.toString(16).toUpperCase().padStart(byteCount * 2, "0");
+    m[p.name] = num
+      .toString(16)
+      .toUpperCase()
+      .padStart(byteCount * 2, "0");
   }
   return m;
 });
@@ -232,7 +242,10 @@ const cdaError = ref<string | null>(null);
 async function generateCdaUds() {
   const name = udsServiceName.value;
   cdaError.value = null;
-  if (!name) { cdaUdsHex.value = null; return; }
+  if (!name) {
+    cdaUdsHex.value = null;
+    return;
+  }
   const params: Record<string, unknown> = {};
   let hasAny = false;
   for (const p of udsParams.value) {
@@ -242,7 +255,10 @@ async function generateCdaUds() {
     params[p.name] = raw;
     hasAny = true;
   }
-  if (!hasAny) { cdaUdsHex.value = null; return; }
+  if (!hasAny) {
+    cdaUdsHex.value = null;
+    return;
+  }
   // Wait for the UDS translator to finish loading before encoding
   await store.waitForUds();
   if (!store.udsReady) {
@@ -259,21 +275,33 @@ async function generateCdaUds() {
   }
 }
 
-watch(editableValues, () => {
-  if (cdaTimer) clearTimeout(cdaTimer);
-  cdaTimer = setTimeout(generateCdaUds, 400);
-}, { deep: true });
+watch(
+  editableValues,
+  () => {
+    if (cdaTimer) clearTimeout(cdaTimer);
+    cdaTimer = setTimeout(generateCdaUds, 400);
+  },
+  { deep: true },
+);
 
-watch(udsServiceName, () => { cdaUdsHex.value = null; });
+watch(udsServiceName, () => {
+  cdaUdsHex.value = null;
+});
 
 const udsHexString = computed(() => cdaUdsHex.value || constOnlyHex.value);
 
 // Value column index in the main param table
 const VALUE_COL_INDEX = 5;
 
-function text(c: DetailContent): string[] | null { return "PlainText" in c ? c.PlainText : null; }
-function getTable(c: DetailContent) { return "Table" in c ? c.Table : null; }
-function composite(c: DetailContent): DetailSection[] | null { return "Composite" in c ? c.Composite : null; }
+function text(c: DetailContent): string[] | null {
+  return "PlainText" in c ? c.PlainText : null;
+}
+function getTable(c: DetailContent) {
+  return "Table" in c ? c.Table : null;
+}
+function composite(c: DetailContent): DetailSection[] | null {
+  return "Composite" in c ? c.Composite : null;
+}
 
 function diffCls(s: string | null): string {
   if (s === "Added") return "bg-emerald-500/5 border-l-2 border-l-emerald-500/40";
@@ -282,35 +310,41 @@ function diffCls(s: string | null): string {
   return "";
 }
 
-async function nav(t: JumpTarget | null) { if (t) await store.navigateTo(t); }
+async function nav(t: JumpTarget | null) {
+  if (t) await store.navigateTo(t);
+}
 
 // --- Cell badge parsing ---
 // Detects embedded prefix badges such as "[DOP] name" or "[Struct] name" in cell text.
 const TEXT_BADGE_RE = /^\[([A-Za-z][A-Za-z0-9_]*)\] /;
 
-type Badge = { label: string; bg: string; fg: string };
+interface Badge {
+  label: string;
+  bg: string;
+  fg: string;
+}
 
 const CELL_BADGES: Record<string, Badge> = {
   // DOP variant types (pink – matches tree DOP badges)
-  DOP:      { label: "DOP",  bg: "bg-pink-500/20",    fg: "text-pink-300" },
-  DTC:      { label: "DTC",  bg: "bg-red-500/20",     fg: "text-red-300" },
-  Struct:   { label: "STRC", bg: "bg-fuchsia-500/20", fg: "text-fuchsia-300" },
-  SField:   { label: "SF",   bg: "bg-purple-500/20",  fg: "text-purple-300" },
-  DynLen:   { label: "DYN",  bg: "bg-yellow-500/20",  fg: "text-yellow-300" },
-  EoPdu:    { label: "EOP",  bg: "bg-emerald-500/20", fg: "text-emerald-300" },
-  Mux:      { label: "MUX",  bg: "bg-orange-500/20",  fg: "text-orange-300" },
-  EnvData:  { label: "ENV",  bg: "bg-teal-500/20",    fg: "text-teal-300" },
-  EnvDesc:  { label: "EDD",  bg: "bg-sky-500/20",     fg: "text-sky-300" },
+  DOP: { label: "DOP", bg: "bg-pink-500/20", fg: "text-pink-300" },
+  DTC: { label: "DTC", bg: "bg-red-500/20", fg: "text-red-300" },
+  Struct: { label: "STRC", bg: "bg-fuchsia-500/20", fg: "text-fuchsia-300" },
+  SField: { label: "SF", bg: "bg-purple-500/20", fg: "text-purple-300" },
+  DynLen: { label: "DYN", bg: "bg-yellow-500/20", fg: "text-yellow-300" },
+  EoPdu: { label: "EOP", bg: "bg-emerald-500/20", fg: "text-emerald-300" },
+  Mux: { label: "MUX", bg: "bg-orange-500/20", fg: "text-orange-300" },
+  EnvData: { label: "ENV", bg: "bg-teal-500/20", fg: "text-teal-300" },
+  EnvDesc: { label: "EDD", bg: "bg-sky-500/20", fg: "text-sky-300" },
   // ComParam classes (sky – matches tree CP child badges)
-  TIMING:   { label: "TMG",  bg: "bg-sky-500/20",     fg: "text-sky-300" },
-  BUSCOM:   { label: "BUS",  bg: "bg-orange-500/20",  fg: "text-orange-300" },
-  TPCOM:    { label: "TPC",  bg: "bg-teal-500/20",    fg: "text-teal-300" },
-  COM:      { label: "COM",  bg: "bg-violet-500/20",  fg: "text-violet-300" },
-  ECU_COMM: { label: "ECUC", bg: "bg-lime-500/20",    fg: "text-lime-300" },
-  ERRH:     { label: "ERR",  bg: "bg-rose-500/20",    fg: "text-rose-300" },
-  TEST:     { label: "TEST", bg: "bg-cyan-500/20",    fg: "text-cyan-300" },
-  UNIQ:     { label: "UNQ",  bg: "bg-indigo-500/20",  fg: "text-indigo-300" },
-  Audience: { label: "AUD",  bg: "bg-amber-500/20",   fg: "text-amber-300" },
+  TIMING: { label: "TMG", bg: "bg-sky-500/20", fg: "text-sky-300" },
+  BUSCOM: { label: "BUS", bg: "bg-orange-500/20", fg: "text-orange-300" },
+  TPCOM: { label: "TPC", bg: "bg-teal-500/20", fg: "text-teal-300" },
+  COM: { label: "COM", bg: "bg-violet-500/20", fg: "text-violet-300" },
+  ECU_COMM: { label: "ECUC", bg: "bg-lime-500/20", fg: "text-lime-300" },
+  ERRH: { label: "ERR", bg: "bg-rose-500/20", fg: "text-rose-300" },
+  TEST: { label: "TEST", bg: "bg-cyan-500/20", fg: "text-cyan-300" },
+  UNIQ: { label: "UNQ", bg: "bg-indigo-500/20", fg: "text-indigo-300" },
+  Audience: { label: "AUD", bg: "bg-amber-500/20", fg: "text-amber-300" },
 };
 
 /** Split a cell text value into an optional badge + display text. */
@@ -318,17 +352,24 @@ function cellParts(raw: string): { badge: Badge | null; text: string } {
   const m = TEXT_BADGE_RE.exec(raw);
   if (!m) return { badge: null, text: raw };
   const cls = m[1];
-  const badge = CELL_BADGES[cls] ?? { label: cls.slice(0, 4).toUpperCase(), bg: "bg-sky-500/20", fg: "text-sky-300" };
+  const badge = CELL_BADGES[cls] ?? {
+    label: cls.slice(0, 4).toUpperCase(),
+    bg: "bg-sky-500/20",
+    fg: "text-sky-300",
+  };
   return { badge, text: raw.slice(m[0].length) };
 }
 
 // --- Column sorting (persisted per section key) ---
-type SortState = { col: number; asc: boolean };
+interface SortState {
+  col: number;
+  asc: boolean;
+}
 const sortStates = ref<Map<string, SortState>>(new Map());
 const colWidthMap = ref<Map<string, number[]>>(new Map());
 
 function sectionKey(): string {
-  return `${store.selectedIndex ?? ''}-${store.selectedTab}`;
+  return `${store.selectedIndex ?? ""}-${store.selectedTab}`;
 }
 
 function currentSort(): SortState | undefined {
@@ -355,7 +396,7 @@ function effectiveSort(): SortState {
   if (cur) return cur;
   const tbl = activeSection.value ? getTable(activeSection.value.content) : null;
   if (tbl) {
-    const byteIdx = tbl.header.cells.findIndex(c => /^byte$/i.test(c.text.trim()));
+    const byteIdx = tbl.header.cells.findIndex((c) => /^byte$/i.test(c.text.trim()));
     if (byteIdx >= 0) return { col: byteIdx, asc: true };
   }
   return { col: 0, asc: true };
@@ -367,8 +408,9 @@ function sortedRows(rows: DetailRow[]): DetailRow[] {
   return [...rows].sort((a, b) => {
     const at = a.cells[col]?.text ?? "";
     const bt = b.cells[col]?.text ?? "";
-    const an = parseNum(at), bn = parseNum(bt);
-    const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : at.localeCompare(bt);
+    const an = parseNum(at),
+      bn = parseNum(bt);
+    const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : at.localeCompare(bt);
     return asc ? cmp : -cmp;
   });
 }
@@ -399,7 +441,11 @@ function colStyle(colIdx: number, key: string): Record<string, string> {
 }
 
 // --- Tab context menu ---
-interface TabCtx { x: number; y: number; section: DetailSection }
+interface TabCtx {
+  x: number;
+  y: number;
+  section: DetailSection;
+}
 const tabCtxMenu = ref<TabCtx | null>(null);
 
 function onTabContextMenu(e: MouseEvent, section: DetailSection) {
@@ -407,7 +453,9 @@ function onTabContextMenu(e: MouseEvent, section: DetailSection) {
   tabCtxMenu.value = { x: e.clientX, y: e.clientY, section };
   nextTick(() => window.addEventListener("click", closeTabCtx, { once: true }));
 }
-function closeTabCtx() { tabCtxMenu.value = null; }
+function closeTabCtx() {
+  tabCtxMenu.value = null;
+}
 
 function sectionToMarkdown(section: DetailSection): string {
   const parts: string[] = [`## ${section.title}`, ""];
@@ -453,17 +501,16 @@ function onTableContextMenu(e: MouseEvent, header: DetailRow, rows: DetailRow[])
   tableCtxMenu.value = { x: e.clientX, y: e.clientY, header, rows };
   nextTick(() => window.addEventListener("click", closeTableCtx, { once: true }));
 }
-function closeTableCtx() { tableCtxMenu.value = null; }
+function closeTableCtx() {
+  tableCtxMenu.value = null;
+}
 
 function tableToMarkdown(header: DetailRow, rows: DetailRow[]): string {
-  const hCells = header.cells.map(c => c.text);
-  const sep = hCells.map(h => "-".repeat(Math.max(3, h.length)));
-  const lines = [
-    "| " + hCells.join(" | ") + " |",
-    "| " + sep.join(" | ") + " |",
-  ];
+  const hCells = header.cells.map((c) => c.text);
+  const sep = hCells.map((h) => "-".repeat(Math.max(3, h.length)));
+  const lines = ["| " + hCells.join(" | ") + " |", "| " + sep.join(" | ") + " |"];
   for (const row of rows) {
-    const cells = row.cells.map(c => c.text.replace(/\|/g, "\\|"));
+    const cells = row.cells.map((c) => c.text.replace(/\|/g, "\\|"));
     lines.push("| " + cells.join(" | ") + " |");
   }
   return lines.join("\n");
@@ -493,7 +540,22 @@ async function tableCtxAction(action: string) {
     <!-- Empty state -->
     <div v-if="!store.selectedNode" class="flex-1 flex items-center justify-center">
       <div class="text-center text-neutral-600 text-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mx-auto mb-3 text-gray-800"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="32"
+          height="32"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="mx-auto mb-3 text-gray-800"
+        >
+          <rect width="18" height="18" x="3" y="3" rx="2" />
+          <path d="M9 3v18" />
+          <path d="m16 15-3-3 3-3" />
+        </svg>
         Select a node
       </div>
     </div>
@@ -508,21 +570,30 @@ async function tableCtxAction(action: string) {
           v-for="(line, i) in text(headerSection.content)"
           :key="i"
           class="text-sm text-neutral-400 leading-relaxed"
-        >{{ line }}</div>
+        >
+          {{ line }}
+        </div>
       </div>
 
       <!-- Tabs -->
-      <div v-if="tabSections.length > 1" class="flex border-b border-neutral-800/60 bg-neutral-900 overflow-x-auto shrink-0">
+      <div
+        v-if="tabSections.length > 1"
+        class="flex border-b border-neutral-800/60 bg-neutral-900 overflow-x-auto shrink-0"
+      >
         <button
           v-for="(section, i) in tabSections"
           :key="i"
           class="px-4 py-2 text-sm whitespace-nowrap border-b-2 transition-colors"
-          :class="i === store.selectedTab
-            ? 'border-blue-500 text-neutral-100'
-            : 'border-transparent text-neutral-500 hover:text-neutral-300'"
+          :class="
+            i === store.selectedTab
+              ? 'border-blue-500 text-neutral-100'
+              : 'border-transparent text-neutral-500 hover:text-neutral-300'
+          "
           @click="store.setSelectedTab(i)"
           @contextmenu.prevent="onTabContextMenu($event, section)"
-        >{{ section.title }}</button>
+        >
+          {{ section.title }}
+        </button>
       </div>
 
       <!-- Content -->
@@ -533,12 +604,23 @@ async function tableCtxAction(action: string) {
             v-for="(line, i) in text(activeSection.content)"
             :key="i"
             class="text-sm text-neutral-300 leading-relaxed"
-          >{{ line || "\u00A0" }}</p>
+          >
+            {{ line || "\u00A0" }}
+          </p>
         </div>
 
         <!-- Table -->
-        <div v-if="getTable(activeSection.content)" @contextmenu="onTableContextMenu($event, getTable(activeSection.content)!.header, sortedRows(getTable(activeSection.content)!.rows))">
-          <table class="text-sm" style="table-layout: fixed;">
+        <div
+          v-if="getTable(activeSection.content)"
+          @contextmenu="
+            onTableContextMenu(
+              $event,
+              getTable(activeSection.content)!.header,
+              sortedRows(getTable(activeSection.content)!.rows),
+            )
+          "
+        >
+          <table class="text-sm" style="table-layout: fixed">
             <thead class="sticky top-0 bg-neutral-950 z-10">
               <tr class="border-b border-gray-800/80">
                 <th
@@ -549,7 +631,9 @@ async function tableCtxAction(action: string) {
                   @click="toggleSort(ci)"
                 >
                   <span>{{ cell.text }}</span>
-                  <span v-if="effectiveSort().col === ci" class="ml-1 text-blue-400">{{ effectiveSort().asc ? '▲' : '▼' }}</span>
+                  <span v-if="effectiveSort().col === ci" class="ml-1 text-blue-400">{{
+                    effectiveSort().asc ? "▲" : "▼"
+                  }}</span>
                   <span
                     class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/40 opacity-0 group-hover:opacity-100"
                     @mousedown="onColResize($event, ci, sectionKey())"
@@ -570,12 +654,18 @@ async function tableCtxAction(action: string) {
                   :key="ci"
                   class="px-3 py-1.5 text-neutral-300"
                   :class="{
-                    'text-blue-400 cursor-pointer hover:text-blue-300 hover:underline': cell.jump_target,
+                    'text-blue-400 cursor-pointer hover:text-blue-300 hover:underline':
+                      cell.jump_target,
                     'text-neutral-100 font-medium': cell.cell_type === 'ParameterName',
-                    'truncate': !store.wrapTableText,
+                    truncate: !store.wrapTableText,
                     'break-words whitespace-normal': store.wrapTableText,
                   }"
-                  :style="{ ...(ci === 0 && row.indent > 0 ? { paddingLeft: `${row.indent * 10 + 12}px` } : {}), ...colStyle(ci, sectionKey()) }"
+                  :style="{
+                    ...(ci === 0 && row.indent > 0
+                      ? { paddingLeft: `${row.indent * 10 + 12}px` }
+                      : {}),
+                    ...colStyle(ci, sectionKey()),
+                  }"
                   @click="nav(cell.jump_target)"
                 >
                   <!-- Editable value input for Value column on non-const UDS rows -->
@@ -590,8 +680,13 @@ async function tableCtxAction(action: string) {
                     />
                   </template>
                   <template v-else>
-                    <template v-for="p in [cellParts(cell.text)]" :key="0">
-                      <span v-if="p.badge" class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none mr-1 shrink-0" :class="`${p.badge.bg} ${p.badge.fg}`">{{ p.badge.label }}</span>{{ p.text }}
+                    <template v-for="p in [cellParts(cell.text)]" :key="p.text">
+                      <span
+                        v-if="p.badge"
+                        class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none mr-1 shrink-0"
+                        :class="`${p.badge.bg} ${p.badge.fg}`"
+                        >{{ p.badge.label }}</span
+                      >{{ p.text }}
                     </template>
                   </template>
                 </td>
@@ -602,13 +697,20 @@ async function tableCtxAction(action: string) {
 
         <!-- UDS request hex – shown below the table for request sections -->
         <div v-if="isRequestSection && udsServiceName" class="px-3 pt-3 space-y-0.5">
-          <div class="text-[10px] uppercase tracking-wide font-medium text-neutral-500">UDS Request</div>
-          <div v-if="udsHexString" class="px-2 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-green-300 text-xs font-mono break-all select-all">
+          <div class="text-[10px] uppercase tracking-wide font-medium text-neutral-500">
+            UDS Request
+          </div>
+          <div
+            v-if="udsHexString"
+            class="px-2 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-green-300 text-xs font-mono break-all select-all"
+          >
             {{ udsHexString }}
           </div>
         </div>
         <div v-if="isRequestSection && cdaError" class="px-3 pt-2">
-          <div class="px-2 py-1.5 rounded bg-red-900/30 border border-red-700/30 text-red-300 text-xs break-all">
+          <div
+            class="px-2 py-1.5 rounded bg-red-900/30 border border-red-700/30 text-red-300 text-xs break-all"
+          >
             {{ cdaError }}
           </div>
         </div>
@@ -626,23 +728,41 @@ async function tableCtxAction(action: string) {
         </div>
 
         <!-- Composite -->
-        <div v-if="!text(activeSection.content) && !getTable(activeSection.content) && composite(activeSection.content)" class="p-3 space-y-3">
+        <div
+          v-if="
+            !text(activeSection.content) &&
+            !getTable(activeSection.content) &&
+            composite(activeSection.content)
+          "
+          class="p-3 space-y-3"
+        >
           <div
             v-for="(sub, si) in composite(activeSection.content)"
             :key="si"
             class="rounded-lg border border-neutral-800/50 overflow-hidden"
           >
-            <div class="px-3 py-1.5 bg-neutral-800/20 text-xs text-neutral-400 font-medium uppercase tracking-wider">
+            <div
+              class="px-3 py-1.5 bg-neutral-800/20 text-xs text-neutral-400 font-medium uppercase tracking-wider"
+            >
               {{ sub.title }}
             </div>
             <div v-if="text(sub.content)" class="px-3 py-2">
-              <p
-                v-for="(line, li) in text(sub.content)"
-                :key="li"
-                class="text-sm text-neutral-300"
-              >{{ line || "\u00A0" }}</p>
+              <p v-for="(line, li) in text(sub.content)" :key="li" class="text-sm text-neutral-300">
+                {{ line || "\u00A0" }}
+              </p>
             </div>
-            <table v-else-if="getTable(sub.content)" class="w-full text-sm" style="table-layout: fixed;" @contextmenu="onTableContextMenu($event, getTable(sub.content)!.header, getTable(sub.content)!.rows)">
+            <table
+              v-else-if="getTable(sub.content)"
+              class="w-full text-sm"
+              style="table-layout: fixed"
+              @contextmenu="
+                onTableContextMenu(
+                  $event,
+                  getTable(sub.content)!.header,
+                  getTable(sub.content)!.rows,
+                )
+              "
+            >
               <thead>
                 <tr class="border-b border-neutral-800/50">
                   <th
@@ -673,13 +793,18 @@ async function tableCtxAction(action: string) {
                     class="px-3 py-1 text-neutral-300"
                     :class="{
                       'text-blue-400 cursor-pointer hover:underline': cell.jump_target,
-                      'truncate': !store.wrapTableText,
+                      truncate: !store.wrapTableText,
                       'break-words whitespace-normal': store.wrapTableText,
                     }"
                     @click="nav(cell.jump_target)"
                   >
-                    <template v-for="p in [cellParts(cell.text)]" :key="0">
-                      <span v-if="p.badge" class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none mr-1 shrink-0" :class="`${p.badge.bg} ${p.badge.fg}`">{{ p.badge.label }}</span>{{ p.text }}
+                    <template v-for="p in [cellParts(cell.text)]" :key="p.text">
+                      <span
+                        v-if="p.badge"
+                        class="inline-flex items-center justify-center rounded px-1 py-px text-[9px] font-semibold leading-none mr-1 shrink-0"
+                        :class="`${p.badge.bg} ${p.badge.fg}`"
+                        >{{ p.badge.label }}</span
+                      >{{ p.text }}
                     </template>
                   </td>
                 </tr>
@@ -692,7 +817,6 @@ async function tableCtxAction(action: string) {
       <div v-else class="flex-1 flex items-center justify-center text-neutral-600 text-xs">
         No details available
       </div>
-
     </template>
     <!-- Tab context menu -->
     <Teleport to="body">
@@ -701,7 +825,10 @@ async function tableCtxAction(action: string) {
         class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-sm"
         :style="{ left: tabCtxMenu.x + 'px', top: tabCtxMenu.y + 'px' }"
       >
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="tabCtxAction('copyMarkdown')">
+        <button
+          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors"
+          @click="tabCtxAction('copyMarkdown')"
+        >
           Copy as Markdown
         </button>
       </div>
@@ -713,10 +840,16 @@ async function tableCtxAction(action: string) {
         class="fixed z-50 min-w-44 py-1 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 text-sm"
         :style="{ left: tableCtxMenu.x + 'px', top: tableCtxMenu.y + 'px' }"
       >
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="tableCtxAction('copyMarkdown')">
+        <button
+          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors"
+          @click="tableCtxAction('copyMarkdown')"
+        >
           Copy table as Markdown
         </button>
-        <button class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors" @click="tableCtxAction('copyPath')">
+        <button
+          class="w-full text-left px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 transition-colors"
+          @click="tableCtxAction('copyPath')"
+        >
           Copy path
         </button>
       </div>

@@ -104,10 +104,7 @@ export async function loadMdd(path: string): Promise<LoadResult> {
   return invoke<LoadResult>("load_mdd", { path });
 }
 
-export async function loadDiff(
-  oldPath: string,
-  newPath: string,
-): Promise<LoadResult> {
+export async function loadDiff(oldPath: string, newPath: string): Promise<LoadResult> {
   return invoke<LoadResult>("load_diff", { oldPath, newPath });
 }
 
@@ -115,19 +112,15 @@ export async function getVisibleNodes(): Promise<VisibleNode[]> {
   return invoke<VisibleNode[]>("get_visible_nodes");
 }
 
-export async function getNodeDetail(
-  index: number,
-): Promise<DetailSection[]> {
+export async function getNodeDetail(index: number): Promise<DetailSection[]> {
   return invoke<DetailSection[]>("get_node_detail", { index });
 }
 
-export async function toggleExpand(
-  index: number,
-): Promise<VisibleNode[]> {
+export async function toggleExpand(index: number): Promise<VisibleNode[]> {
   return invoke<VisibleNode[]>("toggle_expand", { index });
 }
 
-export async function doSearch(query: string, op: 'and' | 'or' = 'and'): Promise<SearchResult> {
+export async function doSearch(query: string, op: "and" | "or" = "and"): Promise<SearchResult> {
   return invoke<SearchResult>("search", { query, op });
 }
 
@@ -163,9 +156,7 @@ export async function toggleHideUnchanged(): Promise<VisibleNode[]> {
   return invoke<VisibleNode[]>("toggle_hide_unchanged");
 }
 
-export async function navigateTo(
-  target: JumpTarget,
-): Promise<NavigateResult> {
+export async function navigateTo(target: JumpTarget): Promise<NavigateResult> {
   return invoke<NavigateResult>("navigate_to", { target });
 }
 
@@ -292,14 +283,10 @@ export async function udsListVariants(): Promise<VariantInfo[]> {
   return invoke<VariantInfo[]>("uds_list_variants");
 }
 
-export async function udsSelectVariant(
-  variantName: string,
-): Promise<VariantInfo> {
+export async function udsSelectVariant(variantName: string): Promise<VariantInfo> {
   return invoke<VariantInfo>("uds_select_variant", { variantName });
 }
 
-export async function getNodeVariant(
-  index: number,
-): Promise<string | null> {
+export async function getNodeVariant(index: number): Promise<string | null> {
   return invoke<string | null>("get_node_variant", { index });
 }

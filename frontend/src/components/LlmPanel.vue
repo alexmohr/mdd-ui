@@ -10,19 +10,23 @@ import { marked } from "marked";
 
 // Extension: render [[name]] as a clickable navigation button
 marked.use({
-  extensions: [{
-    name: "mddNav",
-    level: "inline" as const,
-    start(src: string) { return src.indexOf("[["); },
-    tokenizer(src: string) {
-      const m = /^\[\[([^\]]+)\]\]/.exec(src);
-      if (m) return { type: "mddNav", raw: m[0], name: m[1] };
+  extensions: [
+    {
+      name: "mddNav",
+      level: "inline" as const,
+      start(src: string) {
+        return src.indexOf("[[");
+      },
+      tokenizer(src: string) {
+        const m = /^\[\[([^\]]+)\]\]/.exec(src);
+        if (m) return { type: "mddNav", raw: m[0], name: m[1] };
+      },
+      renderer(token) {
+        const name = (token as unknown as { name: string }).name.replace(/"/g, "&quot;");
+        return `<button class="mdd-nav" data-name="${name}">${name}</button>`;
+      },
     },
-    renderer(token) {
-      const name = (token as unknown as { name: string }).name.replace(/"/g, "&quot;");
-      return `<button class="mdd-nav" data-name="${name}">${name}</button>`;
-    },
-  }],
+  ],
 });
 
 function renderMessage(content: string): string {
@@ -111,9 +115,7 @@ function onMessageAreaClick(e: MouseEvent) {
       @mousedown.prevent="onResizeMouseDown"
     />
     <!-- Header -->
-    <div
-      class="flex items-center h-10 px-3 border-b border-neutral-800 shrink-0 gap-1"
-    >
+    <div class="flex items-center h-10 px-3 border-b border-neutral-800 shrink-0 gap-1">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="15"
@@ -128,9 +130,7 @@ function onMessageAreaClick(e: MouseEvent) {
       >
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
-      <span class="flex-1 font-medium text-neutral-200 text-sm ml-1"
-        >AI Assistant</span
-      >
+      <span class="flex-1 font-medium text-neutral-200 text-sm ml-1">AI Assistant</span>
       <!-- Clear -->
       <button
         class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
@@ -221,8 +221,7 @@ function onMessageAreaClick(e: MouseEvent) {
     >
       <div v-if="store.messages.length === 0" class="text-center py-8">
         <p class="text-neutral-600 text-xs">
-          Ask anything about the loaded MDD file.<br />The ECU structure is
-          sent as context.
+          Ask anything about the loaded MDD file.<br />The ECU structure is sent as context.
         </p>
       </div>
 
@@ -235,17 +234,19 @@ function onMessageAreaClick(e: MouseEvent) {
         <span class="text-[10px] text-neutral-600 px-1">
           {{ msg.role === "user" ? "You" : "AI" }}
         </span>
-          <!-- User message -->
-          <div
-            v-if="msg.role === 'user'"
-            class="max-w-[90%] rounded-xl rounded-br-sm px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words bg-blue-600/20 text-blue-100"
-          >{{ msg.content }}</div>
-          <!-- AI message: rendered markdown with navigation links -->
-          <div
-            v-else
-            class="prose max-w-[90%] rounded-xl rounded-bl-sm px-3 py-2 text-xs bg-neutral-800 text-neutral-200"
-            v-html="renderMessage(msg.content)"
-          />
+        <!-- User message -->
+        <div
+          v-if="msg.role === 'user'"
+          class="max-w-[90%] rounded-xl rounded-br-sm px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words bg-blue-600/20 text-blue-100"
+        >
+          {{ msg.content }}
+        </div>
+        <!-- AI message: rendered markdown with navigation links -->
+        <div
+          v-else
+          class="prose max-w-[90%] rounded-xl rounded-bl-sm px-3 py-2 text-xs bg-neutral-800 text-neutral-200"
+          v-html="renderMessage(msg.content)"
+        />
       </div>
 
       <!-- Typing indicator -->
@@ -254,15 +255,15 @@ function onMessageAreaClick(e: MouseEvent) {
           <div
             class="w-1.5 h-1.5 rounded-full bg-neutral-500 animate-bounce"
             style="animation-delay: 0ms"
-          ></div>
+          />
           <div
             class="w-1.5 h-1.5 rounded-full bg-neutral-500 animate-bounce"
             style="animation-delay: 150ms"
-          ></div>
+          />
           <div
             class="w-1.5 h-1.5 rounded-full bg-neutral-500 animate-bounce"
             style="animation-delay: 300ms"
-          ></div>
+          />
         </div>
       </div>
     </div>
@@ -334,21 +335,84 @@ function onMessageAreaClick(e: MouseEvent) {
 </template>
 
 <style scoped>
-.prose :deep(h1), .prose :deep(h2), .prose :deep(h3) { font-weight: 600; margin: 0.4em 0 0.2em; }
-.prose :deep(h1) { font-size: 0.95rem; }
-.prose :deep(h2) { font-size: 0.85rem; }
-.prose :deep(h3) { font-size: 0.8rem; }
-.prose :deep(p) { margin: 0.3em 0; }
-.prose :deep(ul) { list-style: disc; padding-left: 1.2em; margin: 0.3em 0; }
-.prose :deep(ol) { list-style: decimal; padding-left: 1.2em; margin: 0.3em 0; }
-.prose :deep(li) { margin: 0.1em 0; }
-.prose :deep(code) { background: rgba(255,255,255,0.08); padding: 0.1em 0.3em; border-radius: 3px; font-family: monospace; font-size: 0.9em; }
-.prose :deep(pre) { background: rgba(0,0,0,0.35); padding: 0.6em 0.75em; border-radius: 6px; overflow-x: auto; margin: 0.4em 0; }
-.prose :deep(pre code) { background: none; padding: 0; }
-.prose :deep(strong) { font-weight: 600; }
-.prose :deep(em) { font-style: italic; }
-.prose :deep(blockquote) { border-left: 2px solid #4b5563; padding-left: 0.6em; color: #9ca3af; margin: 0.3em 0; }
-.prose :deep(a) { color: #60a5fa; text-decoration: underline; }
-.prose :deep(button.mdd-nav) { color: #60a5fa; text-decoration: underline; text-underline-offset: 2px; font-weight: 500; cursor: pointer; background: none; border: none; padding: 0; font-size: inherit; font-family: inherit; }
-.prose :deep(button.mdd-nav:hover) { color: #93c5fd; }
+.prose :deep(h1),
+.prose :deep(h2),
+.prose :deep(h3) {
+  font-weight: 600;
+  margin: 0.4em 0 0.2em;
+}
+.prose :deep(h1) {
+  font-size: 0.95rem;
+}
+.prose :deep(h2) {
+  font-size: 0.85rem;
+}
+.prose :deep(h3) {
+  font-size: 0.8rem;
+}
+.prose :deep(p) {
+  margin: 0.3em 0;
+}
+.prose :deep(ul) {
+  list-style: disc;
+  padding-left: 1.2em;
+  margin: 0.3em 0;
+}
+.prose :deep(ol) {
+  list-style: decimal;
+  padding-left: 1.2em;
+  margin: 0.3em 0;
+}
+.prose :deep(li) {
+  margin: 0.1em 0;
+}
+.prose :deep(code) {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+.prose :deep(pre) {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.6em 0.75em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.4em 0;
+}
+.prose :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+.prose :deep(strong) {
+  font-weight: 600;
+}
+.prose :deep(em) {
+  font-style: italic;
+}
+.prose :deep(blockquote) {
+  border-left: 2px solid #4b5563;
+  padding-left: 0.6em;
+  color: #9ca3af;
+  margin: 0.3em 0;
+}
+.prose :deep(a) {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+.prose :deep(button.mdd-nav) {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+}
+.prose :deep(button.mdd-nav:hover) {
+  color: #93c5fd;
+}
 </style>
