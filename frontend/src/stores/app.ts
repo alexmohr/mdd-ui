@@ -3,13 +3,7 @@
 
 import { defineStore } from "pinia";
 import { ref, computed, watch } from "vue";
-import type {
-  VisibleNode,
-  DetailSection,
-  JumpTarget,
-  RecentFile,
-  TabInfo,
-} from "../api/commands";
+import type { VisibleNode, DetailSection, JumpTarget, RecentFile, TabInfo } from "../api/commands";
 import * as api from "../api/commands";
 
 export interface HistoryEntry {
@@ -20,7 +14,7 @@ export interface HistoryEntry {
 export interface SearchFilter {
   query: string;
   scope: string;
-  op: 'and' | 'or';
+  op: "and" | "or";
 }
 
 interface TabUiState {
@@ -62,10 +56,10 @@ export const useAppStore = defineStore("app", () => {
   const filePath = ref("");
   const hideUnchanged = ref(false);
   const fontSize = ref(13);
-  const theme = ref<'dark' | 'light'>('dark');
+  const theme = ref<"dark" | "light">("dark");
   const sortLabel = ref("ID\u25b2");
   const recentFiles = ref<RecentFile[]>([]);
-  const rowDensity = ref<'compact' | 'comfortable' | 'spacious'>('comfortable');
+  const rowDensity = ref<"compact" | "comfortable" | "spacious">("comfortable");
   const defaultHideUnchanged = ref(false);
   const autoExpandFirstLevel = ref(false);
   const maxRecentFiles = ref(10);
@@ -154,20 +148,24 @@ export const useAppStore = defineStore("app", () => {
     try {
       openTabs.value = await api.getOpenTabs();
     } catch {
+      // non-fatal: tab state refresh can silently fail
     }
   }
 
-  const selectedNode = computed(() =>
-    nodes.value.find((n: VisibleNode) => n.index === selectedIndex.value) ?? null,
+  const selectedNode = computed(
+    () => nodes.value.find((n: VisibleNode) => n.index === selectedIndex.value) ?? null,
   );
 
   const canGoBack = computed(() => history.value.length > 0);
 
   const rowHeightPx = computed(() => {
     switch (rowDensity.value) {
-      case 'compact': return 20;
-      case 'spacious': return 30;
-      default: return 24;
+      case "compact":
+        return 20;
+      case "spacious":
+        return 30;
+      default:
+        return 24;
     }
   });
 
@@ -201,18 +199,20 @@ export const useAppStore = defineStore("app", () => {
   }
 
   function persistPrefs() {
-    api.saveUiPrefs({
-      font_size: fontSize.value,
-      theme: theme.value,
-      split_pct: splitPct.value,
-      row_density: rowDensity.value,
-      default_hide_unchanged: defaultHideUnchanged.value,
-      auto_expand_first_level: autoExpandFirstLevel.value,
-      max_recent_files: maxRecentFiles.value,
-      wrap_table_text: wrapTableText.value,
-      last_tab_title: lastTabTitle.value,
-      auto_check_updates: autoCheckUpdates.value,
-    }).catch(() => {});
+    api
+      .saveUiPrefs({
+        font_size: fontSize.value,
+        theme: theme.value,
+        split_pct: splitPct.value,
+        row_density: rowDensity.value,
+        default_hide_unchanged: defaultHideUnchanged.value,
+        auto_expand_first_level: autoExpandFirstLevel.value,
+        max_recent_files: maxRecentFiles.value,
+        wrap_table_text: wrapTableText.value,
+        last_tab_title: lastTabTitle.value,
+        auto_check_updates: autoCheckUpdates.value,
+      })
+      .catch(() => undefined);
   }
 
   let _splitPctTimer: ReturnType<typeof setTimeout> | null = null;
@@ -250,13 +250,17 @@ export const useAppStore = defineStore("app", () => {
       udsLoading.value = true;
       udsReady.value = false;
       udsError.value = null;
-      _udsLoadPromise = api.udsLoad(path).then(() => {
-        udsReady.value = true;
-      }).catch((e) => {
-        udsError.value = String(e);
-      }).finally(() => {
-        udsLoading.value = false;
-      });
+      _udsLoadPromise = api
+        .udsLoad(path)
+        .then(() => {
+          udsReady.value = true;
+        })
+        .catch((e) => {
+          udsError.value = String(e);
+        })
+        .finally(() => {
+          udsLoading.value = false;
+        });
     } catch (e) {
       status.value = `Error: ${e}`;
     } finally {
@@ -292,7 +296,7 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
-  function tabSectionsOf(sections: import('../api/commands').DetailSection[]): import('../api/commands').DetailSection[] {
+  function tabSectionsOf(sections: DetailSection[]): DetailSection[] {
     const first = sections[0];
     if (sections.length > 1 && first?.render_as_header && "PlainText" in first.content) {
       return sections.slice(1);
@@ -301,15 +305,18 @@ export const useAppStore = defineStore("app", () => {
   }
 
   function restoreTab(
-    sections: import('../api/commands').DetailSection[],
+    sections: DetailSection[],
     key: { title: string; section_type: string } | null,
   ) {
-    if (!key) { selectedTab.value = 0; return; }
+    if (!key) {
+      selectedTab.value = 0;
+      return;
+    }
     const tabs = tabSectionsOf(sections);
     // Prefer exact title match, fall back to same section type
-    let idx = key.title ? tabs.findIndex(t => t.title === key.title) : -1;
+    let idx = key.title ? tabs.findIndex((t) => t.title === key.title) : -1;
     if (idx < 0 && key.section_type) {
-      idx = tabs.findIndex(t => t.section_type === key.section_type);
+      idx = tabs.findIndex((t) => t.section_type === key.section_type);
     }
     selectedTab.value = idx >= 0 ? idx : 0;
     if (idx >= 0) {
@@ -400,7 +407,7 @@ export const useAppStore = defineStore("app", () => {
     }
   }
 
-  async function search(query: string, op: 'and' | 'or' = 'and') {
+  async function search(query: string, op: "and" | "or" = "and") {
     try {
       const result = await api.doSearch(query, op);
       nodes.value = result.visible;
@@ -446,7 +453,7 @@ export const useAppStore = defineStore("app", () => {
   async function toggleFilterOp(idx: number) {
     if (idx === 0) return;
     const updated = searchFilters.value.map((f, i) =>
-      i === idx ? { ...f, op: (f.op === 'and' ? 'or' : 'and') as 'and' | 'or' } : f
+      i === idx ? { ...f, op: (f.op === "and" ? "or" : "and") as "and" | "or" } : f,
     );
     try {
       await _replayFilters(updated);
@@ -474,15 +481,18 @@ export const useAppStore = defineStore("app", () => {
   async function nextChange() {
     if (!isDiff.value) return;
     const ns = nodes.value;
-    const curPos = selectedIndex.value === null ? -1 : ns.findIndex(n => n.index === selectedIndex.value);
+    const curPos =
+      selectedIndex.value === null ? -1 : ns.findIndex((n) => n.index === selectedIndex.value);
     for (let i = curPos + 1; i < ns.length; i++) {
-      if (ns[i].diff_status !== null && ns[i].diff_status !== 'Unchanged') {
-        await selectNode(ns[i].index); return;
+      if (ns[i].diff_status !== null && ns[i].diff_status !== "Unchanged") {
+        await selectNode(ns[i].index);
+        return;
       }
     }
     for (let i = 0; i <= Math.max(0, curPos - 1); i++) {
-      if (ns[i].diff_status !== null && ns[i].diff_status !== 'Unchanged') {
-        await selectNode(ns[i].index); return;
+      if (ns[i].diff_status !== null && ns[i].diff_status !== "Unchanged") {
+        await selectNode(ns[i].index);
+        return;
       }
     }
   }
@@ -490,25 +500,38 @@ export const useAppStore = defineStore("app", () => {
   async function prevChange() {
     if (!isDiff.value) return;
     const ns = nodes.value;
-    const curPos = selectedIndex.value === null ? ns.length : ns.findIndex(n => n.index === selectedIndex.value);
+    const curPos =
+      selectedIndex.value === null
+        ? ns.length
+        : ns.findIndex((n) => n.index === selectedIndex.value);
     for (let i = curPos - 1; i >= 0; i--) {
-      if (ns[i].diff_status !== null && ns[i].diff_status !== 'Unchanged') {
-        await selectNode(ns[i].index); return;
+      if (ns[i].diff_status !== null && ns[i].diff_status !== "Unchanged") {
+        await selectNode(ns[i].index);
+        return;
       }
     }
     for (let i = ns.length - 1; i > Math.max(0, curPos); i--) {
-      if (ns[i].diff_status !== null && ns[i].diff_status !== 'Unchanged') {
-        await selectNode(ns[i].index); return;
+      if (ns[i].diff_status !== null && ns[i].diff_status !== "Unchanged") {
+        await selectNode(ns[i].index);
+        return;
       }
     }
   }
 
   async function expandAll() {
-    try { nodes.value = await api.expandAll(); } catch (e) { status.value = `Error: ${e}`; }
+    try {
+      nodes.value = await api.expandAll();
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    }
   }
 
   async function collapseAll() {
-    try { nodes.value = await api.collapseAll(); } catch (e) { status.value = `Error: ${e}`; }
+    try {
+      nodes.value = await api.collapseAll();
+    } catch (e) {
+      status.value = `Error: ${e}`;
+    }
   }
 
   function increaseFontSize() {
@@ -524,12 +547,12 @@ export const useAppStore = defineStore("app", () => {
     persistPrefs();
   }
 
-  function setTheme(t: 'dark' | 'light') {
+  function setTheme(t: "dark" | "light") {
     theme.value = t;
     persistPrefs();
   }
 
-  function setRowDensity(d: 'compact' | 'comfortable' | 'spacious') {
+  function setRowDensity(d: "compact" | "comfortable" | "spacious") {
     rowDensity.value = d;
     persistPrefs();
   }
@@ -565,7 +588,10 @@ export const useAppStore = defineStore("app", () => {
       const result = await api.toggleSort(idx);
       nodes.value = result.nodes;
       status.value = result.sort_label;
-      sortLabel.value = result.sort_label.replace("Sort: ", "").replace("Name ", "N").replace(" ", "");
+      sortLabel.value = result.sort_label
+        .replace("Sort: ", "")
+        .replace("Name ", "N")
+        .replace(" ", "");
     } catch (e) {
       status.value = `Error: ${e}`;
     }
@@ -609,15 +635,18 @@ export const useAppStore = defineStore("app", () => {
     try {
       const prefs = await api.getUiPrefs();
       fontSize.value = prefs.font_size;
-      theme.value = (prefs.theme as 'dark' | 'light') ?? 'dark';
+      theme.value = (prefs.theme as "dark" | "light") ?? "dark";
       if (prefs.split_pct >= 15 && prefs.split_pct <= 70) splitPct.value = prefs.split_pct;
-      rowDensity.value = (prefs.row_density as 'compact' | 'comfortable' | 'spacious') ?? 'comfortable';
+      rowDensity.value =
+        (prefs.row_density as "compact" | "comfortable" | "spacious") ?? "comfortable";
       defaultHideUnchanged.value = prefs.default_hide_unchanged ?? false;
       autoExpandFirstLevel.value = prefs.auto_expand_first_level ?? false;
       maxRecentFiles.value = prefs.max_recent_files ?? 10;
       wrapTableText.value = prefs.wrap_table_text ?? false;
       lastTabTitle.value = prefs.last_tab_title ?? null;
-      lastTabKey.value = lastTabTitle.value ? { title: lastTabTitle.value, section_type: '' } : null;
+      lastTabKey.value = lastTabTitle.value
+        ? { title: lastTabTitle.value, section_type: "" }
+        : null;
       autoCheckUpdates.value = prefs.auto_check_updates ?? false;
     } catch (e) {
       console.error("Failed to load prefs:", e);
@@ -656,7 +685,7 @@ export const useAppStore = defineStore("app", () => {
       saveCurrentTabUiState();
       const result = await api.switchTab(tabId);
       applyLoadResult(result);
-      filePath.value = openTabs.value.find(t => t.id === tabId)?.file_path ?? "";
+      filePath.value = openTabs.value.find((t) => t.id === tabId)?.file_path ?? "";
       restoreTabUiState(tabId);
       status.value = `${result.node_count} nodes`;
       await refreshOpenTabs();
@@ -674,7 +703,7 @@ export const useAppStore = defineStore("app", () => {
       const result = await api.closeTab(tabId);
       if (result) {
         applyLoadResult(result);
-        filePath.value = openTabs.value.find(t => t.id === result.tab_id)?.file_path ?? "";
+        filePath.value = openTabs.value.find((t) => t.id === result.tab_id)?.file_path ?? "";
         restoreTabUiState(result.tab_id);
         status.value = `${result.node_count} nodes`;
       } else {
@@ -687,7 +716,7 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function closeOtherTabs(keepTabId: string) {
-    const toClose = openTabs.value.filter(t => t.id !== keepTabId).map(t => t.id);
+    const toClose = openTabs.value.filter((t) => t.id !== keepTabId).map((t) => t.id);
     for (const id of toClose) {
       tabUiStates.delete(id);
       await api.closeTab(id);
@@ -703,7 +732,7 @@ export const useAppStore = defineStore("app", () => {
   async function switchToAdjacentTab(direction: -1 | 1) {
     const tabs = openTabs.value;
     if (tabs.length < 2) return;
-    const currentIdx = tabs.findIndex(t => t.id === activeTabId.value);
+    const currentIdx = tabs.findIndex((t) => t.id === activeTabId.value);
     if (currentIdx < 0) return;
     const nextIdx = (currentIdx + direction + tabs.length) % tabs.length;
     const nextTab = tabs[nextIdx];
@@ -713,7 +742,7 @@ export const useAppStore = defineStore("app", () => {
   async function removeRecentFile(path: string) {
     try {
       await api.removeRecentFile(path);
-      recentFiles.value = recentFiles.value.filter(f => f.path !== path);
+      recentFiles.value = recentFiles.value.filter((f) => f.path !== path);
     } catch (e) {
       console.error("Failed to remove recent file:", e);
     }
@@ -729,21 +758,85 @@ export const useAppStore = defineStore("app", () => {
   }
 
   return {
-    nodes, ecuName, nodeCount, isDiff, selectedIndex, selectedNode,
-    detailSections, selectedTab, searchQuery, searchScope, searchActive,
-    status, loading, history, canGoBack, canGoForward, breadcrumbs, splitPct,
-    fileLoaded, filePath, hideUnchanged, fontSize, theme, sortLabel, recentFiles,
-    rowDensity, rowHeightPx, defaultHideUnchanged, autoExpandFirstLevel,
-    maxRecentFiles, wrapTableText, lastTabTitle, displayedRecentFiles, autoCheckUpdates,
-    udsLoading, udsReady, udsError, waitForUds,
-    openTabs, activeTabId,
-    loadFile, loadDiff, selectNode, goBack, goForward, toggleExpand, search, searchFilters,
-    clearSearch, removeSearchFilter, toggleFilterOp, cycleScope, setScope, expandAll, collapseAll, toggleSort, toggleHideUnchanged,
-    increaseFontSize, decreaseFontSize, setFontSize, setTheme,
-    setRowDensity, setDefaultHideUnchanged, setAutoExpandFirstLevel, setMaxRecentFiles, setWrapTableText, setSelectedTab,
+    nodes,
+    ecuName,
+    nodeCount,
+    isDiff,
+    selectedIndex,
+    selectedNode,
+    detailSections,
+    selectedTab,
+    searchQuery,
+    searchScope,
+    searchActive,
+    status,
+    loading,
+    history,
+    canGoBack,
+    canGoForward,
+    breadcrumbs,
+    splitPct,
+    fileLoaded,
+    filePath,
+    hideUnchanged,
+    fontSize,
+    theme,
+    sortLabel,
+    recentFiles,
+    rowDensity,
+    rowHeightPx,
+    defaultHideUnchanged,
+    autoExpandFirstLevel,
+    maxRecentFiles,
+    wrapTableText,
+    lastTabTitle,
+    displayedRecentFiles,
+    autoCheckUpdates,
+    udsLoading,
+    udsReady,
+    udsError,
+    waitForUds,
+    openTabs,
+    activeTabId,
+    loadFile,
+    loadDiff,
+    selectNode,
+    goBack,
+    goForward,
+    toggleExpand,
+    search,
+    searchFilters,
+    clearSearch,
+    removeSearchFilter,
+    toggleFilterOp,
+    cycleScope,
+    setScope,
+    expandAll,
+    collapseAll,
+    toggleSort,
+    toggleHideUnchanged,
+    increaseFontSize,
+    decreaseFontSize,
+    setFontSize,
+    setTheme,
+    setRowDensity,
+    setDefaultHideUnchanged,
+    setAutoExpandFirstLevel,
+    setMaxRecentFiles,
+    setWrapTableText,
+    setSelectedTab,
     setAutoCheckUpdates,
-    navigateTo, loadRecentFiles, loadPrefs, clearRecentFiles, removeRecentFile, closeFile,
-    nextChange, prevChange,
-    switchTab, closeTabById, closeOtherTabs, switchToAdjacentTab,
+    navigateTo,
+    loadRecentFiles,
+    loadPrefs,
+    clearRecentFiles,
+    removeRecentFile,
+    closeFile,
+    nextChange,
+    prevChange,
+    switchTab,
+    closeTabById,
+    closeOtherTabs,
+    switchToAdjacentTab,
   };
 });

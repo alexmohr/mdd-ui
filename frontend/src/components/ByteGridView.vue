@@ -13,21 +13,24 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import type { DetailRow, JumpTarget } from "../api/commands";
 
-const props = withDefaults(defineProps<{
-  rows: DetailRow[];
-  title?: string;
-  onNavigate?: (target: JumpTarget) => void;
-  /** Overridden hex values for editable (non-const) params, keyed by name. */
-  editedHex?: Record<string, string>;
-}>(), { title: "Byte Pattern" });
+const props = withDefaults(
+  defineProps<{
+    rows: DetailRow[];
+    title?: string;
+    onNavigate?: (target: JumpTarget) => void;
+    /** Overridden hex values for editable (non-const) params, keyed by name. */
+    editedHex?: Record<string, string>;
+  }>(),
+  { title: "Byte Pattern", onNavigate: undefined, editedHex: undefined },
+);
 
 // ── Parse helpers ──────────────────────────────────────────────────────────
 
 interface Field {
   byteStart: number;
-  byteEnd: number;   // inclusive
-  bitHi: number;     // within the START byte, MSB=7
-  bitLo: number;     // within the START byte
+  byteEnd: number; // inclusive
+  bitHi: number; // within the START byte, MSB=7
+  bitLo: number; // within the START byte
   multiBytes: boolean;
   name: string;
   hex: string;
@@ -42,7 +45,10 @@ function parseBits(bits: string): { hi: number; lo: number } {
   const range = /\[(\d+):(\d+)\]/.exec(bits);
   if (range) return { hi: Number(range[1]), lo: Number(range[2]) };
   const single = /\[(\d+)\]/.exec(bits);
-  if (single) { const b = Number(single[1]); return { hi: b, lo: b }; }
+  if (single) {
+    const b = Number(single[1]);
+    return { hi: b, lo: b };
+  }
   return { hi: 7, lo: 0 };
 }
 
@@ -56,25 +62,28 @@ function parseOffset(offset: string): { start: number; end: number } {
 
 const fields = computed<Field[]>(() =>
   props.rows
-    .filter(r => r.row_type !== "Header")
-    .map(r => {
+    .filter((r) => r.row_type !== "Header")
+    .map((r) => {
       const cells = r.cells;
       const offset = cells[0]?.text ?? "0";
-      const bits   = cells[1]?.text ?? "";
-      const hex    = cells[2]?.text ?? "";
+      const bits = cells[1]?.text ?? "";
+      const hex = cells[2]?.text ?? "";
       const binary = cells[3]?.text ?? "";
-      const name   = cells[4]?.text ?? "";
-      const type_  = cells[5]?.text ?? "";
-      const jump   = cells[4]?.jump_target ?? null;
+      const name = cells[4]?.text ?? "";
+      const type_ = cells[5]?.text ?? "";
+      const jump = cells[4]?.jump_target ?? null;
 
       const { start, end } = parseOffset(offset);
-      const { hi, lo }     = parseBits(bits);
+      const { hi, lo } = parseBits(bits);
 
       // Use edited value when available
       const editedVal = props.editedHex?.[name];
-      const effectiveHex = editedVal !== undefined && editedVal !== ""
-        ? (editedVal.length > 0 ? `0x${editedVal}` : hex)
-        : hex;
+      const effectiveHex =
+        editedVal !== undefined && editedVal !== ""
+          ? editedVal.length > 0
+            ? `0x${editedVal}`
+            : hex
+          : hex;
 
       return {
         byteStart: start,
@@ -94,7 +103,7 @@ const fields = computed<Field[]>(() =>
 
 const totalBytes = computed(() => {
   if (fields.value.length === 0) return 0;
-  return Math.max(...fields.value.map(f => f.byteEnd)) + 1;
+  return Math.max(...fields.value.map((f) => f.byteEnd)) + 1;
 });
 
 const PALETTE = [
@@ -147,15 +156,21 @@ const grid = computed<GridRow[]>(() => {
   let b = 0;
 
   while (b < total) {
-    const byteFields = fields.value.filter(f => f.byteStart <= b && f.byteEnd >= b);
-    const multiField = byteFields.find(f => f.multiBytes);
+    const byteFields = fields.value.filter((f) => f.byteStart <= b && f.byteEnd >= b);
+    const multiField = byteFields.find((f) => f.multiBytes);
 
     if (multiField) {
       // Collapse all bytes of this field into one labelled row
       const end = multiField.byteEnd;
       const cells: GridCell[] = [
         { type: "field", field: multiField, colSpan: 8, firstInRow: true },
-        null, null, null, null, null, null, null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
       ];
       result.push({ byteLabel: end > b ? `${b}\u2013${end}` : `${b}`, cells });
       b = end + 1;
@@ -194,13 +209,18 @@ function onCellEnter(f: Field) {
   hovered.value = f;
   // Tooltip delay
   if (hoverTimer) clearTimeout(hoverTimer);
-  hoverTimer = setTimeout(() => { tooltipVisible.value = true; }, 100);
+  hoverTimer = setTimeout(() => {
+    tooltipVisible.value = true;
+  }, 100);
 }
 
 function onGridLeave() {
   hovered.value = null;
   tooltipVisible.value = false;
-  if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+  if (hoverTimer) {
+    clearTimeout(hoverTimer);
+    hoverTimer = null;
+  }
 }
 
 function cellDimmed(f: Field): boolean {
@@ -229,7 +249,12 @@ function onCellMouseMove(event: MouseEvent) {
 const COLLAPSE_THRESHOLD = 8;
 const expanded = ref(false);
 
-watch(() => props.rows, () => { expanded.value = false; });
+watch(
+  () => props.rows,
+  () => {
+    expanded.value = false;
+  },
+);
 
 const visibleGrid = computed(() => {
   if (expanded.value || grid.value.length <= COLLAPSE_THRESHOLD) return grid.value;
@@ -265,8 +290,11 @@ function onKeydown(e: KeyboardEvent) {
 
   if (e.key === "ArrowDown" || e.key === "ArrowRight") {
     e.preventDefault();
-    if (!selected.value) { selected.value = sorted[0]; return; }
-    const idx = sorted.findIndex(f => f.name === selected.value!.name);
+    if (!selected.value) {
+      selected.value = sorted[0];
+      return;
+    }
+    const idx = sorted.findIndex((f) => f.name === selected.value?.name);
     const next = sorted[(idx + 1) % sorted.length];
     if (next) selected.value = next;
     return;
@@ -274,8 +302,11 @@ function onKeydown(e: KeyboardEvent) {
 
   if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
     e.preventDefault();
-    if (!selected.value) { selected.value = sorted[sorted.length - 1]; return; }
-    const idx = sorted.findIndex(f => f.name === selected.value!.name);
+    if (!selected.value) {
+      selected.value = sorted[sorted.length - 1];
+      return;
+    }
+    const idx = sorted.findIndex((f) => f.name === selected.value?.name);
     const prev = sorted[(idx - 1 + sorted.length) % sorted.length];
     if (prev) selected.value = prev;
     return;
@@ -289,8 +320,12 @@ async function copyValue(value: string, label: string) {
   try {
     await navigator.clipboard.writeText(value);
     copiedField.value = label;
-    setTimeout(() => { copiedField.value = null; }, 1500);
-  } catch { /* clipboard not available */ }
+    setTimeout(() => {
+      copiedField.value = null;
+    }, 1500);
+  } catch {
+    /* clipboard not available */
+  }
 }
 
 onBeforeUnmount(() => {
@@ -307,22 +342,46 @@ onBeforeUnmount(() => {
   >
     <!-- Section header -->
     <div class="flex items-center gap-2 px-1 pb-2 border-b border-neutral-800/50 mb-2">
-      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-600"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
-      <span class="text-[11px] text-neutral-500 font-medium uppercase tracking-wide">{{ title }}</span>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="11"
+        height="11"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="text-neutral-600"
+      >
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8" />
+        <path d="M12 17v4" />
+      </svg>
+      <span class="text-[11px] text-neutral-500 font-medium uppercase tracking-wide">{{
+        title
+      }}</span>
     </div>
 
     <!-- Bit grid -->
     <div class="overflow-x-auto rounded-lg relative" @mouseleave="onGridLeave">
-      <table class="w-full border-collapse" style="table-layout: fixed; min-width: 360px;">
+      <table class="w-full border-collapse" style="table-layout: fixed; min-width: 360px">
         <thead>
           <tr class="bg-neutral-900/60 border-b border-neutral-800">
-            <th class="px-2 py-1 text-neutral-600 text-[10px] font-medium text-right border-r border-neutral-800" style="width: 52px;">byte</th>
             <th
-              v-for="b in [7,6,5,4,3,2,1,0]"
+              class="px-2 py-1 text-neutral-600 text-[10px] font-medium text-right border-r border-neutral-800"
+              style="width: 52px"
+            >
+              byte
+            </th>
+            <th
+              v-for="b in [7, 6, 5, 4, 3, 2, 1, 0]"
               :key="b"
               class="py-1 text-neutral-600 text-[10px] font-medium text-center"
-              style="width: 11.5%;"
-            >{{ b }}</th>
+              style="width: 11.5%"
+            >
+              {{ b }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -331,7 +390,9 @@ onBeforeUnmount(() => {
             :key="row.byteLabel"
             class="border-b border-neutral-800/50 last:border-0"
           >
-            <td class="px-2 py-0.5 text-neutral-600 text-[10px] text-right border-r border-neutral-800 align-middle leading-tight select-none">
+            <td
+              class="px-2 py-0.5 text-neutral-600 text-[10px] text-right border-r border-neutral-800 align-middle leading-tight select-none"
+            >
               {{ row.byteLabel }}
             </td>
             <template v-for="(cell, ci) in row.cells" :key="ci">
@@ -350,7 +411,9 @@ onBeforeUnmount(() => {
                       ? 'ring-1 ring-inset ring-white/30'
                       : 'hover:brightness-125',
                     cellDimmed(cell.field) ? 'opacity-30' : '',
-                    cellHighlighted(cell.field) && selected?.name !== cell.field.name ? 'brightness-130' : '',
+                    cellHighlighted(cell.field) && selected?.name !== cell.field.name
+                      ? 'brightness-130'
+                      : '',
                   ]"
                   @click="select(cell.field)"
                   @mouseenter="onCellEnter(cell.field)"
@@ -363,7 +426,9 @@ onBeforeUnmount(() => {
                   >
                     <template v-if="cell.colSpan >= 4">
                       <span class="opacity-80">{{ cell.field.name }}</span>
-                      <span v-if="cell.field.hex?.startsWith('0x')" class="ml-1 opacity-50">{{ cell.field.hex }}</span>
+                      <span v-if="cell.field.hex?.startsWith('0x')" class="ml-1 opacity-50">{{
+                        cell.field.hex
+                      }}</span>
                     </template>
                     <template v-else-if="cell.colSpan >= 2">
                       <span class="opacity-70">{{ cell.field.name.slice(0, 6) }}</span>
@@ -378,7 +443,6 @@ onBeforeUnmount(() => {
           </tr>
         </tbody>
       </table>
-
     </div>
 
     <!-- Custom tooltip (teleported to body to avoid overflow clipping) -->
@@ -390,12 +454,16 @@ onBeforeUnmount(() => {
       >
         <div class="text-neutral-100 font-semibold truncate">{{ hovered.name }}</div>
         <div class="text-neutral-400">
-          <span class="opacity-60">Hex</span> <span class="text-neutral-200">{{ hovered.hex || '—' }}</span>
+          <span class="opacity-60">Hex</span>
+          <span class="text-neutral-200">{{ hovered.hex || "—" }}</span>
         </div>
         <div class="text-neutral-400">
-          <span class="opacity-60">Bits</span> <span class="text-neutral-200">[{{ hovered.bitHi }}:{{ hovered.bitLo }}]</span>
+          <span class="opacity-60">Bits</span>
+          <span class="text-neutral-200">[{{ hovered.bitHi }}:{{ hovered.bitLo }}]</span>
         </div>
-        <div v-if="hovered.paramType" class="text-neutral-500 truncate">{{ hovered.paramType }}</div>
+        <div v-if="hovered.paramType" class="text-neutral-500 truncate">
+          {{ hovered.paramType }}
+        </div>
       </div>
     </Teleport>
 
@@ -405,7 +473,7 @@ onBeforeUnmount(() => {
         class="text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
         @click="expanded = !expanded"
       >
-        {{ expanded ? 'Collapse' : `Show all ${grid.length} rows` }}
+        {{ expanded ? "Collapse" : `Show all ${grid.length} rows` }}
       </button>
     </div>
 
@@ -427,14 +495,19 @@ onBeforeUnmount(() => {
             v-if="selected.jumpTarget && onNavigate"
             class="font-semibold text-[11px] text-neutral-100 cursor-pointer hover:underline hover:text-white transition-colors"
             @click="onNavigate(selected.jumpTarget!)"
-          >{{ selected.name }} ↗</span>
+            >{{ selected.name }} ↗</span
+          >
           <span v-else class="font-semibold text-[11px] text-neutral-100">{{ selected.name }}</span>
           <span class="text-[10px] opacity-60">{{ selected.paramType }}</span>
         </div>
         <div class="grid grid-cols-3 gap-x-4 gap-y-0.5 text-[10px] opacity-80">
           <div>
             <span class="opacity-60">Bytes </span>
-            <span class="font-mono">{{ selected.byteStart === selected.byteEnd ? selected.byteStart : `${selected.byteStart}–${selected.byteEnd}` }}</span>
+            <span class="font-mono">{{
+              selected.byteStart === selected.byteEnd
+                ? selected.byteStart
+                : `${selected.byteStart}–${selected.byteEnd}`
+            }}</span>
           </div>
           <div>
             <span class="opacity-60">Bits </span>
@@ -442,15 +515,43 @@ onBeforeUnmount(() => {
           </div>
           <div class="flex items-center gap-1">
             <span class="opacity-60">Hex </span>
-            <span class="font-mono">{{ selected.hex || '—' }}</span>
+            <span class="font-mono">{{ selected.hex || "—" }}</span>
             <!-- Copy hex button -->
             <button
               v-if="selected.hex"
               class="opacity-40 hover:opacity-80 transition-opacity ml-0.5"
               @click.stop="copyValue(selected.hex, 'hex')"
             >
-              <svg v-if="copiedField !== 'hex'" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><polyline points="20 6 9 17 4 12"/></svg>
+              <svg
+                v-if="copiedField !== 'hex'"
+                xmlns="http://www.w3.org/2000/svg"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="text-emerald-400"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
             </button>
           </div>
           <div v-if="selected.binary" class="col-span-3 flex items-center gap-1">
@@ -461,15 +562,41 @@ onBeforeUnmount(() => {
               class="opacity-40 hover:opacity-80 transition-opacity ml-0.5"
               @click.stop="copyValue(selected.binary, 'binary')"
             >
-              <svg v-if="copiedField !== 'binary'" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><polyline points="20 6 9 17 4 12"/></svg>
+              <svg
+                v-if="copiedField !== 'binary'"
+                xmlns="http://www.w3.org/2000/svg"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="text-emerald-400"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
             </button>
           </div>
         </div>
         <!-- Keyboard hint -->
-        <div class="text-[9px] text-neutral-600 pt-0.5">
-          ↑↓ navigate · Enter jump · Esc close
-        </div>
+        <div class="text-[9px] text-neutral-600 pt-0.5">↑↓ navigate · Enter jump · Esc close</div>
       </div>
     </transition>
   </div>
