@@ -39,7 +39,6 @@ interface DeviceFlowInfo {
 
 export const useLlmStore = defineStore("llm", () => {
   const panelOpen = ref(false);
-  const settingsOpen = ref(false);
   const settings = ref<LlmSettingsView>({
     ghe_host: "",
     llm_endpoint: "",
@@ -224,7 +223,6 @@ export const useLlmStore = defineStore("llm", () => {
 
   return {
     panelOpen,
-    settingsOpen,
     settings,
     messages,
     loginState,
