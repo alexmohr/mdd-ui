@@ -32,6 +32,18 @@ fn get_mtime(path: &str) -> std::result::Result<SystemTime, String> {
         .map_err(|e| format!("Failed to stat {path}: {e}"))
 }
 
+/// Build a breadcrumb path string for a node by walking parent_idx up to the root.
+fn build_parent_path(nodes: &[TreeNode], node_index: usize) -> String {
+    let mut ancestors = Vec::new();
+    let mut current = nodes[node_index].parent_idx;
+    while let Some(idx) = current {
+        ancestors.push(nodes[idx].text.as_str());
+        current = nodes[idx].parent_idx;
+    }
+    ancestors.reverse();
+    ancestors.join(" > ")
+}
+
 // Tool parameter types
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -280,6 +292,11 @@ impl MddMcpServer {
                 node.text, node.node_type, node.depth
             );
 
+            let path = build_parent_path(&db.nodes, params.node_index);
+            if !path.is_empty() {
+                let _ = writeln!(output, "Path: {path}");
+            }
+
             if let Some(ref status) = node.diff_status {
                 let _ = writeln!(output, "Diff: {status:?}");
             }
@@ -316,10 +333,18 @@ impl MddMcpServer {
             let mut results = Vec::new();
             for (i, node) in db.nodes.iter().enumerate() {
                 if node.text.to_lowercase().contains(&query_lower) {
-                    results.push(format!(
-                        "[{i}] {} (depth:{}, type:{:?})",
-                        node.text, node.depth, node.node_type
-                    ));
+                    let path = build_parent_path(&db.nodes, i);
+                    if path.is_empty() {
+                        results.push(format!(
+                            "[{i}] {} (type:{:?})",
+                            node.text, node.node_type
+                        ));
+                    } else {
+                        results.push(format!(
+                            "[{i}] {} (type:{:?}, path: {path})",
+                            node.text, node.node_type
+                        ));
+                    }
                 }
             }
             if results.is_empty() {
