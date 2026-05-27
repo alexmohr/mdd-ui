@@ -8,7 +8,7 @@
 //! Exposes tools over stdio that allow LLMs to load MDD files, browse the tree
 //! structure, search nodes, view details, and compare two databases.
 
-use std::{collections::HashMap, fmt::Write as _, sync::Mutex};
+use std::{collections::HashMap, fmt::Write as _, sync::Mutex, time::SystemTime};
 
 use anyhow::{Context, Result};
 use mdd_core::{
@@ -23,6 +23,13 @@ use serde::Deserialize;
 struct CachedDatabase {
     nodes: Vec<TreeNode>,
     ecu_name: String,
+    mtime: SystemTime,
+}
+
+fn get_mtime(path: &str) -> std::result::Result<SystemTime, String> {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .map_err(|e| format!("Failed to stat {path}: {e}"))
 }
 
 // Tool parameter types
@@ -77,6 +84,12 @@ struct ExportDiffParams {
     new_path: String,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct UnloadMddParams {
+    /// Absolute path to the MDD file to unload from the cache
+    path: String,
+}
+
 // MCP Server
 
 #[derive(Clone)]
@@ -91,22 +104,35 @@ impl MddMcpServer {
         }
     }
 
-    /// Load a database if not already cached, returning `Ok(())` or an error message.
+    /// Load a database if not already cached (or reload if file changed on disk).
     fn ensure_loaded(&self, path: &str) -> std::result::Result<(), String> {
         let mut cache = self
             .databases
             .lock()
             .map_err(|e| format!("Lock poisoned: {e}"))?;
-        if cache.contains_key(path) {
-            return Ok(());
+        let current_mtime = get_mtime(path)?;
+        if let Some(existing) = cache.get(path) {
+            if existing.mtime == current_mtime {
+                return Ok(());
+            }
+            // File changed on disk — remove stale entry and reload below
+            cache.remove(path);
         }
         let db = database::load_mdd(path).map_err(|e| format!("Failed to load {path}: {e:#}"))?;
         let (nodes, ecu_name) = tree::build_tree(&db, path);
-        cache.insert(path.to_owned(), CachedDatabase { nodes, ecu_name });
+        cache.insert(
+            path.to_owned(),
+            CachedDatabase {
+                nodes,
+                ecu_name,
+                mtime: current_mtime,
+            },
+        );
         Ok(())
     }
 
     /// Get a reference to cached nodes via a closure (avoids holding the lock).
+    /// Returns an error if the file has been modified on disk since it was loaded.
     fn with_cache<F, R>(&self, path: &str, f: F) -> std::result::Result<R, String>
     where
         F: FnOnce(&CachedDatabase) -> R,
@@ -118,6 +144,15 @@ impl MddMcpServer {
         let db = cache
             .get(path)
             .ok_or_else(|| format!("Database not loaded: {path}. Call load_mdd first."))?;
+        // Check staleness
+        if let Ok(current_mtime) = get_mtime(path) {
+            if db.mtime != current_mtime {
+                return Err(format!(
+                    "File {path} has been modified on disk since it was loaded. \
+                     Please call load_mdd again to reload."
+                ));
+            }
+        }
         Ok(f(db))
     }
 }
@@ -150,6 +185,23 @@ impl MddMcpServer {
             summary
         })
         .unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Unload an MDD database from the cache, freeing memory.
+    #[tool(
+        description = "Unload an MDD database from the cache. Use this to free memory or force a \
+                       fresh reload on the next load_mdd call."
+    )]
+    fn unload_mdd(&self, Parameters(params): Parameters<UnloadMddParams>) -> String {
+        let mut cache = match self.databases.lock() {
+            Ok(c) => c,
+            Err(e) => return format!("Error: Lock poisoned: {e}"),
+        };
+        if cache.remove(&params.path).is_some() {
+            format!("Unloaded: {}", params.path)
+        } else {
+            format!("Not loaded: {}", params.path)
+        }
     }
 
     /// Browse the tree structure of a loaded MDD database.
