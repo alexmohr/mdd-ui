@@ -37,7 +37,7 @@ fn build_parent_path(nodes: &[TreeNode], node_index: usize) -> String {
     let mut ancestors = Vec::new();
     let mut current = nodes[node_index].parent_idx;
     while let Some(idx) = current {
-        ancestors.push(nodes[idx].text.as_str());
+        ancestors.push(format!("[{}] {}", idx, nodes[idx].text));
         current = nodes[idx].parent_idx;
     }
     ancestors.reverse();
@@ -160,8 +160,8 @@ impl MddMcpServer {
         if let Ok(current_mtime) = get_mtime(path) {
             if db.mtime != current_mtime {
                 return Err(format!(
-                    "File {path} has been modified on disk since it was loaded. \
-                     Please call load_mdd again to reload."
+                    "File {path} has been modified on disk since it was loaded. Please call \
+                     load_mdd again to reload."
                 ));
             }
         }
@@ -335,10 +335,7 @@ impl MddMcpServer {
                 if node.text.to_lowercase().contains(&query_lower) {
                     let path = build_parent_path(&db.nodes, i);
                     if path.is_empty() {
-                        results.push(format!(
-                            "[{i}] {} (type:{:?})",
-                            node.text, node.node_type
-                        ));
+                        results.push(format!("[{i}] {} (type:{:?})", node.text, node.node_type));
                     } else {
                         results.push(format!(
                             "[{i}] {} (type:{:?}, path: {path})",
