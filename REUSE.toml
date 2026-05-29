@@ -21,6 +21,7 @@ path = [
   "frontend/package.json",
   "frontend/tsconfig.json",
   "gen/schemas/**",
+  "frontend/.prettierrc",
   ".DS_Store",
 ]
 SPDX-FileCopyrightText = "2026 Alexander Mohr"
